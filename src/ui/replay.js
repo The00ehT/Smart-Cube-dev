@@ -1,10 +1,12 @@
 /**
  * Rekonstruktion eines Solves: Wiedergabe in Echtzeit (mit den gemessenen Zeiten jedes Zuges),
  * Kreuzfarbe automatisch unten (ohne Gyroskop: der Würfel wird rechnerisch gedreht),
+ * mit Gyroskop-Daten auf Wunsch inklusive Würfeldrehungen (x/y/z) und Griffwechseln,
  * Lösung nach Phasen gegliedert, als Link teilbar.
  */
 import { TwistyPlayer } from 'cubing/twisty';
-import { SOLVED, applyAlg, CROSS_DOWN, translateMoves, COLOR_NAMES, groupMoves } from '../cube/facelets.js';
+import { SOLVED, applyAlg, CROSS_DOWN, COLOR_NAMES } from '../cube/facelets.js';
+import { viewerEvents } from '../cube/gyro.js';
 import { analyzeSolve, PHASE_NAMES } from '../cube/analysis.js';
 import { setupAlgFor } from './cube-view.js';
 import { formatTime, formatSolve } from '../stats.js';
@@ -51,6 +53,7 @@ export class Replay {
         </div>
         <div class="rp-side">
           <div class="rp-phases"></div>
+          <label class="toggle rp-gyro-toggle" hidden><input type="checkbox" class="rp-gyro" checked /> Würfeldrehungen &amp; Griffwechsel (Gyro) zeigen</label>
           <div class="rp-actions">
             <button class="rp-share primary">Teilen</button>
             <a class="rp-twizzle" target="_blank" rel="noopener">In Twizzle öffnen ↗</a>
@@ -86,6 +89,14 @@ export class Replay {
       }
     });
     $('.rp-share', dialog).addEventListener('click', () => this.share());
+    $('.rp-gyro', dialog).addEventListener('change', (e) => {
+      this.useGyro = e.target.checked;
+      this.pause();
+      this.build();
+      this.seekMove(0);
+      this.onGyroToggle?.(this.useGyro);
+    });
+    this.useGyro = true;
   }
 
   /**
@@ -97,33 +108,32 @@ export class Replay {
     this.solve = solve;
     const a = analyzeSolve(solve.start, solve.moves, solve.times);
     this.analysis = a;
-    this.rotation = CROSS_DOWN[a.crossFace];
-    this.moves = translateMoves(solve.moves, this.rotation);
-    this.times = solve.times;
-    this.total = this.times.length ? this.times[this.times.length - 1] : 0;
-    this.k = 0;
-    this.cursor = 0;
+    this.total = solve.times.length ? solve.times[solve.times.length - 1] : 0;
+    this.hasGyro = !!solve.gyro;
+    if (opts.useGyro !== undefined) this.useGyro = opts.useGyro;
 
     const d = this.dlg;
     const shown = { time: a.time, penalty: solve.penalty || 0 };
     $('.rp-title', d).textContent = `${opts.title ? opts.title + ': ' : ''}${formatSolve(shown)}`;
+    const g = solve.gyro;
     const sub = [
       solve.date ? new Date(solve.date).toLocaleString('de-DE') : null,
       `${a.moveCount} Züge · ${a.tps.toFixed(2)} TPS`,
       `Kreuz ${COLOR_NAMES[a.crossFace]}${a.xcross ? ' · X-Cross' : ''}`,
+      g ? `${g.rotations.length} Drehungen · ~${g.regrips.length} Griffwechsel` : null,
       solve.estimated ? 'ohne gemessene Zugzeiten (gleichmäßig verteilt)' : null,
     ].filter(Boolean);
     $('.rp-sub', d).innerHTML = sub.map(esc).join(' · ');
     $('.rp-seek', d).max = String(Math.max(1, this.total));
     $('.rp-msg', d).textContent = '';
     $('.rp-share', d).hidden = !!solve.estimated;
-    this.renderPhases();
+    $('.rp-gyro-toggle', d).hidden = !this.hasGyro;
+    $('.rp-gyro', d).checked = this.useGyro;
     if (!d.open) d.showModal();
 
-    // Setup: Scramble (falls er zum Startzustand passt), sonst berechnet; danach Kreuz nach unten drehen
-    const setup =
+    // Setup: Scramble (falls er zum Startzustand passt), sonst berechnet
+    this.baseSetup =
       solve.scramble && applyAlg(SOLVED, solve.scramble) === solve.start ? solve.scramble : await setupAlgFor(solve.start);
-    this.setup = `${setup} ${this.rotation}`.trim();
     if (!this.player) {
       this.player = new TwistyPlayer({
         puzzle: '3x3x3',
@@ -137,16 +147,64 @@ export class Replay {
       this.player.classList.add('twisty');
       $('.rp-cube', d).append(this.player);
     }
-    this.player.experimentalSetupAlg = this.setup;
+    this.build();
     this.seekMove(0);
-    $('.rp-twizzle', d).href = this.twizzleUrl();
   }
 
-  /** Lösung als Text mit Phasen-Kommentaren (Notation mit Kreuz unten) */
+  /** Ereignisliste (Züge aus Sicht des Lösers, ggf. Drehungen und Griffwechsel) neu aufbauen */
+  build() {
+    const s = this.solve;
+    const v0 = CROSS_DOWN[this.analysis.crossFace];
+    const gyro = this.hasGyro && this.useGyro ? s.gyro : null;
+    // Kreuz unten; mit Gyro zusätzlich die gemessenen Drehungen
+    const ev = viewerEvents(s.moves, s.times, { v0, rotations: gyro?.rotations || [] });
+    for (const t of gyro?.regrips || []) {
+      const at = ev.findIndex((e) => e.t > t);
+      ev.splice(at < 0 ? ev.length : at, 0, { kind: 'grip', text: '✋', t });
+    }
+    this.events = ev;
+    // Phase je Ereignis: Drehungen/Griffe gehören zur Phase des nächsten Zuges
+    const phaseOfMove = (i) => this.analysis.phases.findIndex((p) => p.moves > 0 && i >= p.start && i <= p.end);
+    let next = 6;
+    for (let k = ev.length - 1; k >= 0; k--) {
+      if (ev[k].kind === 'move') next = phaseOfMove(ev[k].i);
+      ev[k].phase = next < 0 ? 6 : next;
+    }
+    this.setup = `${this.baseSetup} ${v0}`.trim();
+    this.player.experimentalSetupAlg = this.setup;
+    this.renderPhases();
+    $('.rp-twizzle', this.dlg).href = this.twizzleUrl();
+  }
+
+  /** Ereignisse für die Anzeige gruppieren: zwei gleiche Vierteldrehungen hintereinander → Doppelzug */
+  groups(from, to) {
+    const out = [];
+    for (let k = from; k <= to; k++) {
+      const e = this.events[k];
+      const n = this.events[k + 1];
+      if (e.kind === 'move' && n && k + 1 <= to && n.kind === 'move' && n.text === e.text && !e.text.endsWith('2')) {
+        out.push({ text: e.text[0] + '2', first: k, last: k + 1, kind: 'move' });
+        k++;
+      } else out.push({ text: e.text, first: k, last: k, kind: e.kind });
+    }
+    return out;
+  }
+
+  phaseRange(pi) {
+    const ks = this.events.map((e, k) => (e.phase === pi ? k : -1)).filter((k) => k >= 0);
+    return ks.length ? [ks[0], ks[ks.length - 1]] : null;
+  }
+
+  /** Lösung als Text mit Phasen-Kommentaren (Notation aus Sicht des Lösers) */
   annotated() {
     return this.analysis.phases
-      .filter((p) => p.moves > 0)
-      .map((p) => `${groupMoves(this.moves.slice(p.start, p.end + 1)).map((g) => g.text).join(' ')} // ${PHASE_NAMES[p.key]}`)
+      .map((p, pi) => {
+        const r = this.phaseRange(pi);
+        if (!r) return null;
+        const txt = this.groups(r[0], r[1]).filter((g) => g.kind !== 'grip').map((g) => g.text).join(' ');
+        return txt ? `${txt} // ${PHASE_NAMES[p.key]}` : null;
+      })
+      .filter(Boolean)
       .join('\n');
   }
 
@@ -157,38 +215,43 @@ export class Replay {
 
   renderPhases() {
     const a = this.analysis;
-    const rows = a.phases.map((p) => {
-      const mv = groupMoves(this.moves.slice(p.start, p.end + 1), p.start)
-        .map((g) => `<span class="rp-mv" data-k="${g.last}" data-first="${g.first}">${g.text}</span>`)
-        .join(' ');
+    const rows = a.phases.map((p, pi) => {
+      const r = this.phaseRange(pi);
+      const mv = r
+        ? this.groups(r[0], r[1])
+            .map((g) => `<span class="rp-mv ${g.kind}" data-k="${g.last}" data-first="${g.first}"${g.kind === 'grip' ? ' title="Griffwechsel (geschätzt)"' : ''}>${g.text}</span>`)
+            .join(' ')
+        : '';
+      const rots = r ? this.events.slice(r[0], r[1] + 1).filter((e) => e.kind === 'rot').length : 0;
       const slot = p.slot ? ` ${[...p.slot].map(colorChip).join('')}` : '';
       const skip = p.skip ? ' <span class="tag">Skip</span>' : '';
       const recog = p.recog > 0 ? `<span class="small">Erk. ${formatTime(p.recog)}</span>` : '';
-      return `<div class="rp-ph ph-${/^p\d$/.test(p.key) ? 'pair' : p.key}" data-start="${p.start}">
+      const rotTag = rots ? `<span class="small">${rots} Dreh.</span>` : '';
+      return `<div class="rp-ph ph-${/^p\d$/.test(p.key) ? 'pair' : p.key}">
         <div class="rp-ph-head"><b>${PHASE_NAMES[p.key]}</b>${slot}${skip}
-          <span class="rp-ph-num">${formatTime(p.time)} · ${p.moves} Z.</span>${recog}</div>
+          <span class="rp-ph-num">${formatTime(p.time)} · ${p.moves} Z.</span>${recog}${rotTag}</div>
         <div class="rp-ph-moves">${mv || '<span class="small">–</span>'}</div>
       </div>`;
     });
     $('.rp-phases', this.dlg).innerHTML = rows.join('');
   }
 
-  /** Anzahl der Züge, die zum Zeitpunkt t schon gemacht sind */
-  movesAt(t) {
+  /** Anzahl der Ereignisse bis einschließlich Zeitpunkt t */
+  eventsAt(t) {
     let k = 0;
-    while (k < this.times.length && this.times[k] <= t) k++;
+    while (k < this.events.length && this.events[k].t <= t) k++;
     return k;
   }
 
   seekTime(t) {
     this.cursor = Math.max(0, Math.min(t, this.total));
-    this.setK(this.movesAt(this.cursor));
+    this.setK(this.eventsAt(this.cursor));
     this.updateUi();
   }
 
   seekMove(k) {
-    k = Math.max(0, Math.min(k, this.moves.length));
-    this.cursor = k > 0 ? this.times[k - 1] : 0;
+    k = Math.max(0, Math.min(k, this.events.length));
+    this.cursor = k > 0 ? this.events[k - 1].t : 0;
     this.setK(k);
     this.updateUi();
   }
@@ -197,13 +260,13 @@ export class Replay {
   setK(k) {
     this.k = k;
     if (!this.player) return;
-    this.player.alg = this.moves.slice(0, k).join(' ');
+    this.player.alg = this.events.slice(0, k).filter((e) => e.kind !== 'grip').map((e) => e.text).join(' ');
     this.player.jumpToEnd({ flash: false });
   }
 
   play() {
-    if (!this.player || !this.moves.length) return;
-    if (this.k >= this.moves.length) this.seekMove(0);
+    if (!this.player || !this.events.length) return;
+    if (this.k >= this.events.length) this.seekMove(0);
     this.playing = true;
     $('.rp-play', this.dlg).textContent = '⏸ Pause';
     const wall0 = performance.now();
@@ -211,13 +274,14 @@ export class Replay {
     const step = () => {
       if (!this.playing) return;
       const t = t0 + (performance.now() - wall0) * this.speed;
-      while (this.k < this.moves.length && this.times[this.k] <= t) {
-        this.player.experimentalAddMove(this.moves[this.k], { cancel: false });
+      while (this.k < this.events.length && this.events[this.k].t <= t) {
+        const e = this.events[this.k];
+        if (e.kind !== 'grip') this.player.experimentalAddMove(e.text, { cancel: false });
         this.k++;
       }
       this.cursor = Math.min(t, this.total);
       this.updateUi();
-      if (this.k >= this.moves.length && t >= this.total) return this.pause();
+      if (this.k >= this.events.length && t >= this.total) return this.pause();
       this.raf = requestAnimationFrame(step);
     };
     this.raf = requestAnimationFrame(step);
@@ -235,8 +299,8 @@ export class Replay {
     $('.rp-clock', d).textContent = formatTime(this.cursor);
     $('.rp-seek', d).value = String(Math.round(this.cursor));
     const last = this.k - 1;
-    const ph = this.analysis.phases.find((p) => p.moves > 0 && last <= p.end) ?? this.analysis.phases[6];
-    $('.rp-phase', d).textContent = this.k === 0 ? 'Start' : PHASE_NAMES[ph.key];
+    const e = this.events[last];
+    $('.rp-phase', d).textContent = this.k === 0 ? 'Start' : PHASE_NAMES[this.analysis.phases[e.phase].key];
     d.querySelectorAll('.rp-mv.cur, .rp-mv.done').forEach((el) => el.classList.remove('cur', 'done'));
     d.querySelectorAll('.rp-mv').forEach((el) => {
       const k = Number(el.dataset.k);

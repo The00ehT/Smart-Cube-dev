@@ -103,7 +103,35 @@ export function detailStats(solves) {
   }
   const slotStats = Object.entries(slots).map(([k, ts]) => ({ slot: k, n: ts.length, mean: avg(ts) }));
 
+  // Gyro: Würfeldrehungen und Griffwechsel, auch je Phase
+  const gy = det.filter((s) => s.gyro);
+  let gyro = null;
+  if (gy.length) {
+    const perPhase = { cross: 0, f2l: 0, oll: 0, pll: 0 };
+    const kinds = {};
+    for (const s of gy) {
+      // Phasenenden aus den aufsummierten Phasenzeiten: Kreuz, F2L (nach Paar 4), OLL, PLL
+      const cum = [];
+      s.phases.reduce((acc, p) => (cum.push(acc + p.time), acc + p.time), 0);
+      const ends = [cum[0], cum[4], cum[5], Infinity];
+      for (const r of s.gyro.rotations) {
+        const k = ['cross', 'f2l', 'oll', 'pll'][ends.findIndex((e) => r.t <= e)] ?? 'pll';
+        perPhase[k]++;
+        kinds[r.name] = (kinds[r.name] || 0) + 1;
+      }
+    }
+    for (const k of Object.keys(perPhase)) perPhase[k] /= gy.length;
+    gyro = {
+      n: gy.length,
+      rotations: avg(gy.map((s) => s.gyro.rotations.length)),
+      regrips: avg(gy.map((s) => s.gyro.regrips.length)),
+      perPhase,
+      kinds: Object.entries(kinds).sort((a, b) => b[1] - a[1]),
+    };
+  }
+
   return {
+    gyro,
     n: solves.length,
     detailed: count,
     best: times.length ? Math.min(...times) : null,

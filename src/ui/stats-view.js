@@ -256,6 +256,18 @@ export class StatsView {
       ['Pausen ≥ 0,5 s / Solve', num(s.lookahead?.perSolve)],
       ['Pausenzeit / Solve', t(s.lookahead?.timePerSolve)],
     ];
+    const g = s.gyro;
+    const gyroSec = g
+      ? `<section class="sv-sec">
+      <h3>Gyroskop <span class="small">(${g.n} Solves mit Lagedaten)</span></h3>
+      <div class="stats">
+        <div class="stat"><div class="v">${num(g.rotations)}</div><div class="k">Ø Würfeldrehungen / Solve</div></div>
+        <div class="stat"><div class="v">${num(g.regrips)}</div><div class="k">Ø Griffwechsel / Solve (geschätzt)</div></div>
+        ${['cross', 'f2l', 'oll', 'pll'].map((k) => `<div class="stat"><div class="v">${num(g.perPhase[k])}</div><div class="k">Ø Drehungen ${PHASE_NAMES[k]}</div></div>`).join('')}
+      </div>
+      ${g.kinds.length ? `<p class="small">Häufigste Drehungen: ${g.kinds.slice(0, 6).map(([n, c]) => `<b>${n}</b> ${c}×`).join(' · ')}</p>` : ''}
+    </section>`
+      : '';
     const faces = Object.entries(s.crossFaces).sort((a, b) => b[1].n - a[1].n);
     const crossRows = faces
       .map(([f, c]) => `<tr><td>${colorChip(f)} ${COLOR_NAMES[f]}</td><td>${c.n}</td><td>${pct(c.n / s.n)}</td><td>${t(c.mean)}</td></tr>`)
@@ -264,7 +276,7 @@ export class StatsView {
       .sort((a, b) => a.mean - b.mean)
       .map((x) => `<tr><td>${[...x.slot].map(colorChip).join('')} ${[...x.slot].map((f) => COLOR_NAMES[f]).join('–')}</td><td>${x.n}</td><td>${t(x.mean)}</td></tr>`)
       .join('');
-    return `<section class="sv-sec">
+    return `${gyroSec}<section class="sv-sec">
       <h3>Skips &amp; Lookahead</h3>
       <div class="stats">${tiles.map(([k, v]) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`).join('')}</div>
     </section>

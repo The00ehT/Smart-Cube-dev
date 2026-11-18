@@ -74,13 +74,16 @@ assert.equal(new Set(slots).size, slots.length, 'jeder Slot nur einmal');
 assert.deepEqual(pauses([0, 100, 800, 900, 1500], 500), { count: 2, sum: 1300 });
 
 // Teilen: Hin- und Rückweg
-const solve = { start, moves: solution, times, date: '2026-11-18T10:00:00.000Z', penalty: 2000, scramble: '', name: 'Theo & Co' };
+const solve = { start, moves: solution, times, date: '2026-11-18T10:00:00.000Z', penalty: 2000, scramble: '', name: 'Theo & Co',
+  gyro: { v0: 'z2', rotations: [{ t: 120, name: 'y' }, { t: 900, name: "x'" }], regrips: [450] } };
 const back = decodeShare(encodeShare(solve));
 assert.equal(back.start, start);
 assert.deepEqual(back.moves, solution);
 assert.deepEqual(back.times, times);
 assert.equal(back.penalty, 2000);
 assert.equal(back.name, 'Theo & Co');
+assert.deepEqual(back.gyro.rotations, solve.gyro.rotations);
+assert.deepEqual(back.gyro.regrips, [450]);
 const sc = "R U2 F' D";
 const s2 = { start: applyAlg(SOLVED, sc), scramble: sc, moves: ['D\''], times: [0], penalty: 'DNF', date: solve.date };
 const b2 = decodeShare(encodeShare(s2));

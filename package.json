@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node tests/analysis.test.mjs && node tests/facelets.test.mjs && node tests/tracker.test.mjs && node tests/recorder.test.mjs"
+    "test": "node tests/gyro.test.mjs && node tests/analysis.test.mjs && node tests/facelets.test.mjs && node tests/tracker.test.mjs && node tests/recorder.test.mjs"
   },
   "dependencies": {
     "cubing": "^0.66.1",

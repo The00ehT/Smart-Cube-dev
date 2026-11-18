@@ -7,8 +7,11 @@
  *   p  Strafe: 2 = +2, d = DNF
  *   d  Datum (ms seit 1970, Basis 36)
  *   n  Name (optional, aus dem Profil)
+ *   g  Würfeldrehungen (Gyro): Zeit~Lage (Basis 36, Lage = Index in ROT24), durch Punkte getrennt
+ *   h  Griffwechsel (Gyro): Zeiten, Basis 36, durch Punkte getrennt
  */
 import { FACES, SOLVED, applyAlg, parseMove, formatMove } from './cube/facelets.js';
+import { ROT24 } from './cube/gyro.js';
 
 const AMOUNT_IDX = { 1: 0, 2: 1, 3: 2 };
 const encMove = (m) => {
@@ -32,6 +35,10 @@ export function encodeShare(solve) {
   else if (solve.penalty) q.set('p', '2');
   if (solve.date) q.set('d', new Date(solve.date).getTime().toString(36));
   if (solve.name) q.set('n', solve.name.slice(0, 24));
+  if (solve.gyro) {
+    q.set('g', solve.gyro.rotations.map((r) => `${r.t.toString(36)}~${ROT24.findIndex((x) => x.name === r.name).toString(36)}`).join('.'));
+    if (solve.gyro.regrips.length) q.set('h', solve.gyro.regrips.map((t) => t.toString(36)).join('.'));
+  }
   return q.toString();
 }
 
@@ -56,6 +63,21 @@ export function decodeShare(str) {
     penalty: p === 'd' ? 'DNF' : p === '2' ? 2000 : 0,
     date: d ? new Date(parseInt(d, 36)).toISOString() : null,
     name: (q.get('n') || '').slice(0, 24),
+    gyro: q.has('g')
+      ? {
+          v0: '',
+          rotations: q
+            .get('g')
+            .split('.')
+            .filter(Boolean)
+            .map((x) => {
+              const [t, i] = x.split('~');
+              return { t: parseInt(t, 36), name: ROT24[parseInt(i, 36)]?.name ?? '' };
+            })
+            .filter((r) => r.name),
+          regrips: (q.get('h') || '').split('.').filter(Boolean).map((t) => parseInt(t, 36)),
+        }
+      : null,
   };
 }
 

@@ -1,7 +1,8 @@
 /**
  * Gespeicherte Solves:
  *   v1 (alt):  { id, date, time, penalty, scramble, solution, moveCount, tps, crossFace, phases: [{name,time,moves}], device }
- *   v2 (neu):  zusätzlich { v: 2, start, times: [ms je Zug], phases: [{key,time,moves,recog,slot?,skip?}], xcross }
+ *   v2 (neu):  zusätzlich { v: 2, start, times: [ms je Zug], phases: [{key,time,moves,recog,slot?,skip?}], xcross,
+ *              gyro?: { v0, rotations: [{t, name}], regrips: [t] } }
  * Für v2 lässt sich alles aus start + Zügen + Zeiten neu berechnen (analysis.js).
  */
 import { PHASE_NAMES } from './cube/analysis.js';

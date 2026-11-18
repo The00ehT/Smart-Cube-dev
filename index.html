@@ -49,7 +49,6 @@
         <div class="cube-actions">
           <button id="btn-reset-gyro" title="Halte den Würfel mit Weiß oben und Grün vorne und drücke dann hier">Ausrichtung zurücksetzen</button>
           <button id="btn-mark-solved" title="Setzt den gespeicherten Zustand im Würfel auf gelöst">Als gelöst markieren</button>
-          <label class="toggle"><input type="checkbox" id="opt-gyro" checked /> Gyro</label>
         </div>
         <div class="hw" id="hw"></div>
         <div class="pad" id="pad" hidden>
@@ -196,6 +195,8 @@
 
       <section class="set-sec">
         <h3>Würfel</h3>
+        <label class="toggle"><input type="checkbox" id="opt-gyro" checked /> Gyroskop verwenden (Würfeldrehungen, Griffwechsel, 3D-Lage)</label>
+        <p class="small">Aus spart Akku am Handy: Die App verarbeitet dann keine Lagedaten und zeichnet den Würfel nur bei Zügen neu. Der Würfel selbst sendet weiter – sein Akku wird dadurch nicht geschont.</p>
         <button id="btn-forget-mac">Gespeicherte MAC-Adressen vergessen</button>
       </section>
     </dialog>

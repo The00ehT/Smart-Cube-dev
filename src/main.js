@@ -1,6 +1,7 @@
 import './styles.css';
 import { now } from 'gan-web-bluetooth';
-import { SOLVED, applyMove, applyAlg, isSolved, COLOR_NAMES, groupMoves } from './cube/facelets.js';
+import { SOLVED, applyMove, applyAlg, isSolved, COLOR_NAMES, groupMoves, CROSS_DOWN } from './cube/facelets.js';
+import { analyzeGyro, fromGan } from './cube/gyro.js';
 import { ScrambleTracker } from './cube/scramble-tracker.js';
 import { SolveRecorder } from './cube/solve-recorder.js';
 import { bluetoothAvailable, connectGan, connectOther, connectVirtual } from './cube/connection.js';
@@ -19,7 +20,7 @@ const $ = (id) => document.getElementById(id);
 const SOLVES_KEY = 'smartcube.solves.v1';
 const SETTINGS_KEY = 'smartcube.settings.v1';
 
-const settings = { inspection: false, autoScramble: true, hideTime: false, gyro: true, viewDown: 'auto', theme: 'auto', ...load(SETTINGS_KEY, {}) };
+const settings = { inspection: false, autoScramble: true, hideTime: false, gyro: true, viewDown: 'auto', theme: 'auto', replayGyro: true, ...load(SETTINGS_KEY, {}) };
 let solves = load(SOLVES_KEY, []);
 
 const app = {
@@ -56,7 +57,9 @@ function onCubeEvent(e) {
       }
       break;
     case 'gyro':
+      if (!settings.gyro) break; // ausgeschaltet: nichts verarbeiten, nichts zeichnen
       view.setGyro(e.quaternion);
+      recordGyro(e.quaternion);
       break;
     case 'gyro-available':
       renderHardware();
@@ -220,6 +223,8 @@ function startSolve(e, before) {
   }
   app.phase = 'running';
   app.recorder = new SolveRecorder(before);
+  // Gyro-Messungen: die letzte vor dem Start als Ausgangslage behalten
+  app.gyroSamples = app.lastGyro ? [app.lastGyro] : [];
   app.startLocal = e.localTimestamp ?? now();
   app.recorder.push(e);
   updateViewOrientation();
@@ -230,7 +235,9 @@ function startSolve(e, before) {
 
 function finishSolve() {
   const r = app.recorder.finish();
+  const gyro = gyroOfSolve(r);
   const solve = buildSolve(r, {
+    ...(gyro ? { gyro } : {}),
     penalty: app.inspectionPenalty || 0,
     scramble: app.scramble,
     device: app.conn?.name || '',
@@ -249,6 +256,28 @@ function finishSolve() {
   const summary = () => `${formatSolve(solve)} · ${solve.moveCount} Züge · ${solve.tps.toFixed(2)} TPS${pb ? ' · Neue Bestzeit! 🎉' : ''}`;
   setStatus(summary());
   if (settings.autoScramble) newScramble().then(() => setStatus('Letzter Solve: ' + summary()));
+}
+
+/** Gyro-Messung merken (Zeit = Gerätezeit beim Empfang) */
+function recordGyro(q) {
+  const sample = { t: now(), q: fromGan(q) };
+  app.lastGyro = sample;
+  if (app.phase === 'running' && app.gyroSamples) app.gyroSamples.push(sample);
+}
+
+/** Drehungen und Griffwechsel aus den Gyro-Messungen eines Solves */
+function gyroOfSolve(r) {
+  const raw = app.gyroSamples || [];
+  app.gyroSamples = null;
+  if (!settings.gyro || raw.length < 3) return null;
+  const samples = raw.map((s) => ({ t: s.t - app.startLocal, q: s.q }));
+  try {
+    const g = analyzeGyro(samples, r.times, CROSS_DOWN[r.crossFace]);
+    return { v0: g.v0, rotations: g.rotations, regrips: g.regrips };
+  } catch (err) {
+    console.error(err);
+    return null;
+  }
 }
 
 function cancelSolve() {
@@ -488,6 +517,8 @@ function openSolve(i) {
     `${(s.tps ?? 0).toFixed(2)} TPS`,
     s.crossFace ? `Kreuz: ${colorChip(s.crossFace)} ${COLOR_NAMES[s.crossFace]}` : '',
     s.xcross ? 'X-Cross' : '',
+    s.gyro ? `${s.gyro.rotations.length} Würfeldrehungen${s.gyro.rotations.length ? ' (' + s.gyro.rotations.map((r) => r.name).join(', ') + ')' : ''}` : '',
+    s.gyro ? `~${s.gyro.regrips.length} Griffwechsel` : '',
   ].filter(Boolean);
   $('sd-info').innerHTML = extra.map((x) => `<span>${x}</span>`).join('');
   $('sd-scramble').textContent = s.scramble || '(eigenes Scramble)';
@@ -561,7 +592,15 @@ const bindToggle = (id, key, after) => {
 bindToggle('opt-inspection', 'inspection');
 bindToggle('opt-auto-scramble', 'autoScramble');
 bindToggle('opt-hide-time', 'hideTime');
-bindToggle('opt-gyro', 'gyro', (on) => view.setGyroEnabled(on));
+bindToggle('opt-gyro', 'gyro', (on) => {
+  view.setGyroEnabled(on);
+  if (!on) app.lastGyro = null;
+});
+replay.useGyro = settings.replayGyro;
+replay.onGyroToggle = (on) => {
+  settings.replayGyro = on;
+  save(SETTINGS_KEY, settings);
+};
 
 $('btn-forget-mac').addEventListener('click', () => {
   forgetMacs();
@@ -732,4 +771,7 @@ function openSharedFromHash() {
   }
 }
 openSharedFromHash();
+
+// Testzugang: mit ?debug in der URL lassen sich Würfel-Ereignisse simulieren (z. B. Gyro-Daten)
+if (new URLSearchParams(location.search).has('debug')) window.__smartcube = { emit: onCubeEvent, app, settings };
 window.addEventListener('hashchange', openSharedFromHash);

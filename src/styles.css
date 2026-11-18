@@ -395,3 +395,7 @@ dialog.settings-dialog { width: min(560px, calc(100vw - 24px)); max-height: calc
 .mini-pie .label { margin-bottom: 6px; }
 .mini-pie .donut-legend li { font-size: 13px; }
 #sd-pie { margin: 10px 0; }
+.rp-mv.rot { color: var(--ph-oll); font-weight: 700; font-style: italic; }
+.rp-mv.grip { font-size: 12px; opacity: 0.8; cursor: default; }
+.rp-mv.rot.cur, .rp-mv.grip.cur { color: var(--accent-text); }
+.rp-gyro-toggle { font-size: 14px; }

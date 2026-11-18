@@ -164,8 +164,12 @@ export class CubeView {
         if (scene && this.gyroActive) {
           const Q = scene.quaternion.constructor;
           const t = this.target;
-          scene.quaternion.slerp(new Q(t.x, t.y, t.z, t.w), 0.25);
-          vantage.render();
+          const goal = new Q(t.x, t.y, t.z, t.w);
+          // Nur neu zeichnen, wenn sich die Lage noch sichtbar ändert (spart Akku)
+          if (scene.quaternion.angleTo(goal) > 0.002) {
+            scene.quaternion.slerp(goal, 0.25);
+            vantage.render();
+          }
         }
       } catch {
         /* Player noch nicht bereit */
