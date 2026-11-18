@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#11141a" />
+    <title>Smartcube Timer</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Crect x='1' y='1' width='8' height='8' rx='2' fill='%23e5484d'/%3E%3Crect x='11' y='1' width='8' height='8' rx='2' fill='%23fff'/%3E%3Crect x='21' y='1' width='8' height='8' rx='2' fill='%2330a46c'/%3E%3Crect x='1' y='11' width='8' height='8' rx='2' fill='%23f5d90a'/%3E%3Crect x='11' y='11' width='8' height='8' rx='2' fill='%230091ff'/%3E%3Crect x='21' y='11' width='8' height='8' rx='2' fill='%23f76b15'/%3E%3Crect x='1' y='21' width='8' height='8' rx='2' fill='%23fff'/%3E%3Crect x='11' y='21' width='8' height='8' rx='2' fill='%2330a46c'/%3E%3Crect x='21' y='21' width='8' height='8' rx='2' fill='%23e5484d'/%3E%3C/svg%3E" />
+    <script type="module" crossorigin src="./assets/index-dyRgpsH1.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BxnFPlZt.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Smartcube<span>Timer</span></h1>
+      <div class="device" id="device">
+        <span class="dot"></span>
+        <span class="device-label" id="device-label">Nicht verbunden</span>
+        <span class="battery" id="battery" hidden></span>
+      </div>
+      <div class="connect-buttons" id="connect-buttons">
+        <button class="primary" id="btn-connect-gan">GAN-Würfel verbinden</button>
+        <details class="more">
+          <summary aria-label="Weitere Verbindungen">Mehr</summary>
+          <div class="menu">
+            <button id="btn-connect-other">Anderer Smartcube (GiiKER, GoCube, …) – experimentell</button>
+            <button id="btn-connect-virtual">Ohne Würfel testen (virtueller Würfel)</button>
+          </div>
+        </details>
+      </div>
+      <button id="btn-disconnect" hidden>Trennen</button>
+    </header>
+
+    <div class="notice" id="bt-notice" hidden>
+      Dieser Browser unterstützt kein Web Bluetooth. Nutze <b>Chrome</b> oder <b>Edge</b> (Windows, macOS, Linux, Android, ChromeOS)
+      – auf dem iPhone/iPad den <b>Bluefy</b>-Browser. Ohne Bluetooth kannst du den virtuellen Würfel ausprobieren.
+    </div>
+
+    <main class="layout">
+      <section class="panel cube-panel">
+        <div class="cube" id="cube"></div>
+        <div class="cube-actions">
+          <button id="btn-reset-gyro" title="Halte den Würfel mit Weiß oben und Grün vorne und drücke dann hier">Ausrichtung zurücksetzen</button>
+          <button id="btn-mark-solved" title="Setzt den gespeicherten Zustand im Würfel auf gelöst">Als gelöst markieren</button>
+          <label class="toggle"><input type="checkbox" id="opt-gyro" checked /> Gyro</label>
+        </div>
+        <div class="hw" id="hw"></div>
+        <div class="pad" id="pad" hidden>
+          <div class="pad-grid" id="pad-grid"></div>
+          <p class="hint">Tastatur: I/K = R/R', J/F = U/U', H/G = F/F', D/E = L/L', S/L = D/D', W/O = B/B'</p>
+        </div>
+      </section>
+
+      <section class="panel timer-panel">
+        <div class="scramble-box">
+          <div class="scramble-head">
+            <span class="label" id="scramble-label">Scramble</span>
+            <div class="scramble-buttons">
+              <button id="btn-new-scramble">Neues Scramble</button>
+              <button id="btn-own-scramble" title="Du verdrehst selbst – der nächste Zug startet die Zeit">Eigenes Scramble</button>
+            </div>
+          </div>
+          <div class="scramble" id="scramble" aria-live="polite"></div>
+          <div class="progress"><div id="scramble-progress"></div></div>
+        </div>
+
+        <div class="timer-wrap">
+          <div class="timer" id="timer">0.00</div>
+          <div class="status" id="status">Verbinde deinen Würfel, um loszulegen.</div>
+          <div class="splits" id="splits"></div>
+        </div>
+
+        <div class="recent">
+          <span class="label">Letzte Züge</span>
+          <div class="moves" id="last-moves"></div>
+        </div>
+      </section>
+
+      <section class="panel stats-panel">
+        <div class="stats" id="stats"></div>
+        <div class="list-head">
+          <span class="label">Solves</span>
+          <div>
+            <button id="btn-export" title="Alle Solves als Datei speichern">Export</button>
+            <label class="file-button" title="Solves aus einer Export-Datei laden">Import<input type="file" id="file-import" accept="application/json,.json" hidden /></label>
+            <button id="btn-clear" class="danger">Alle löschen</button>
+          </div>
+        </div>
+        <ol class="solves" id="solves" reversed></ol>
+        <details class="settings">
+          <summary>Einstellungen</summary>
+          <label class="toggle"><input type="checkbox" id="opt-inspection" /> 15 s Inspektion (WCA: +2 ab 15 s, DNF ab 17 s)</label>
+          <label class="toggle"><input type="checkbox" id="opt-auto-scramble" checked /> Nach jedem Solve automatisch neues Scramble</label>
+          <label class="toggle"><input type="checkbox" id="opt-hide-time" /> Zeit während des Solves ausblenden</label>
+          <button id="btn-forget-mac">Gespeicherte MAC-Adressen vergessen</button>
+        </details>
+      </section>
+    </main>
+
+    <dialog id="mac-dialog">
+      <form method="dialog">
+        <h2>MAC-Adresse von <span class="device-name"></span></h2>
+        <p>
+          GAN-Würfel verschlüsseln ihre Daten mit ihrer Bluetooth-MAC-Adresse. Dein Browser gibt sie nicht automatisch heraus,
+          deshalb bitte einmal eintragen – sie wird für diesen Würfel gespeichert.
+        </p>
+        <ul class="small">
+          <li><b>Automatisch (Chrome/Edge):</b> unter <code>chrome://flags/#enable-experimental-web-platform-features</code> aktivieren und neu verbinden.</li>
+          <li><b>Manuell finden:</b> in der GAN-App unter Geräteinfo, oder in Chrome unter <code>chrome://bluetooth-internals</code> → Devices.</li>
+        </ul>
+        <input type="text" placeholder="AB:12:CD:34:EF:56" autocomplete="off" spellcheck="false" />
+        <div class="error"></div>
+        <menu>
+          <button value="cancel" formnovalidate>Abbrechen</button>
+          <button value="ok" class="primary">Verbinden</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="solve-dialog">
+      <form method="dialog">
+        <h2 id="sd-time"></h2>
+        <div class="small" id="sd-date"></div>
+        <table class="phase-table" id="sd-phases"></table>
+        <div class="kv" id="sd-info"></div>
+        <div class="label">Scramble</div>
+        <div class="alg" id="sd-scramble"></div>
+        <div class="label">Lösung</div>
+        <div class="alg" id="sd-solution"></div>
+        <a id="sd-replay" target="_blank" rel="noopener">Lösung im 3D-Player ansehen ↗</a>
+        <menu>
+          <button value="ok-pen" id="sd-ok">OK</button>
+          <button value="p2" id="sd-plus2">+2</button>
+          <button value="dnf" id="sd-dnf">DNF</button>
+          <button value="del" id="sd-delete" class="danger">Löschen</button>
+          <button value="close" class="primary">Schließen</button>
+        </menu>
+      </form>
+    </dialog>
+
+  </body>
+</html>
