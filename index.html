@@ -5,11 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#11141a" />
     <title>Smartcube Timer</title>
+    <script>
+      try {
+        const t = JSON.parse(localStorage.getItem('smartcube.settings.v1') || '{}').theme;
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Crect x='1' y='1' width='8' height='8' rx='2' fill='%23e5484d'/%3E%3Crect x='11' y='1' width='8' height='8' rx='2' fill='%23fff'/%3E%3Crect x='21' y='1' width='8' height='8' rx='2' fill='%2330a46c'/%3E%3Crect x='1' y='11' width='8' height='8' rx='2' fill='%23f5d90a'/%3E%3Crect x='11' y='11' width='8' height='8' rx='2' fill='%230091ff'/%3E%3Crect x='21' y='11' width='8' height='8' rx='2' fill='%23f76b15'/%3E%3Crect x='1' y='21' width='8' height='8' rx='2' fill='%23fff'/%3E%3Crect x='11' y='21' width='8' height='8' rx='2' fill='%2330a46c'/%3E%3Crect x='21' y='21' width='8' height='8' rx='2' fill='%23e5484d'/%3E%3C/svg%3E" />
   </head>
   <body>
     <header class="topbar">
       <h1>Smartcube<span>Timer</span></h1>
+      <button class="profile-chip" id="profile-chip" title="Profil & Einstellungen">
+        <span class="avatar" id="avatar-top"></span><span class="profile-name" id="name-top"></span>
+      </button>
+      <button class="icon-btn" id="btn-settings" title="Einstellungen" aria-label="Einstellungen">⚙︎</button>
       <div class="device" id="device">
         <span class="dot"></span>
         <span class="device-label" id="device-label">Nicht verbunden</span>
@@ -75,6 +85,7 @@
 
       <section class="panel stats-panel">
         <div class="stats" id="stats"></div>
+        <div id="phase-pie" class="mini-pie"></div>
         <button id="btn-stats" class="stats-more">Ausführliche Statistik →</button>
         <div class="list-head">
           <span class="label">Solves</span>
@@ -85,25 +96,6 @@
           </div>
         </div>
         <ol class="solves" id="solves" reversed></ol>
-        <details class="settings">
-          <summary>Einstellungen</summary>
-          <label class="toggle"><input type="checkbox" id="opt-inspection" /> 15 s Inspektion (WCA: +2 ab 15 s, DNF ab 17 s)</label>
-          <label class="toggle"><input type="checkbox" id="opt-auto-scramble" checked /> Nach jedem Solve automatisch neues Scramble</label>
-          <label class="toggle"><input type="checkbox" id="opt-hide-time" /> Zeit während des Solves ausblenden</label>
-          <label class="select-row">Würfelansicht ohne Gyroskop
-            <select id="opt-view-down">
-              <option value="auto">Kreuzfarbe unten (automatisch)</option>
-              <option value="U">Weiß unten</option>
-              <option value="D">Gelb unten</option>
-              <option value="F">Grün unten</option>
-              <option value="B">Blau unten</option>
-              <option value="R">Rot unten</option>
-              <option value="L">Orange unten</option>
-              <option value="none">Standard (Weiß oben)</option>
-            </select>
-          </label>
-          <button id="btn-forget-mac">Gespeicherte MAC-Adressen vergessen</button>
-        </details>
       </section>
     </main>
 
@@ -131,6 +123,7 @@
       <form method="dialog">
         <h2 id="sd-time"></h2>
         <div class="small" id="sd-date"></div>
+        <div id="sd-pie"></div>
         <table class="phase-table" id="sd-phases"></table>
         <div class="kv" id="sd-info"></div>
         <div class="label">Scramble</div>
@@ -149,6 +142,64 @@
     </dialog>
 
     <script type="module" src="./src/main.js"></script>
+    <dialog id="settings-dialog" class="settings-dialog">
+      <div class="rp-head">
+        <h2>Einstellungen</h2>
+        <button class="rp-close" id="settings-close" aria-label="Schließen">✕</button>
+      </div>
+
+      <section class="set-sec">
+        <h3>Profil</h3>
+        <div class="profile-edit">
+          <span class="avatar big" id="avatar-preview"></span>
+          <div class="profile-fields">
+            <label class="select-row">Name
+              <input type="text" id="opt-name" maxlength="24" placeholder="Dein Name" autocomplete="nickname" />
+            </label>
+            <div class="avatar-actions">
+              <label class="file-button">Foto wählen<input type="file" id="avatar-file" accept="image/*" hidden /></label>
+              <button type="button" id="avatar-clear">Entfernen</button>
+            </div>
+          </div>
+        </div>
+        <div class="emoji-grid" id="emoji-grid" role="group" aria-label="Avatar auswählen"></div>
+        <p class="small">Dein Name steht auf geteilten Rekonstruktionen. Das Foto bleibt nur auf diesem Gerät.</p>
+      </section>
+
+      <section class="set-sec">
+        <h3>Darstellung</h3>
+        <div class="seg-control" id="opt-theme" role="radiogroup" aria-label="Farbschema">
+          <button type="button" data-v="auto" role="radio">Automatisch</button>
+          <button type="button" data-v="light" role="radio">Hell</button>
+          <button type="button" data-v="dark" role="radio">Dunkel</button>
+        </div>
+        <label class="select-row">Würfelansicht ohne Gyroskop
+          <select id="opt-view-down">
+            <option value="auto">Kreuzfarbe unten (automatisch)</option>
+            <option value="U">Weiß unten</option>
+            <option value="D">Gelb unten</option>
+            <option value="F">Grün unten</option>
+            <option value="B">Blau unten</option>
+            <option value="R">Rot unten</option>
+            <option value="L">Orange unten</option>
+            <option value="none">Standard (Weiß oben)</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="set-sec">
+        <h3>Timer</h3>
+        <label class="toggle"><input type="checkbox" id="opt-inspection" /> 15 s Inspektion (WCA: +2 ab 15 s, DNF ab 17 s)</label>
+        <label class="toggle"><input type="checkbox" id="opt-auto-scramble" checked /> Nach jedem Solve automatisch neues Scramble</label>
+        <label class="toggle"><input type="checkbox" id="opt-hide-time" /> Zeit während des Solves ausblenden</label>
+      </section>
+
+      <section class="set-sec">
+        <h3>Würfel</h3>
+        <button id="btn-forget-mac">Gespeicherte MAC-Adressen vergessen</button>
+      </section>
+    </dialog>
+
     <dialog id="replay-dialog" class="big-dialog"></dialog>
     <dialog id="stats-dialog" class="big-dialog"></dialog>
   </body>

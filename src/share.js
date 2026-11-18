@@ -6,6 +6,7 @@
  *   f  Startzustand als Facelets
  *   p  Strafe: 2 = +2, d = DNF
  *   d  Datum (ms seit 1970, Basis 36)
+ *   n  Name (optional, aus dem Profil)
  */
 import { FACES, SOLVED, applyAlg, parseMove, formatMove } from './cube/facelets.js';
 
@@ -30,6 +31,7 @@ export function encodeShare(solve) {
   if (solve.penalty === 'DNF') q.set('p', 'd');
   else if (solve.penalty) q.set('p', '2');
   if (solve.date) q.set('d', new Date(solve.date).getTime().toString(36));
+  if (solve.name) q.set('n', solve.name.slice(0, 24));
   return q.toString();
 }
 
@@ -53,6 +55,7 @@ export function decodeShare(str) {
     start,
     penalty: p === 'd' ? 'DNF' : p === '2' ? 2000 : 0,
     date: d ? new Date(parseInt(d, 36)).toISOString() : null,
+    name: (q.get('n') || '').slice(0, 24),
   };
 }
 

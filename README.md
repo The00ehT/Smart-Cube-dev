@@ -23,6 +23,9 @@ Aufgebaut auf [gan-web-bluetooth](https://github.com/afedotov/gan-web-bluetooth)
 - **Ausführliche Statistik**: Zeitraum wählbar; Bestzeit, Mittel, Median, Streuung, Ø5/12/50/100 (aktuell und
   beste), Verlauf, Verteilung, Phasen-Tabelle (Erkennung vs. Ausführung, TPS, Anteil), Skip-Raten,
   Lookahead (Pausen ≥ 0,5 s), Kreuzfarben, Zeiten je F2L-Slot; +2 / DNF; Export/Import als JSON
+- **Profil** mit Name und Avatar (Emoji oder eigenes Foto); der Name erscheint auf geteilten Rekonstruktionen
+- **Hell-/Dunkelmodus** (automatisch nach System oder fest)
+- **Kuchendiagramme**: Zeitverteilung Kreuz/F2L/OLL/PLL, F2L-Paare, Erkennen vs. Drehen
 - **Würfelansicht ohne Gyroskop**: Kreuzfarbe automatisch unten (beim Scrambeln Standardlage Weiß oben, Grün vorne)
 - Optional **15 s Inspektion** nach WCA (+2 ab 15 s, DNF ab 17 s)
 - **Akkustand**, Modell, Firmware

@@ -8,6 +8,7 @@ import { detailStats, series } from '../stats-detail.js';
 import { PHASE_NAMES } from '../cube/analysis.js';
 import { COLOR_NAMES } from '../cube/facelets.js';
 import { colorChip } from './replay.js';
+import { donut, phaseSegments } from './donut.js';
 
 const RANGES = [
   ['12', 12],
@@ -199,20 +200,27 @@ export class StatsView {
       return `<section class="sv-sec"><h3>Phasen</h3><p class="small">Detaildaten (F2L-Paare, Erkennungszeiten) gibt es für Solves ab diesem Update.</p></section>`;
     }
     const ph = Object.fromEntries(s.phases.map((p) => [p.key, p]));
-    // Gestapelter Balken: Ø-Zeit je Phase, Erkennung heller
-    const order = ['cross', 'p1', 'p2', 'p3', 'p4', 'oll', 'pll'];
-    const total = order.reduce((a, k) => a + (ph[k].time || 0), 0) || 1;
-    const segs = order
-      .map((k) => {
-        const p = ph[k];
-        const w = ((p.time || 0) / total) * 100;
-        const rw = p.time ? ((p.recog || 0) / p.time) * 100 : 0;
-        const short = /^p\d$/.test(k) ? k[1] : PHASE_NAMES[k];
-        const tip = `${PHASE_NAMES[k]}|Ø ${t(p.time)}|Erkennung ${t(p.recog)}|Ausführung ${t(p.exec)}`;
-        return `<div class="seg ph-${PHASE_CLASS(k)}" style="flex-basis:${w}%" data-tip="${tip}">
-          <div class="seg-recog" style="width:${rw}%"></div><span>${w > 6 ? short : ''}</span></div>`;
-      })
-      .join('');
+    const avgSum = (k) => ph[k].time || 0;
+    const totalAvg = avgSum('cross') + avgSum('f2l') + avgSum('oll') + avgSum('pll');
+    const pie = donut(
+      phaseSegments({ cross: avgSum('cross'), f2l: avgSum('f2l'), oll: avgSum('oll'), pll: avgSum('pll') }),
+      { value: t(totalAvg), label: 'Ø gesamt' },
+      { size: 200 },
+    );
+    const recogSum = ['p1', 'p2', 'p3', 'p4', 'oll', 'pll'].reduce((a, k) => a + (ph[k].recog || 0), 0);
+    const pie2 = donut(
+      [
+        { label: 'Drehen', value: Math.max(0, totalAvg - recogSum), cls: 'ph-exec' },
+        { label: 'Erkennen / Pausen', value: recogSum, cls: 'ph-recog' },
+      ],
+      { value: t(recogSum), label: 'Ø Erkennung' },
+      { size: 200, aria: 'Erkennen und Drehen' },
+    );
+    const pairsPie = donut(
+      ['p1', 'p2', 'p3', 'p4'].map((k, i) => ({ label: `Paar ${i + 1}`, value: ph[k].time || 0, cls: `ph-pair pair-${i + 1}` })),
+      { value: t(avgSum('f2l')), label: 'Ø F2L' },
+      { size: 200, aria: 'F2L-Paare' },
+    );
     const rows = ['cross', 'p1', 'p2', 'p3', 'p4', 'f2l', 'oll', 'pll']
       .map((k) => {
         const p = ph[k];
@@ -222,8 +230,11 @@ export class StatsView {
       .join('');
     return `<section class="sv-sec">
       <h3>Phasen <span class="small">(${s.detailed} Solves mit Detaildaten)</span></h3>
-      <div class="legend"><span><i class="key ph-cross"></i>Kreuz</span><span><i class="key ph-pair"></i>F2L-Paare 1–4</span><span><i class="key ph-oll"></i>OLL</span><span><i class="key ph-pll"></i>PLL</span><span><i class="key recog"></i>heller Teil = Erkennung</span></div>
-      <div class="stack">${segs}</div>
+      <div class="pies">
+        <figure><figcaption>Wofür geht die Zeit drauf?</figcaption>${pie}</figure>
+        <figure><figcaption>F2L-Paare</figcaption>${pairsPie}</figure>
+        <figure><figcaption>Erkennen vs. Drehen</figcaption>${pie2}</figure>
+      </div>
       <div class="sv-ll">
         <div class="stat big"><div class="v">${t(ph.oll.recog)}</div><div class="k">Ø Erkennung OLL</div></div>
         <div class="stat big"><div class="v">${t(ph.pll.recog)}</div><div class="k">Ø Erkennung PLL</div></div>

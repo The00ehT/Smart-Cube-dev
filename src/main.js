@@ -12,12 +12,14 @@ import { buildSolve, hasDetail, phasesOf, phaseName } from './solve-data.js';
 import { decodeShare } from './share.js';
 import { Replay, colorChip } from './ui/replay.js';
 import { StatsView } from './ui/stats-view.js';
+import { donut, phaseSegments } from './ui/donut.js';
+import { profile, saveProfile, avatarHtml, resizeImage, EMOJIS } from './profile.js';
 
 const $ = (id) => document.getElementById(id);
 const SOLVES_KEY = 'smartcube.solves.v1';
 const SETTINGS_KEY = 'smartcube.settings.v1';
 
-const settings = { inspection: false, autoScramble: true, hideTime: false, gyro: true, viewDown: 'auto', ...load(SETTINGS_KEY, {}) };
+const settings = { inspection: false, autoScramble: true, hideTime: false, gyro: true, viewDown: 'auto', theme: 'auto', ...load(SETTINGS_KEY, {}) };
 let solves = load(SOLVES_KEY, []);
 
 const app = {
@@ -401,7 +403,22 @@ function renderStats() {
     const avgOf = (i) => det.reduce((a, s) => a + s.phases[i].recog, 0) / det.length;
     items.push(['Ø Erk. OLL', formatTime(avgOf(5))], ['Ø Erk. PLL', formatTime(avgOf(6))], ['Ø F2L', formatTime(det.reduce((a, s) => a + s.phases.slice(1, 5).reduce((b, p) => b + p.time, 0), 0) / det.length)]);
   }
+  renderMiniPie(det);
   $('stats').innerHTML = items.map(([k, v]) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`).join('');
+}
+
+/** Kuchendiagramm der Phasen über die letzten 12 Solves mit Detaildaten */
+function renderMiniPie(det) {
+  const el = $('phase-pie');
+  if (!det.length) {
+    el.innerHTML = '';
+    return;
+  }
+  const m = (pick) => det.reduce((a, s) => a + pick(s), 0) / det.length;
+  const f2l = m((s) => s.phases.slice(1, 5).reduce((a, p) => a + p.time, 0));
+  const vals = { cross: m((s) => s.phases[0].time), f2l, oll: m((s) => s.phases[5].time), pll: m((s) => s.phases[6].time) };
+  el.innerHTML = `<div class="label">Zeitverteilung · Ø letzte ${det.length}</div>` +
+    donut(phaseSegments(vals), { value: formatTime(vals.cross + vals.f2l + vals.oll + vals.pll), label: 'Ø' }, { size: 132 });
 }
 
 function renderSolves() {
@@ -459,6 +476,10 @@ function openSolve(i) {
     const tag = p.skip ? ' <span class="tag">Skip</span>' : '';
     return `<tr class="${/^p\d$/.test(p.key ?? '') ? 'sub' : ''}"><td>${name}${tag}</td><td>${formatTime(p.time)}</td>${detail ? `<td>${p.key === 'cross' ? '–' : formatTime(p.recog)}</td>` : ''}<td>${p.moves}</td><td>${tps}</td></tr>`;
   });
+  if (detail) {
+    const [c, f, o, pl] = phasesOf(s, { mergeF2l: true });
+    $('sd-pie').innerHTML = donut(phaseSegments({ cross: c.time, f2l: f.time, oll: o.time, pll: pl.time }), { value: formatTime(s.time), label: 'gesamt' }, { size: 140 });
+  } else $('sd-pie').innerHTML = '';
   $('sd-phases').innerHTML = rows.length
     ? `<tr><th>Phase</th><th>Zeit</th>${detail ? '<th>Erkennung</th>' : ''}<th>Züge</th><th>TPS</th></tr>` + rows.join('')
     : '';
@@ -482,7 +503,7 @@ $('sd-replay').addEventListener('click', (e) => {
   const data = s && replayData(s);
   if (!data) return;
   dlg.close();
-  replay.open(data, { title: `Solve ${Number(dlg.dataset.index) + 1}` });
+  replay.open({ ...data, name: profile.name }, { title: `Solve ${Number(dlg.dataset.index) + 1}` });
 });
 
 $('solve-dialog').addEventListener('close', () => {
@@ -576,6 +597,78 @@ $('file-import').addEventListener('change', async (e) => {
 
 $('btn-stats').addEventListener('click', () => statsView.open(solves));
 
+// ---------------- Einstellungen, Profil, Farbschema ----------------
+
+const settingsDlg = $('settings-dialog');
+const openSettings = () => settingsDlg.showModal();
+$('btn-settings').addEventListener('click', openSettings);
+$('profile-chip').addEventListener('click', openSettings);
+$('settings-close').addEventListener('click', () => settingsDlg.close());
+
+function renderProfile() {
+  $('avatar-top').innerHTML = avatarHtml();
+  $('avatar-preview').innerHTML = avatarHtml();
+  $('name-top').textContent = profile.name || 'Profil';
+  $('opt-name').value = profile.name;
+  $('emoji-grid').querySelectorAll('button').forEach((b) => {
+    const on = profile.avatar?.type === 'emoji' && profile.avatar.value === b.dataset.e;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on);
+  });
+}
+function storeProfile() {
+  if (!saveProfile()) setStatus('Hinweis: Profil konnte nicht gespeichert werden (Speicher voll?).');
+  renderProfile();
+}
+$('emoji-grid').innerHTML = EMOJIS.map((e) => `<button type="button" data-e="${e}" aria-label="Avatar ${e}">${e}</button>`).join('');
+$('emoji-grid').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-e]');
+  if (!b) return;
+  profile.avatar = { type: 'emoji', value: b.dataset.e };
+  storeProfile();
+});
+$('opt-name').addEventListener('input', (e) => {
+  profile.name = e.target.value.trim().slice(0, 24);
+  storeProfile();
+});
+$('avatar-file').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    profile.avatar = { type: 'image', value: await resizeImage(file) };
+    storeProfile();
+  } catch (err) {
+    setStatus(String(err.message || err));
+  }
+});
+$('avatar-clear').addEventListener('click', () => {
+  profile.avatar = null;
+  storeProfile();
+});
+
+function applyTheme() {
+  const t = settings.theme;
+  if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+  else delete document.documentElement.dataset.theme;
+  const dark = t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.querySelector('meta[name=theme-color]').content = dark ? '#181b21' : '#ffffff';
+  $('opt-theme').querySelectorAll('button').forEach((b) => {
+    b.classList.toggle('on', b.dataset.v === t);
+    b.setAttribute('aria-checked', b.dataset.v === t);
+  });
+}
+$('opt-theme').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-v]');
+  if (!b) return;
+  settings.theme = b.dataset.v;
+  save(SETTINGS_KEY, settings);
+  applyTheme();
+});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+applyTheme();
+renderProfile();
+
 $('opt-view-down').value = settings.viewDown;
 $('opt-view-down').addEventListener('change', (e) => {
   settings.viewDown = e.target.value;
@@ -633,7 +726,7 @@ function openSharedFromHash() {
       replay.onClose = null;
       history.replaceState(null, '', location.pathname + location.search);
     };
-    replay.open(shared, { title: 'Geteilter Solve' });
+    replay.open(shared, { title: shared.name ? `Solve von ${shared.name}` : 'Geteilter Solve' });
   } catch (err) {
     setStatus('Der geteilte Link ist ungültig: ' + (err?.message || err));
   }
