@@ -25,6 +25,10 @@ Aufgebaut auf [gan-web-bluetooth](https://github.com/afedotov/gan-web-bluetooth)
   Lookahead (Pausen ≥ 0,5 s), Kreuzfarben, Zeiten je F2L-Slot; +2 / DNF; Export/Import als JSON
 - **Gyroskop**: Würfeldrehungen (x/y/z) werden erkannt und in der Rekonstruktion mitgezeigt (umschaltbar),
   Griffwechsel werden geschätzt (kleine Wackler in Pausen); in den Einstellungen abschaltbar (spart Akku am Handy)
+- **Online-Räume**: Raum erstellen, Code oder Link teilen; alle bekommen dasselbe Scramble, sehen sich live beim
+  Lösen zu (Würfel und Zeit) und die Zeiten landen in einer gemeinsamen Tabelle mit Siegen und Ø. Die Verbindung
+  läuft über WebRTC direkt zwischen den Geräten (PeerJS; nur der Verbindungsaufbau nutzt den öffentlichen
+  PeerJS-Server). Zum Testen mit eigenem Server: `?peer=host:port`
 - **Profil** mit Name und Avatar (Emoji oder eigenes Foto); der Name erscheint auf geteilten Rekonstruktionen
 - **Hell-/Dunkelmodus** (automatisch nach System oder fest)
 - **Kuchendiagramme**: Zeitverteilung Kreuz/F2L/OLL/PLL, F2L-Paare, Erkennen vs. Drehen
@@ -88,6 +92,9 @@ Jeder Push wird getestet und gebaut; der Stand von `main` wird automatisch auf G
 | `src/share.js` | Solve als Link kodieren/dekodieren |
 | `src/ui/replay.js` | Rekonstruktion (Echtzeit-Wiedergabe, Kreuz unten, Teilen) |
 | `src/ui/stats-view.js` | Statistik-Ansicht mit Diagrammen |
+| `src/cube/gyro.js` | Würfeldrehungen und Griffwechsel aus den Gyroskop-Daten |
+| `src/room.js` | Online-Räume (PeerJS/WebRTC, Gastgeber verteilt Scrambles und Ergebnisse) |
+| `src/ui/room-view.js` | Raum-Ansicht mit Live-Würfeln und Rundentabelle |
 | `src/cube/connection.js` | GAN / andere Smartcubes / virtueller Würfel mit einheitlichen Ereignissen |
 | `src/ui/cube-view.js` | 3D-Darstellung mit Gyroskop |
 | `src/main.js` | Ablauf, Oberfläche, Statistik, Speicherung (localStorage) |

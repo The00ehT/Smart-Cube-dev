@@ -19,6 +19,7 @@
       <button class="profile-chip" id="profile-chip" title="Profil & Einstellungen">
         <span class="avatar" id="avatar-top"></span><span class="profile-name" id="name-top"></span>
       </button>
+      <button class="room-btn" id="btn-room" title="Online-Raum">👥 Raum</button>
       <button class="icon-btn" id="btn-settings" title="Einstellungen" aria-label="Einstellungen">⚙︎</button>
       <div class="device" id="device">
         <span class="dot"></span>
@@ -42,6 +43,8 @@
       Dieser Browser unterstützt kein Web Bluetooth. Nutze <b>Chrome</b> oder <b>Edge</b> (Windows, macOS, Linux, Android, ChromeOS)
       – auf dem iPhone/iPad den <b>Bluefy</b>-Browser. Ohne Bluetooth kannst du den virtuellen Würfel ausprobieren.
     </div>
+
+    <section class="panel room-panel" id="room-panel" hidden></section>
 
     <main class="layout">
       <section class="panel cube-panel">
@@ -199,6 +202,21 @@
         <p class="small">Aus spart Akku am Handy: Die App verarbeitet dann keine Lagedaten und zeichnet den Würfel nur bei Zügen neu. Der Würfel selbst sendet weiter – sein Akku wird dadurch nicht geschont.</p>
         <button id="btn-forget-mac">Gespeicherte MAC-Adressen vergessen</button>
       </section>
+    </dialog>
+
+    <dialog id="room-dialog">
+      <h2>Online-Raum</h2>
+      <p class="small">Alle im Raum bekommen dasselbe Scramble, ihr seht euch gegenseitig live beim Lösen zu und
+        die Zeiten landen in einer gemeinsamen Tabelle. Die Verbindung läuft direkt zwischen den Geräten.</p>
+      <div class="room-choose">
+        <button type="button" class="primary" id="room-create">Raum erstellen</button>
+        <div class="room-join-row">
+          <input type="text" id="room-code" placeholder="CODE" maxlength="5" autocomplete="off" spellcheck="false" autocapitalize="characters" />
+          <button type="button" id="room-join">Beitreten</button>
+        </div>
+      </div>
+      <div class="error" id="room-error"></div>
+      <menu><button type="button" id="room-cancel">Schließen</button></menu>
     </dialog>
 
     <dialog id="replay-dialog" class="big-dialog"></dialog>

@@ -15,6 +15,8 @@ import { Replay, colorChip } from './ui/replay.js';
 import { StatsView } from './ui/stats-view.js';
 import { donut, phaseSegments } from './ui/donut.js';
 import { profile, saveProfile, avatarHtml, resizeImage, EMOJIS } from './profile.js';
+import { Room, normalizeCode } from './room.js';
+import { RoomView } from './ui/room-view.js';
 
 const $ = (id) => document.getElementById(id);
 const SOLVES_KEY = 'smartcube.solves.v1';
@@ -142,6 +144,7 @@ function onMove(e) {
   const before = app.state;
   app.state = applyMove(app.state, e.move);
   view.addMove(e.move);
+  app.room?.live('move', { m: e.move });
   app.lastMoves.push(e.move);
   if (app.lastMoves.length > 40) app.lastMoves.shift();
   $('last-moves').textContent = app.lastMoves.join(' ');
@@ -173,15 +176,24 @@ function maybeResync() {
   }
 }
 
-async function newScramble() {
+async function randomScramble() {
+  const { randomScrambleForEvent } = await import('cubing/scramble');
+  return (await randomScrambleForEvent('333')).toString();
+}
+
+/** Neues Scramble; im Raum kommt es vom Gastgeber (given) */
+async function newScramble(given) {
+  if (app.room && typeof given !== 'string') {
+    setStatus('Im Raum gibt der Gastgeber die Scrambles vor.');
+    return;
+  }
   app.phase = 'scrambling';
   updateViewOrientation();
   app.tracker = null;
   app.scramble = '';
   $('scramble').innerHTML = '<span class="msg">Scramble wird erzeugt …</span>';
   renderTimer();
-  const { randomScrambleForEvent } = await import('cubing/scramble');
-  const alg = (await randomScrambleForEvent('333')).toString();
+  const alg = typeof given === 'string' ? given : await randomScramble();
   if (app.phase !== 'scrambling') return; // inzwischen abgebrochen
   app.scramble = alg;
   app.tracker = new ScrambleTracker(alg);
@@ -255,7 +267,17 @@ function finishSolve() {
   const pb = best(solves) === effectiveTime(solve) && solves.length > 1;
   const summary = () => `${formatSolve(solve)} · ${solve.moveCount} Züge · ${solve.tps.toFixed(2)} TPS${pb ? ' · Neue Bestzeit! 🎉' : ''}`;
   setStatus(summary());
-  if (settings.autoScramble) newScramble().then(() => setStatus('Letzter Solve: ' + summary()));
+  if (app.room) {
+    app.room.result(app.roomRound, solve);
+    app.roomRound = null;
+    setStatus(summary() + ' · warte auf die anderen …');
+    app.room.live('state', { facelets: app.state });
+    if (app.pendingRound) {
+      const r = app.pendingRound;
+      app.pendingRound = null;
+      setTimeout(() => onRoomEvent(r), 1500);
+    }
+  } else if (settings.autoScramble) newScramble().then(() => setStatus('Letzter Solve: ' + summary()));
 }
 
 /** Gyro-Messung merken (Zeit = Gerätezeit beim Empfang) */
@@ -374,6 +396,11 @@ function renderTimer() {
 
 function tick() {
   if (app.phase === 'running' || app.phase === 'inspecting') renderTimer();
+  // Im Raum: Statuswechsel an die anderen melden
+  if (app.room && app.phase !== app.sentPhase) {
+    app.sentPhase = app.phase;
+    app.room.live('status', { phase: app.phase, elapsed: app.phase === 'running' ? now() - app.startLocal : 0 });
+  }
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
@@ -744,6 +771,160 @@ document.addEventListener('keydown', (e) => {
 
 window.addEventListener('beforeunload', () => app.conn?.disconnect());
 
+// ---------------- Online-Raum ----------------
+
+const roomView = new RoomView($('room-panel'), {
+  onInvite: () => inviteToRoom(),
+  onNextRound: () => hostNextRound(),
+  onLeave: () => leaveRoom(),
+  onAutoChange: (on) => (app.roomAuto = on),
+});
+app.roomAuto = true;
+
+function roomLink(code) {
+  return `${location.href.split('#')[0]}#raum=${code}`;
+}
+
+async function inviteToRoom() {
+  const url = roomLink(app.room.code);
+  const text = `Komm in meinen Smartcube-Raum: ${app.room.code}`;
+  try {
+    if (navigator.share) return await navigator.share({ title: 'Smartcube-Raum', text, url });
+  } catch (e) {
+    if (e?.name === 'AbortError') return;
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    roomView.message('Einladungslink kopiert.');
+  } catch {
+    prompt('Einladungslink:', url);
+  }
+}
+
+function onRoomEvent(ev) {
+  const room = app.room;
+  if (!room) return;
+  switch (ev.type) {
+    case 'roster':
+      roomView.renderRoster(ev.roster);
+      break;
+    case 'board':
+      roomView.renderBoard(ev.board);
+      if (room.isHost && app.roomAuto && room.roundComplete() && !app.nextRoundTimer) {
+        roomView.message('Alle fertig – nächste Runde in 5 s …');
+        app.nextRoundTimer = setTimeout(() => {
+          app.nextRoundTimer = null;
+          if (app.room && room.roundComplete()) hostNextRound();
+        }, 5000);
+      }
+      break;
+    case 'round':
+      if (app.phase === 'running' || app.phase === 'inspecting') {
+        app.pendingRound = ev; // erst nach dem laufenden Solve
+        break;
+      }
+      app.roomRound = ev.n;
+      roomView.message(`Runde ${ev.n}: Scramble ausführen, der erste Zug danach startet die Zeit.`);
+      for (const c of roomView.cards.values()) c.el.querySelector('.person-time').textContent = '–';
+      if (!isSolved(app.state) && app.conn) setStatus('Löse zuerst deinen Würfel (oder „Als gelöst markieren“), dann stimmt das Scramble.');
+      newScramble(ev.scramble);
+      room.live('state', { facelets: app.state });
+      break;
+    case 'live':
+      roomView.live(ev);
+      break;
+    case 'result':
+      roomView.result(ev);
+      break;
+    case 'closed':
+      setStatus(ev.reason);
+      leaveRoom(true);
+      break;
+    case 'error':
+      console.error(ev.error);
+      roomView.message('Verbindungsproblem: ' + (ev.error?.message || ev.error));
+      break;
+  }
+}
+
+async function hostNextRound() {
+  if (!app.room?.isHost) return;
+  clearTimeout(app.nextRoundTimer);
+  app.nextRoundTimer = null;
+  roomView.message('Scramble wird erzeugt …');
+  app.room.startRound(await randomScramble());
+}
+
+async function enterRoom(mode, code) {
+  const msg = $('room-error');
+  msg.textContent = '';
+  if (!profile.name) {
+    msg.textContent = 'Gib dir zuerst einen Namen (Einstellungen → Profil), damit die anderen dich erkennen.';
+    return;
+  }
+  const room = new Room({ name: profile.name, avatar: profile.avatar }, (ev) => onRoomEvent(ev));
+  app.room = room; // schon setzen, damit frühe Ereignisse ankommen
+  $('room-dialog').querySelectorAll('button').forEach((b) => (b.disabled = true));
+  msg.textContent = mode === 'create' ? 'Raum wird erstellt …' : 'Verbinde …';
+  try {
+    roomView.show(room); // Karten brauchen room.myId – Liste wird nach dem Öffnen gezeichnet
+    if (mode === 'create') await room.create();
+    else await room.join(code);
+    roomView.show(room);
+    roomView.renderRoster(room.roster);
+    $('room-dialog').close();
+    app.sentPhase = null;
+    room.live('state', { facelets: app.state });
+    if (app.phase === 'scrambling' || app.phase === 'done') {
+      app.phase = 'idle';
+      renderTimer();
+    }
+    setStatus(mode === 'create' ? `Raum ${room.code} erstellt.` : `Raum ${room.code} beigetreten.`);
+    history.replaceState(null, '', location.pathname + location.search);
+  } catch (err) {
+    console.error(err);
+    app.room = null;
+    room.leave();
+    roomView.hide();
+    msg.textContent = 'Das hat nicht geklappt: ' + (err?.message || err);
+  } finally {
+    $('room-dialog').querySelectorAll('button').forEach((b) => (b.disabled = false));
+  }
+}
+
+function leaveRoom(silent) {
+  if (!app.room) return;
+  if (!silent && !confirm(app.room.isHost ? 'Raum schließen? Alle anderen fliegen dann raus.' : 'Raum verlassen?')) return;
+  clearTimeout(app.nextRoundTimer);
+  app.nextRoundTimer = null;
+  app.room.leave();
+  app.room = null;
+  app.roomRound = null;
+  roomView.hide();
+  if (!silent) setStatus('Raum verlassen.');
+}
+
+$('btn-room').addEventListener('click', () => {
+  if (app.room) return $('room-panel').scrollIntoView({ behavior: 'smooth' });
+  $('room-error').textContent = profile.name ? '' : 'Tipp: Gib dir in den Einstellungen einen Namen.';
+  $('room-dialog').showModal();
+});
+$('room-create').addEventListener('click', () => enterRoom('create'));
+$('room-join').addEventListener('click', () => enterRoom('join', $('room-code').value));
+$('room-code').addEventListener('input', (e) => (e.target.value = normalizeCode(e.target.value)));
+$('room-cancel').addEventListener('click', () => $('room-dialog').close());
+
+/** Einladungslink #raum=CODE: Beitreten-Dialog mit Code öffnen */
+function openRoomFromHash() {
+  const m = /[#&]raum=([A-Za-z0-9]{5})/.exec(location.hash);
+  if (!m || app.room) return;
+  $('room-code').value = normalizeCode(m[1]);
+  $('room-error').textContent = profile.name ? '' : 'Gib dir zuerst in den Einstellungen einen Namen.';
+  $('room-dialog').showModal();
+}
+window.addEventListener('hashchange', openRoomFromHash);
+window.addEventListener('beforeunload', () => app.room?.leave());
+
 // ---------------- Start ----------------
 
 if (!bluetoothAvailable()) {
@@ -771,6 +952,7 @@ function openSharedFromHash() {
   }
 }
 openSharedFromHash();
+openRoomFromHash();
 
 // Testzugang: mit ?debug in der URL lassen sich Würfel-Ereignisse simulieren (z. B. Gyro-Daten)
 if (new URLSearchParams(location.search).has('debug')) window.__smartcube = { emit: onCubeEvent, app, settings };
