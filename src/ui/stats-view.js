@@ -22,18 +22,15 @@ const t = (x) => (x == null ? '–' : formatTime(x));
 const PHASE_CLASS = (key) => (/^p\d$/.test(key) ? 'pair' : key);
 
 export class StatsView {
-  constructor(dialog) {
-    this.dlg = dialog;
+  /** @param root Container im Statistik-Tab */
+  constructor(root) {
+    this.dlg = root;
     this.range = 100;
-    dialog.innerHTML = `
-      <div class="rp-head">
-        <h2>Statistik</h2>
-        <button class="sv-close" aria-label="Schließen">✕</button>
-      </div>
+    root.innerHTML = `
       <div class="sv-range" role="group" aria-label="Zeitraum"></div>
       <div class="sv-body"></div>
       <div class="sv-tip" hidden></div>`;
-    dialog.querySelector('.sv-close').addEventListener('click', () => dialog.close());
+    const dialog = root;
     dialog.querySelector('.sv-range').addEventListener('click', (e) => {
       const b = e.target.closest('button[data-n]');
       if (!b) return;
@@ -45,16 +42,16 @@ export class StatsView {
     dialog.addEventListener('pointerleave', () => (this.tip.hidden = true));
   }
 
+  /** Mit diesen Solves neu zeichnen */
   open(solves) {
     this.all = solves;
     this.render();
-    if (!this.dlg.open) this.dlg.showModal();
   }
 
   render() {
     const all = this.all;
     this.dlg.querySelector('.sv-range').innerHTML =
-      '<span class="label">Letzte</span>' +
+      '<span class="label">Zeitraum: letzte</span>' +
       RANGES.map(
         ([label, n]) => `<button data-n="${n}" class="${n === this.range ? 'on' : ''}" aria-pressed="${n === this.range}">${label}</button>`,
       ).join('');
@@ -310,7 +307,7 @@ export class StatsView {
     let left = e.clientX - box.left + 14;
     if (left + tw > box.width - 8) left = e.clientX - box.left - tw - 14;
     this.tip.style.left = `${Math.max(8, left)}px`;
-    this.tip.style.top = `${e.clientY - box.top + this.dlg.scrollTop + 14}px`;
+    this.tip.style.top = `${e.clientY - box.top + 14}px`;
   }
 }
 

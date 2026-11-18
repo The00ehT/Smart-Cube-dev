@@ -3,7 +3,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#11141a" />
+    <meta name="theme-color" content="#f3f4f7" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>Smartcube Timer</title>
     <script>
       try {
@@ -15,91 +17,135 @@
   </head>
   <body>
     <header class="topbar">
-      <h1>Smartcube<span>Timer</span></h1>
-      <button class="profile-chip" id="profile-chip" title="Profil & Einstellungen">
-        <span class="avatar" id="avatar-top"></span><span class="profile-name" id="name-top"></span>
-      </button>
-      <button class="room-btn" id="btn-room" title="Online-Raum">👥 Raum</button>
-      <button class="icon-btn" id="btn-settings" title="Einstellungen" aria-label="Einstellungen">⚙︎</button>
-      <div class="device" id="device">
-        <span class="dot"></span>
-        <span class="device-label" id="device-label">Nicht verbunden</span>
-        <span class="battery" id="battery" hidden></span>
+      <div class="brand">
+        <svg class="logo" viewBox="0 0 30 30" aria-hidden="true"><rect x="1" y="1" width="8" height="8" rx="2" fill="#e5484d"/><rect x="11" y="1" width="8" height="8" rx="2" fill="#f5f5f5"/><rect x="21" y="1" width="8" height="8" rx="2" fill="#30a46c"/><rect x="1" y="11" width="8" height="8" rx="2" fill="#f5d90a"/><rect x="11" y="11" width="8" height="8" rx="2" fill="#0091ff"/><rect x="21" y="11" width="8" height="8" rx="2" fill="#f76b15"/><rect x="1" y="21" width="8" height="8" rx="2" fill="#f5f5f5"/><rect x="11" y="21" width="8" height="8" rx="2" fill="#30a46c"/><rect x="21" y="21" width="8" height="8" rx="2" fill="#e5484d"/></svg>
+        <h1>Smartcube</h1>
       </div>
-      <div class="connect-buttons" id="connect-buttons">
-        <button class="primary" id="btn-connect-gan">GAN-Würfel verbinden</button>
-        <details class="more">
-          <summary aria-label="Weitere Verbindungen">Mehr</summary>
-          <div class="menu">
-            <button id="btn-connect-other">Anderer Smartcube (GiiKER, GoCube, …) – experimentell</button>
-            <button id="btn-connect-virtual">Ohne Würfel testen (virtueller Würfel)</button>
-          </div>
-        </details>
+      <nav class="tabs-top" role="tablist" aria-label="Bereiche"><button type="button" role="tab" data-tab="timer" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 2M9.5 2.5h5M12 2.5V6"/></svg><span>Timer</span></button><button type="button" role="tab" data-tab="stats" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 2.6A9 9 0 0 1 21.4 9H15z"/></svg><span>Statistik</span></button><button type="button" role="tab" data-tab="solves" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg><span>Solves</span></button><button type="button" role="tab" data-tab="room" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><circle cx="17" cy="9" r="2.6"/><path d="M16.5 14.6c2.6.1 4.5 1.8 5 4.4"/></svg><span>Raum</span><i class="tab-dot" hidden></i></button></nav>
+      <div class="top-right">
+        <div class="device" id="device" title="Würfel">
+          <span class="dot"></span>
+          <span class="device-label" id="device-label">Nicht verbunden</span>
+          <span class="battery" id="battery" hidden></span>
+          <button type="button" id="btn-disconnect" class="link-btn" hidden>Trennen</button>
+        </div>
+        <button class="profile-chip" id="profile-chip" title="Profil &amp; Einstellungen">
+          <span class="avatar" id="avatar-top"></span><span class="profile-name" id="name-top"></span>
+        </button>
+        <button class="icon-btn" id="btn-settings" title="Einstellungen" aria-label="Einstellungen"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
       </div>
-      <button id="btn-disconnect" hidden>Trennen</button>
     </header>
 
-    <div class="notice" id="bt-notice" hidden>
-      Dieser Browser unterstützt kein Web Bluetooth. Nutze <b>Chrome</b> oder <b>Edge</b> (Windows, macOS, Linux, Android, ChromeOS)
-      – auf dem iPhone/iPad den <b>Bluefy</b>-Browser. Ohne Bluetooth kannst du den virtuellen Würfel ausprobieren.
-    </div>
-
-    <section class="panel room-panel" id="room-panel" hidden></section>
-
-    <main class="layout">
-      <section class="panel cube-panel">
-        <div class="cube" id="cube"></div>
-        <div class="cube-actions">
-          <button id="btn-reset-gyro" title="Halte den Würfel mit Weiß oben und Grün vorne und drücke dann hier">Ausrichtung zurücksetzen</button>
-          <button id="btn-mark-solved" title="Setzt den gespeicherten Zustand im Würfel auf gelöst">Als gelöst markieren</button>
+    <main class="app">
+      <!-- ============ Timer ============ -->
+      <section class="tab" id="tab-timer" data-tab="timer">
+        <div class="notice" id="bt-notice" hidden>
+          Dieser Browser kann kein Web Bluetooth. Nutze <b>Chrome</b> oder <b>Edge</b> – auf dem iPhone den <b>Bluefy</b>-Browser.
+          Ohne Bluetooth kannst du den virtuellen Würfel ausprobieren.
         </div>
-        <div class="hw" id="hw"></div>
-        <div class="pad" id="pad" hidden>
-          <div class="pad-grid" id="pad-grid"></div>
-          <p class="hint">Tastatur: I/K = R/R', J/F = U/U', H/G = F/F', D/E = L/L', S/L = D/D', W/O = B/B'</p>
+
+        <button type="button" class="room-strip" id="room-strip" hidden></button>
+
+        <div class="card connect-card" id="connect-buttons">
+          <div class="connect-text">
+            <b>Würfel verbinden</b>
+            <span class="small">Schalte deinen Smartcube ein und tippe auf „Verbinden“.</span>
+          </div>
+          <div class="connect-actions">
+            <button class="primary big" id="btn-connect-gan">GAN-Würfel verbinden</button>
+            <button id="btn-connect-other">Anderer Smartcube</button>
+            <button id="btn-connect-virtual">Virtueller Würfel</button>
+          </div>
+        </div>
+
+        <div class="timer-layout">
+          <section class="card timer-card">
+            <div class="scramble-box">
+              <div class="scramble-head">
+                <span class="label" id="scramble-label">Scramble</span>
+                <div class="scramble-buttons">
+                  <button id="btn-new-scramble" class="ghost">Neues Scramble</button>
+                  <button id="btn-own-scramble" class="ghost" title="Du verdrehst selbst – der nächste Zug startet die Zeit">Eigenes</button>
+                </div>
+              </div>
+              <div class="scramble" id="scramble" aria-live="polite"></div>
+              <div class="progress"><div id="scramble-progress"></div></div>
+            </div>
+
+            <div class="timer-wrap">
+              <div class="timer" id="timer">0.00</div>
+              <div class="status" id="status">Verbinde deinen Würfel, um loszulegen.</div>
+              <div class="splits" id="splits"></div>
+            </div>
+
+            <div class="quick" id="stats-quick"></div>
+          </section>
+
+          <section class="card cube-card">
+            <div class="cube" id="cube"></div>
+            <div class="cube-actions">
+              <button id="btn-reset-gyro" class="ghost" title="Halte den Würfel mit Weiß oben und Grün vorne und drücke dann hier">Ausrichtung zurücksetzen</button>
+              <button id="btn-mark-solved" class="ghost" title="Setzt den gespeicherten Zustand im Würfel auf gelöst">Als gelöst markieren</button>
+              <button id="btn-disconnect-2" class="ghost danger" hidden>Trennen</button>
+            </div>
+            <div class="pad" id="pad" hidden>
+              <div class="pad-grid" id="pad-grid"></div>
+              <p class="hint">Tastatur: I/K = R/R', J/F = U/U', H/G = F/F', D/E = L/L', S/L = D/D', W/O = B/B'</p>
+            </div>
+            <details class="recent">
+              <summary class="label">Letzte Züge &amp; Gerät</summary>
+              <div class="moves" id="last-moves"></div>
+              <div class="hw" id="hw"></div>
+            </details>
+          </section>
         </div>
       </section>
 
-      <section class="panel timer-panel">
-        <div class="scramble-box">
-          <div class="scramble-head">
-            <span class="label" id="scramble-label">Scramble</span>
-            <div class="scramble-buttons">
-              <button id="btn-new-scramble">Neues Scramble</button>
-              <button id="btn-own-scramble" title="Du verdrehst selbst – der nächste Zug startet die Zeit">Eigenes Scramble</button>
+      <!-- ============ Statistik ============ -->
+      <section class="tab" id="tab-stats" data-tab="stats" hidden>
+        <div class="tab-head"><h2>Statistik</h2></div>
+        <div class="card" id="phase-pie-card">
+          <div id="phase-pie" class="mini-pie"></div>
+        </div>
+        <div class="card stats-full" id="stats-view"></div>
+      </section>
+
+      <!-- ============ Solves ============ -->
+      <section class="tab" id="tab-solves" data-tab="solves" hidden>
+        <div class="tab-head">
+          <h2>Solves</h2>
+          <div class="tab-actions">
+            <button id="btn-export" class="ghost" title="Alle Solves als Datei speichern">Export</button>
+            <label class="file-button ghost" title="Solves aus einer Export-Datei laden">Import<input type="file" id="file-import" accept="application/json,.json" hidden /></label>
+            <button id="btn-clear" class="ghost danger">Alle löschen</button>
+          </div>
+        </div>
+        <div class="card list-card">
+          <ol class="solves" id="solves" reversed></ol>
+        </div>
+      </section>
+
+      <!-- ============ Raum ============ -->
+      <section class="tab" id="tab-room" data-tab="room" hidden>
+        <div class="tab-head"><h2>Online-Raum</h2></div>
+        <div class="card room-intro" id="room-intro">
+          <p>Alle im Raum bekommen <b>dasselbe Scramble</b>, ihr seht euch <b>live beim Lösen</b> zu und die Zeiten landen in
+            einer gemeinsamen Tabelle. Die Verbindung läuft direkt zwischen den Geräten.</p>
+          <div class="room-choose">
+            <button type="button" class="primary big" id="room-create">Raum erstellen</button>
+            <div class="or small">oder mit Code beitreten</div>
+            <div class="room-join-row">
+              <input type="text" id="room-code" placeholder="CODE" maxlength="5" autocomplete="off" spellcheck="false" autocapitalize="characters" />
+              <button type="button" id="room-join">Beitreten</button>
             </div>
           </div>
-          <div class="scramble" id="scramble" aria-live="polite"></div>
-          <div class="progress"><div id="scramble-progress"></div></div>
+          <div class="error" id="room-error"></div>
         </div>
-
-        <div class="timer-wrap">
-          <div class="timer" id="timer">0.00</div>
-          <div class="status" id="status">Verbinde deinen Würfel, um loszulegen.</div>
-          <div class="splits" id="splits"></div>
-        </div>
-
-        <div class="recent">
-          <span class="label">Letzte Züge</span>
-          <div class="moves" id="last-moves"></div>
-        </div>
-      </section>
-
-      <section class="panel stats-panel">
-        <div class="stats" id="stats"></div>
-        <div id="phase-pie" class="mini-pie"></div>
-        <button id="btn-stats" class="stats-more">Ausführliche Statistik →</button>
-        <div class="list-head">
-          <span class="label">Solves</span>
-          <div>
-            <button id="btn-export" title="Alle Solves als Datei speichern">Export</button>
-            <label class="file-button" title="Solves aus einer Export-Datei laden">Import<input type="file" id="file-import" accept="application/json,.json" hidden /></label>
-            <button id="btn-clear" class="danger">Alle löschen</button>
-          </div>
-        </div>
-        <ol class="solves" id="solves" reversed></ol>
+        <section class="card room-panel" id="room-panel" hidden></section>
       </section>
     </main>
+
+    <nav class="tabbar" role="tablist" aria-label="Bereiche"><button type="button" role="tab" data-tab="timer" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 2M9.5 2.5h5M12 2.5V6"/></svg><span>Timer</span></button><button type="button" role="tab" data-tab="stats" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 2.6A9 9 0 0 1 21.4 9H15z"/></svg><span>Statistik</span></button><button type="button" role="tab" data-tab="solves" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg><span>Solves</span></button><button type="button" role="tab" data-tab="room" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><circle cx="17" cy="9" r="2.6"/><path d="M16.5 14.6c2.6.1 4.5 1.8 5 4.4"/></svg><span>Raum</span><i class="tab-dot" hidden></i></button></nav>
 
     <dialog id="mac-dialog">
       <form method="dialog">
@@ -204,22 +250,6 @@
       </section>
     </dialog>
 
-    <dialog id="room-dialog">
-      <h2>Online-Raum</h2>
-      <p class="small">Alle im Raum bekommen dasselbe Scramble, ihr seht euch gegenseitig live beim Lösen zu und
-        die Zeiten landen in einer gemeinsamen Tabelle. Die Verbindung läuft direkt zwischen den Geräten.</p>
-      <div class="room-choose">
-        <button type="button" class="primary" id="room-create">Raum erstellen</button>
-        <div class="room-join-row">
-          <input type="text" id="room-code" placeholder="CODE" maxlength="5" autocomplete="off" spellcheck="false" autocapitalize="characters" />
-          <button type="button" id="room-join">Beitreten</button>
-        </div>
-      </div>
-      <div class="error" id="room-error"></div>
-      <menu><button type="button" id="room-cancel">Schließen</button></menu>
-    </dialog>
-
     <dialog id="replay-dialog" class="big-dialog"></dialog>
-    <dialog id="stats-dialog" class="big-dialog"></dialog>
   </body>
 </html>

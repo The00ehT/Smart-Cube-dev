@@ -42,7 +42,7 @@ const app = {
 const view = new CubeView($('cube'));
 view.setGyroEnabled(settings.gyro);
 const replay = new Replay($('replay-dialog'));
-const statsView = new StatsView($('stats-dialog'));
+const statsView = new StatsView($('stats-view'));
 
 // ---------------- Verbindung ----------------
 
@@ -332,6 +332,7 @@ function renderDevice() {
   $('device-label').textContent = on ? app.conn.name : 'Nicht verbunden';
   $('connect-buttons').hidden = on;
   $('btn-disconnect').hidden = !on;
+  $('btn-disconnect-2').hidden = !on;
   $('pad').hidden = app.conn?.kind !== 'virtual';
   $('btn-mark-solved').disabled = !app.conn?.supportsReset;
 }
@@ -396,6 +397,13 @@ function renderTimer() {
 
 function tick() {
   if (app.phase === 'running' || app.phase === 'inspecting') renderTimer();
+  // Fokus-Modus: beim Lösen nur Timer (und Würfel) zeigen
+  const solving = app.phase === 'running' || app.phase === 'inspecting';
+  if (solving !== app.focus) {
+    app.focus = solving;
+    document.body.classList.toggle('solving', solving);
+    if (solving && app.tab !== 'timer') showTab('timer');
+  }
   // Im Raum: Statuswechsel an die anderen melden
   if (app.room && app.phase !== app.sentPhase) {
     app.sentPhase = app.phase;
@@ -460,12 +468,25 @@ function renderStats() {
     items.push(['Ø Erk. OLL', formatTime(avgOf(5))], ['Ø Erk. PLL', formatTime(avgOf(6))], ['Ø F2L', formatTime(det.reduce((a, s) => a + s.phases.slice(1, 5).reduce((b, p) => b + p.time, 0), 0) / det.length)]);
   }
   renderMiniPie(det);
+  if (!$('stats')) return;
   $('stats').innerHTML = items.map(([k, v]) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`).join('');
+}
+
+/** Kurzstatistik unter dem Timer */
+function renderQuick() {
+  const items = [
+    ['Ø 5', formatTime(averageOf(solves, 5))],
+    ['Ø 12', formatTime(averageOf(solves, 12))],
+    ['Bestzeit', formatTime(best(solves))],
+    ['Solves', String(solves.length)],
+  ];
+  $('stats-quick').innerHTML = items.map(([k, v]) => `<div><span class="k">${k}</span><b>${v}</b></div>`).join('');
 }
 
 /** Kuchendiagramm der Phasen über die letzten 12 Solves mit Detaildaten */
 function renderMiniPie(det) {
   const el = $('phase-pie');
+  $('phase-pie-card').hidden = !det.length;
   if (!det.length) {
     el.innerHTML = '';
     return;
@@ -479,6 +500,8 @@ function renderMiniPie(det) {
 
 function renderSolves() {
   renderStats();
+  renderQuick();
+  if (app.tab === 'stats') statsView.open(solves);
   const list = $('solves');
   if (!solves.length) {
     list.innerHTML = '<li class="empty">Noch keine Solves</li>';
@@ -594,6 +617,7 @@ $('btn-connect-gan').addEventListener('click', () => connect('gan'));
 $('btn-connect-other').addEventListener('click', () => connect('other'));
 $('btn-connect-virtual').addEventListener('click', () => connect('virtual'));
 $('btn-disconnect').addEventListener('click', disconnect);
+$('btn-disconnect-2').addEventListener('click', disconnect);
 $('btn-new-scramble').addEventListener('click', newScramble);
 $('btn-own-scramble').addEventListener('click', ownScramble);
 $('btn-reset-gyro').addEventListener('click', () => view.resetGyro());
@@ -661,7 +685,29 @@ $('file-import').addEventListener('change', async (e) => {
   }
 });
 
-$('btn-stats').addEventListener('click', () => statsView.open(solves));
+// ---------------- Tabs ----------------
+
+const TABS = ['timer', 'stats', 'solves', 'room'];
+app.tab = 'timer';
+function showTab(name) {
+  if (!TABS.includes(name)) name = 'timer';
+  app.tab = name;
+  for (const sec of document.querySelectorAll('main > .tab')) sec.hidden = sec.dataset.tab !== name;
+  for (const b of document.querySelectorAll('[role=tab][data-tab]')) b.setAttribute('aria-selected', String(b.dataset.tab === name));
+  if (name === 'stats') statsView.open(solves);
+  window.scrollTo({ top: 0 });
+  try {
+    sessionStorage.setItem('smartcube.tab', name);
+  } catch {
+    /* egal */
+  }
+}
+document.querySelectorAll('[role=tab][data-tab]').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+try {
+  showTab(sessionStorage.getItem('smartcube.tab') || 'timer');
+} catch {
+  showTab('timer');
+}
 
 // ---------------- Einstellungen, Profil, Farbschema ----------------
 
@@ -718,7 +764,7 @@ function applyTheme() {
   if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
   else delete document.documentElement.dataset.theme;
   const dark = t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
-  document.querySelector('meta[name=theme-color]').content = dark ? '#181b21' : '#ffffff';
+  document.querySelector('meta[name=theme-color]').content = dark ? '#101318' : '#ffffff';
   $('opt-theme').querySelectorAll('button').forEach((b) => {
     b.classList.toggle('on', b.dataset.v === t);
     b.setAttribute('aria-checked', b.dataset.v === t);
@@ -773,7 +819,7 @@ window.addEventListener('beforeunload', () => app.conn?.disconnect());
 
 // ---------------- Online-Raum ----------------
 
-const roomView = new RoomView($('room-panel'), {
+const roomView = new RoomView($('room-panel'), $('room-strip'), {
   onInvite: () => inviteToRoom(),
   onNextRound: () => hostNextRound(),
   onLeave: () => leaveRoom(),
@@ -828,6 +874,7 @@ function onRoomEvent(ev) {
       for (const c of roomView.cards.values()) c.el.querySelector('.person-time').textContent = '–';
       if (!isSolved(app.state) && app.conn) setStatus('Löse zuerst deinen Würfel (oder „Als gelöst markieren“), dann stimmt das Scramble.');
       newScramble(ev.scramble);
+      showTab('timer');
       room.live('state', { facelets: app.state });
       break;
     case 'live':
@@ -864,7 +911,7 @@ async function enterRoom(mode, code) {
   }
   const room = new Room({ name: profile.name, avatar: profile.avatar }, (ev) => onRoomEvent(ev));
   app.room = room; // schon setzen, damit frühe Ereignisse ankommen
-  $('room-dialog').querySelectorAll('button').forEach((b) => (b.disabled = true));
+  $('room-intro').querySelectorAll('button').forEach((b) => (b.disabled = true));
   msg.textContent = mode === 'create' ? 'Raum wird erstellt …' : 'Verbinde …';
   try {
     roomView.show(room); // Karten brauchen room.myId – Liste wird nach dem Öffnen gezeichnet
@@ -872,7 +919,8 @@ async function enterRoom(mode, code) {
     else await room.join(code);
     roomView.show(room);
     roomView.renderRoster(room.roster);
-    $('room-dialog').close();
+    $('room-intro').hidden = true;
+    document.querySelectorAll('.tab-dot').forEach((d) => (d.hidden = false));
     app.sentPhase = null;
     room.live('state', { facelets: app.state });
     if (app.phase === 'scrambling' || app.phase === 'done') {
@@ -888,7 +936,7 @@ async function enterRoom(mode, code) {
     roomView.hide();
     msg.textContent = 'Das hat nicht geklappt: ' + (err?.message || err);
   } finally {
-    $('room-dialog').querySelectorAll('button').forEach((b) => (b.disabled = false));
+    $('room-intro').querySelectorAll('button').forEach((b) => (b.disabled = false));
   }
 }
 
@@ -901,26 +949,24 @@ function leaveRoom(silent) {
   app.room = null;
   app.roomRound = null;
   roomView.hide();
+  $('room-intro').hidden = false;
+  $('room-strip').hidden = true;
+  document.querySelectorAll('.tab-dot').forEach((d) => (d.hidden = true));
   if (!silent) setStatus('Raum verlassen.');
 }
 
-$('btn-room').addEventListener('click', () => {
-  if (app.room) return $('room-panel').scrollIntoView({ behavior: 'smooth' });
-  $('room-error').textContent = profile.name ? '' : 'Tipp: Gib dir in den Einstellungen einen Namen.';
-  $('room-dialog').showModal();
-});
+$('room-strip').addEventListener('click', () => showTab('room'));
 $('room-create').addEventListener('click', () => enterRoom('create'));
 $('room-join').addEventListener('click', () => enterRoom('join', $('room-code').value));
 $('room-code').addEventListener('input', (e) => (e.target.value = normalizeCode(e.target.value)));
-$('room-cancel').addEventListener('click', () => $('room-dialog').close());
 
 /** Einladungslink #raum=CODE: Beitreten-Dialog mit Code öffnen */
 function openRoomFromHash() {
   const m = /[#&]raum=([A-Za-z0-9]{5})/.exec(location.hash);
   if (!m || app.room) return;
   $('room-code').value = normalizeCode(m[1]);
-  $('room-error').textContent = profile.name ? '' : 'Gib dir zuerst in den Einstellungen einen Namen.';
-  $('room-dialog').showModal();
+  $('room-error').textContent = profile.name ? 'Tippe auf „Beitreten“.' : 'Gib dir zuerst in den Einstellungen einen Namen, dann „Beitreten“.';
+  showTab('room');
 }
 window.addEventListener('hashchange', openRoomFromHash);
 window.addEventListener('beforeunload', () => app.room?.leave());

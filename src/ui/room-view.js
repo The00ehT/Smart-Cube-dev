@@ -17,8 +17,9 @@ const STATUS = {
 };
 
 export class RoomView {
-  constructor(panel, handlers) {
+  constructor(panel, strip, handlers) {
     this.panel = panel;
+    this.strip = strip;
     this.h = handlers;
     this.cards = new Map(); // id → { el, cube, phase, startedAt, state }
     panel.innerHTML = `
@@ -56,6 +57,10 @@ export class RoomView {
 
   hide() {
     this.panel.hidden = true;
+    if (this.strip) {
+      this.strip.hidden = true;
+      this.stripHtml = '';
+    }
     for (const c of this.cards.values()) c.el.remove();
     this.cards.clear();
     this.room = null;
@@ -177,6 +182,26 @@ export class RoomView {
     for (const c of this.cards.values()) {
       if (c.phase === 'running') c.el.querySelector('.person-time').textContent = formatTime(now - c.startedAt);
     }
+    this.#renderStrip();
     requestAnimationFrame(() => this.#tick());
+  }
+
+  /** Kurzleiste im Timer-Tab: die anderen mit Status bzw. Zeit */
+  #renderStrip() {
+    if (!this.room || !this.strip) return;
+    const others = (this.room.roster || []).filter((p) => p.id !== this.room.myId);
+    const round = this.room.board?.at(-1);
+    const parts = others.map((p) => {
+      const c = this.cards.get(p.id);
+      const t = c ? c.el.querySelector('.person-time').textContent : '–';
+      const st = c?.phase === 'running' ? t : c?.phase === 'done' ? t : STATUS[c?.phase] ?? '';
+      return `<span class="rs-p${c?.phase === 'running' ? ' live' : ''}"><span class="avatar">${avatarHtml({ name: p.name, avatar: p.avatar })}</span>${esc(p.name)} <b>${esc(st)}</b></span>`;
+    });
+    const html = `<span class="rs-code">Raum ${esc(this.room.code)}${round ? ` · Runde ${round.n}` : ''}</span>${parts.join('') || '<span class="small">Warte auf Mitspieler …</span>'}<span class="rs-go">›</span>`;
+    if (html !== this.stripHtml) {
+      this.strip.innerHTML = html;
+      this.stripHtml = html;
+    }
+    this.strip.hidden = false;
   }
 }
