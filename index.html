@@ -75,6 +75,7 @@
 
       <section class="panel stats-panel">
         <div class="stats" id="stats"></div>
+        <button id="btn-stats" class="stats-more">Ausführliche Statistik →</button>
         <div class="list-head">
           <span class="label">Solves</span>
           <div>
@@ -89,6 +90,18 @@
           <label class="toggle"><input type="checkbox" id="opt-inspection" /> 15 s Inspektion (WCA: +2 ab 15 s, DNF ab 17 s)</label>
           <label class="toggle"><input type="checkbox" id="opt-auto-scramble" checked /> Nach jedem Solve automatisch neues Scramble</label>
           <label class="toggle"><input type="checkbox" id="opt-hide-time" /> Zeit während des Solves ausblenden</label>
+          <label class="select-row">Würfelansicht ohne Gyroskop
+            <select id="opt-view-down">
+              <option value="auto">Kreuzfarbe unten (automatisch)</option>
+              <option value="U">Weiß unten</option>
+              <option value="D">Gelb unten</option>
+              <option value="F">Grün unten</option>
+              <option value="B">Blau unten</option>
+              <option value="R">Rot unten</option>
+              <option value="L">Orange unten</option>
+              <option value="none">Standard (Weiß oben)</option>
+            </select>
+          </label>
           <button id="btn-forget-mac">Gespeicherte MAC-Adressen vergessen</button>
         </details>
       </section>
@@ -124,7 +137,7 @@
         <div class="alg" id="sd-scramble"></div>
         <div class="label">Lösung</div>
         <div class="alg" id="sd-solution"></div>
-        <a id="sd-replay" target="_blank" rel="noopener">Lösung im 3D-Player ansehen ↗</a>
+        <button type="button" id="sd-replay" class="primary">▶ Rekonstruktion ansehen &amp; teilen</button>
         <menu>
           <button value="ok-pen" id="sd-ok">OK</button>
           <button value="p2" id="sd-plus2">+2</button>
@@ -136,5 +149,7 @@
     </dialog>
 
     <script type="module" src="./src/main.js"></script>
+    <dialog id="replay-dialog" class="big-dialog"></dialog>
+    <dialog id="stats-dialog" class="big-dialog"></dialog>
   </body>
 </html>

@@ -1,5 +1,5 @@
 import { cubeTimestampLinearFit } from 'gan-web-bluetooth';
-import { FACES, phaseStatus } from './facelets.js';
+import { analyzeSolve } from './analysis.js';
 
 /**
  * Zeiten der Züge relativ zum ersten Zug.
@@ -25,60 +25,25 @@ export function moveTimes(moves) {
   return out;
 }
 
+/** Sammelt die Züge eines Solves; die Auswertung passiert erst am Ende (analysis.js) */
 export class SolveRecorder {
-  constructor() {
+  /** @param {string} start Zustand vor dem ersten Zug */
+  constructor(start) {
+    this.start = start;
     this.moves = [];
-    // je Kreuzseite: Zugindex, bei dem Kreuz / F2L / OLL erstmals erreicht wurden
-    this.phaseIdx = Object.fromEntries(FACES.map((f) => [f, { cross: null, f2l: null, oll: null }]));
   }
 
-  push(moveEvent, stateAfter) {
-    const i = this.moves.length;
+  push(moveEvent) {
     this.moves.push({ move: moveEvent.move, localTimestamp: moveEvent.localTimestamp, cubeTimestamp: moveEvent.cubeTimestamp });
-    const st = phaseStatus(stateAfter);
-    for (const f of FACES) {
-      const p = this.phaseIdx[f];
-      for (const k of ['cross', 'f2l', 'oll']) if (p[k] === null && st[f][k]) p[k] = i;
-    }
   }
 
   /** Ergebnis nach dem lösenden Zug */
   finish() {
-    const times = moveTimes(this.moves);
-    const n = this.moves.length;
-    const time = n ? times[n - 1] : 0;
-    // Kreuzseite: dort, wo F2L zuerst fertig war (bei Gleichstand das frühere Kreuz)
-    let face = FACES[0];
-    for (const f of FACES) {
-      const a = this.phaseIdx[f];
-      const b = this.phaseIdx[face];
-      if (a.f2l < b.f2l || (a.f2l === b.f2l && a.cross < b.cross)) face = f;
-    }
-    const p = this.phaseIdx[face];
-    const marks = [
-      ['Kreuz', p.cross],
-      ['F2L', p.f2l],
-      ['OLL', p.oll],
-      ['PLL', n - 1],
-    ];
-    let prevIdx = -1;
-    let prevT = 0;
-    const phases = marks.map(([name, idx]) => {
-      const i = Math.max(idx ?? prevIdx, prevIdx);
-      const t = i >= 0 ? times[i] : 0;
-      const ph = { name, time: t - prevT, moves: i - prevIdx, at: t };
-      prevIdx = i;
-      prevT = t;
-      return ph;
-    });
-    return {
-      time,
-      moveCount: n,
-      tps: time > 0 ? (n / time) * 1000 : 0,
-      crossFace: face,
-      phases,
-      solution: this.moves.map((m) => m.move).join(' '),
-      moveTimes: times,
-    };
+    const times = moveTimes(this.moves).map((x) => Math.max(0, Math.round(x)));
+    // Zeiten dürfen nicht rückwärts laufen (verlorene oder vertauschte Ereignisse)
+    for (let i = 1; i < times.length; i++) if (times[i] < times[i - 1]) times[i] = times[i - 1];
+    const moves = this.moves.map((m) => m.move);
+    const a = analyzeSolve(this.start, moves, times);
+    return { ...a, start: this.start, moves, times, solution: moves.join(' ') };
   }
 }

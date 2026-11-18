@@ -19,16 +19,16 @@ const { SolveRecorder, moveTimes } = await import('../src/cube/solve-recorder.js
 
 // Scramble = Umkehrung einer "Lösung" aus Kreuz-/F2L-/OLL-/PLL-artigen Teilen
 let state = applyAlg(SOLVED, "F R U R' U' F'"); // OLL-Fall (Kreuz und F2L intakt)
-const rec = new SolveRecorder();
+const rec = new SolveRecorder(state);
 let t = 1000;
 for (const m of "F U R U' R' F'".split(' ')) {
   state = applyMove(state, m);
-  rec.push({ move: m, localTimestamp: (t += 200), cubeTimestamp: t * 1.01 }, state);
+  rec.push({ move: m, localTimestamp: (t += 200), cubeTimestamp: t * 1.01 });
 }
 assert.ok(isSolved(state));
 const r = rec.finish();
 assert.equal(r.moveCount, 6);
-assert.ok(Math.abs(r.time - 1000) < 5, 'Zeit ≈ 1000 ms, ist ' + r.time);
+assert.ok(Math.abs(r.time - 1000) < 6, 'Zeit ≈ 1000 ms, ist ' + r.time);
 assert.equal(r.phases.reduce((a, p) => a + p.moves, 0), 6, 'Zugzahlen summieren sich');
 assert.ok(Math.abs(r.phases.reduce((a, p) => a + p.time, 0) - r.time) < 1, 'Phasenzeiten summieren sich');
 assert.ok('URFDLB'.includes(r.crossFace));

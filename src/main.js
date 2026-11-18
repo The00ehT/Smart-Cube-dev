@@ -1,6 +1,6 @@
 import './styles.css';
 import { now } from 'gan-web-bluetooth';
-import { SOLVED, applyMove, isSolved } from './cube/facelets.js';
+import { SOLVED, applyMove, applyAlg, isSolved, COLOR_NAMES, groupMoves } from './cube/facelets.js';
 import { ScrambleTracker } from './cube/scramble-tracker.js';
 import { SolveRecorder } from './cube/solve-recorder.js';
 import { bluetoothAvailable, connectGan, connectOther, connectVirtual } from './cube/connection.js';
@@ -8,12 +8,16 @@ import { CubeView } from './ui/cube-view.js';
 import { forgetMacs } from './ui/mac-dialog.js';
 import { load, save } from './storage.js';
 import { averageOf, bestAverage, best, mean, formatTime, formatSolve, effectiveTime } from './stats.js';
+import { buildSolve, hasDetail, phasesOf, phaseName } from './solve-data.js';
+import { decodeShare } from './share.js';
+import { Replay, colorChip } from './ui/replay.js';
+import { StatsView } from './ui/stats-view.js';
 
 const $ = (id) => document.getElementById(id);
 const SOLVES_KEY = 'smartcube.solves.v1';
 const SETTINGS_KEY = 'smartcube.settings.v1';
 
-const settings = { inspection: false, autoScramble: true, hideTime: false, gyro: true, ...load(SETTINGS_KEY, {}) };
+const settings = { inspection: false, autoScramble: true, hideTime: false, gyro: true, viewDown: 'auto', ...load(SETTINGS_KEY, {}) };
 let solves = load(SOLVES_KEY, []);
 
 const app = {
@@ -32,6 +36,8 @@ const app = {
 
 const view = new CubeView($('cube'));
 view.setGyroEnabled(settings.gyro);
+const replay = new Replay($('replay-dialog'));
+const statsView = new StatsView($('stats-dialog'));
 
 // ---------------- Verbindung ----------------
 
@@ -88,6 +94,7 @@ async function connect(kind) {
     renderDevice();
     return;
   }
+  view.resetGyroSeen();
   renderDevice();
   renderHardware();
   if (app.phase === 'idle') setStatus(isSolved(app.state) ? 'Verbunden. Hol dir ein Scramble.' : 'Verbunden.');
@@ -127,6 +134,7 @@ function onDisconnected() {
 // ---------------- Züge und Ablauf ----------------
 
 function onMove(e) {
+  const before = app.state;
   app.state = applyMove(app.state, e.move);
   view.addMove(e.move);
   app.lastMoves.push(e.move);
@@ -141,10 +149,10 @@ function onMove(e) {
       break;
     case 'ready':
     case 'inspecting':
-      startSolve(e);
+      startSolve(e, before);
       break;
     case 'running':
-      app.recorder.push(e, app.state);
+      app.recorder.push(e);
       if (isSolved(app.state)) finishSolve();
       break;
     default:
@@ -162,6 +170,7 @@ function maybeResync() {
 
 async function newScramble() {
   app.phase = 'scrambling';
+  updateViewOrientation();
   app.tracker = null;
   app.scramble = '';
   $('scramble').innerHTML = '<span class="msg">Scramble wird erzeugt …</span>';
@@ -202,15 +211,16 @@ function enterReady() {
   renderTimer();
 }
 
-function startSolve(e) {
+function startSolve(e, before) {
   if (app.phase === 'inspecting') {
     const t = now() - app.inspectionStart;
     app.inspectionPenalty = t > 17000 ? 'DNF' : t > 15000 ? 2000 : 0;
   }
   app.phase = 'running';
-  app.recorder = new SolveRecorder();
+  app.recorder = new SolveRecorder(before);
   app.startLocal = e.localTimestamp ?? now();
-  app.recorder.push(e, app.state);
+  app.recorder.push(e);
+  updateViewOrientation();
   setStatus('Läuft …');
   if (isSolved(app.state)) finishSolve();
   renderTimer();
@@ -218,31 +228,25 @@ function startSolve(e) {
 
 function finishSolve() {
   const r = app.recorder.finish();
-  const solve = {
-    id: Date.now(),
-    date: new Date().toISOString(),
-    time: Math.round(r.time),
+  const solve = buildSolve(r, {
     penalty: app.inspectionPenalty || 0,
     scramble: app.scramble,
-    solution: r.solution,
-    moveCount: r.moveCount,
-    tps: Math.round(r.tps * 100) / 100,
-    crossFace: r.crossFace,
-    phases: r.phases.map((p) => ({ name: p.name, time: Math.round(p.time), moves: p.moves })),
     device: app.conn?.name || '',
-  };
+  });
   solves.push(solve);
   persistSolves();
   app.phase = 'done';
   app.lastSolve = solve;
   app.movesSinceSync = 0;
   view.setState(app.state);
+  updateViewOrientation();
   renderTimer();
   renderSplits(solve);
   renderSolves();
   const pb = best(solves) === effectiveTime(solve) && solves.length > 1;
-  setStatus(`${formatSolve(solve)} · ${solve.moveCount} Züge · ${solve.tps.toFixed(2)} TPS${pb ? ' · Neue Bestzeit! 🎉' : ''}`);
-  if (settings.autoScramble) newScramble().then(() => setStatus(`Letzter Solve: ${formatSolve(solve)} · ${solve.moveCount} Züge · ${solve.tps.toFixed(2)} TPS${pb ? ' · Neue Bestzeit! 🎉' : ''}`));
+  const summary = () => `${formatSolve(solve)} · ${solve.moveCount} Züge · ${solve.tps.toFixed(2)} TPS${pb ? ' · Neue Bestzeit! 🎉' : ''}`;
+  setStatus(summary());
+  if (settings.autoScramble) newScramble().then(() => setStatus('Letzter Solve: ' + summary()));
 }
 
 function cancelSolve() {
@@ -344,9 +348,38 @@ function tick() {
 requestAnimationFrame(tick);
 
 function renderSplits(solve) {
-  $('splits').innerHTML = (solve.phases || [])
-    .map((p) => `<div class="sp">${p.name}<b>${formatTime(p.time)}</b>${p.moves} ${p.moves === 1 ? 'Zug' : 'Züge'}</div>`)
-    .join('');
+  const el = $('splits');
+  if (!hasDetail(solve)) {
+    el.innerHTML = (solve.phases || [])
+      .map((p) => `<div class="sp">${phaseName(p)}<b>${formatTime(p.time)}</b>${p.moves} Z.</div>`)
+      .join('');
+    return;
+  }
+  const [cross, f2l, oll, pll] = phasesOf(solve, { mergeF2l: true });
+  const pairs = solve.phases.slice(1, 5);
+  const recog = (p) => (p.recog > 0 ? `<small>Erk. ${formatTime(p.recog)}</small>` : '');
+  const skip = (p) => (p.skip ? '<small class="tag">Skip</small>' : '');
+  el.innerHTML = `
+    <div class="sp ph-cross">Kreuz ${colorChip(solve.crossFace)}<b>${formatTime(cross.time)}</b>${cross.moves} Z.${solve.xcross ? '<small class="tag">X-Cross</small>' : ''}</div>
+    <div class="sp ph-pair">F2L<b>${formatTime(f2l.time)}</b>${f2l.moves} Z.
+      <small class="pairs">${pairs.map((p) => formatTime(p.time)).join(' · ')}</small></div>
+    <div class="sp ph-oll">OLL<b>${formatTime(oll.time)}</b>${oll.moves} Z.${recog(oll)}${skip(oll)}</div>
+    <div class="sp ph-pll">PLL<b>${formatTime(pll.time)}</b>${pll.moves} Z.${recog(pll)}${skip(pll)}</div>`;
+}
+
+/**
+ * Ansicht ohne Gyroskop: beim Scrambeln Standardlage (Weiß oben, Grün vorne),
+ * sonst liegt die Kreuzfarbe unten (Einstellung „auto“: häufigste Kreuzfarbe der letzten 12 Solves).
+ */
+function updateViewOrientation() {
+  if (app.phase === 'scrambling' || settings.viewDown === 'none') return view.setDownFace(null);
+  let face = settings.viewDown;
+  if (face === 'auto') {
+    const count = {};
+    for (const s of solves.slice(-12)) if (s.crossFace) count[s.crossFace] = (count[s.crossFace] || 0) + 1;
+    face = Object.entries(count).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  }
+  view.setDownFace(face);
 }
 
 function renderStats() {
@@ -362,6 +395,12 @@ function renderStats() {
     ['Solves', String(solves.length)],
     ['Ø TPS', solves.length ? (solves.reduce((a, s) => a + (s.tps || 0), 0) / solves.length).toFixed(2) : '–'],
   ];
+  // Ø Erkennung OLL/PLL über die letzten 12 Solves mit Detaildaten
+  const det = solves.filter(hasDetail).slice(-12);
+  if (det.length) {
+    const avgOf = (i) => det.reduce((a, s) => a + s.phases[i].recog, 0) / det.length;
+    items.push(['Ø Erk. OLL', formatTime(avgOf(5))], ['Ø Erk. PLL', formatTime(avgOf(6))], ['Ø F2L', formatTime(det.reduce((a, s) => a + s.phases.slice(1, 5).reduce((b, p) => b + p.time, 0), 0) / det.length)]);
+  }
   $('stats').innerHTML = items.map(([k, v]) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`).join('');
 }
 
@@ -394,6 +433,17 @@ function escapeHtml(s) {
 
 // ---------------- Solve-Details ----------------
 
+/** Daten für die Wiedergabe; alte Solves ohne Zugzeiten bekommen gleichmäßige Zeiten */
+function replayData(s) {
+  if (hasDetail(s)) return { ...s, moves: s.solution.split(' ').filter(Boolean) };
+  const moves = (s.solution || '').split(' ').filter(Boolean);
+  if (!s.scramble || !moves.length) return null;
+  const start = applyAlg(SOLVED, s.scramble);
+  if (!isSolved(applyAlg(start, moves.join(' ')))) return null;
+  const step = s.time / Math.max(1, moves.length - 1);
+  return { ...s, start, moves, times: moves.map((_, k) => Math.round(k * step)), estimated: true };
+}
+
 function openSolve(i) {
   const s = solves[i];
   if (!s) return;
@@ -401,20 +451,39 @@ function openSolve(i) {
   dlg.dataset.index = i;
   $('sd-time').textContent = `${i + 1}. ${formatSolve(s)}`;
   $('sd-date').textContent = `${new Date(s.date).toLocaleString('de-DE')}${s.device ? ' · ' + s.device : ''}`;
-  $('sd-phases').innerHTML = s.phases?.length
-    ? '<tr><th>Phase</th><th>Zeit</th><th>Züge</th><th>TPS</th></tr>' +
-      s.phases.map((p) => `<tr><td>${p.name}</td><td>${formatTime(p.time)}</td><td>${p.moves}</td><td>${p.time > 0 ? ((p.moves / p.time) * 1000).toFixed(2) : '–'}</td></tr>`).join('')
+  const detail = hasDetail(s);
+  const rows = (s.phases || []).map((p) => {
+    const name = phaseName(p) + (p.slot ? ' ' + [...p.slot].map(colorChip).join('') : '');
+    const exec = p.time - (p.recog || 0);
+    const tps = exec > 0 && p.moves ? ((p.moves / exec) * 1000).toFixed(2) : '–';
+    const tag = p.skip ? ' <span class="tag">Skip</span>' : '';
+    return `<tr class="${/^p\d$/.test(p.key ?? '') ? 'sub' : ''}"><td>${name}${tag}</td><td>${formatTime(p.time)}</td>${detail ? `<td>${p.key === 'cross' ? '–' : formatTime(p.recog)}</td>` : ''}<td>${p.moves}</td><td>${tps}</td></tr>`;
+  });
+  $('sd-phases').innerHTML = rows.length
+    ? `<tr><th>Phase</th><th>Zeit</th>${detail ? '<th>Erkennung</th>' : ''}<th>Züge</th><th>TPS</th></tr>` + rows.join('')
     : '';
-  $('sd-info').innerHTML = `<span>${s.moveCount ?? '–'} Züge (Vierteldrehungen)</span><span>${(s.tps ?? 0).toFixed(2)} TPS</span>`;
+  const extra = [
+    `${s.moveCount ?? '–'} Züge (Vierteldrehungen)`,
+    `${(s.tps ?? 0).toFixed(2)} TPS`,
+    s.crossFace ? `Kreuz: ${colorChip(s.crossFace)} ${COLOR_NAMES[s.crossFace]}` : '',
+    s.xcross ? 'X-Cross' : '',
+  ].filter(Boolean);
+  $('sd-info').innerHTML = extra.map((x) => `<span>${x}</span>`).join('');
   $('sd-scramble').textContent = s.scramble || '(eigenes Scramble)';
-  $('sd-solution').textContent = s.solution || '–';
-  const link = $('sd-replay');
-  if (s.scramble && s.solution) {
-    link.hidden = false;
-    link.href = `https://alpha.twizzle.net/edit/?setup-alg=${encodeURIComponent(s.scramble)}&alg=${encodeURIComponent(s.solution)}`;
-  } else link.hidden = true;
+  $('sd-solution').textContent = s.solution ? groupMoves(s.solution.split(' ').filter(Boolean)).map((g) => g.text).join(' ') : '–';
+  $('sd-replay').hidden = !replayData(s);
   dlg.showModal();
 }
+
+$('sd-replay').addEventListener('click', (e) => {
+  e.preventDefault();
+  const dlg = $('solve-dialog');
+  const s = solves[Number(dlg.dataset.index)];
+  const data = s && replayData(s);
+  if (!data) return;
+  dlg.close();
+  replay.open(data, { title: `Solve ${Number(dlg.dataset.index) + 1}` });
+});
 
 $('solve-dialog').addEventListener('close', () => {
   const dlg = $('solve-dialog');
@@ -505,6 +574,15 @@ $('file-import').addEventListener('change', async (e) => {
   }
 });
 
+$('btn-stats').addEventListener('click', () => statsView.open(solves));
+
+$('opt-view-down').value = settings.viewDown;
+$('opt-view-down').addEventListener('change', (e) => {
+  settings.viewDown = e.target.value;
+  save(SETTINGS_KEY, settings);
+  updateViewOrientation();
+});
+
 $('btn-clear').addEventListener('click', () => {
   if (!solves.length || !confirm(`Alle ${solves.length} Solves löschen? Tipp: vorher exportieren.`)) return;
   solves = [];
@@ -544,3 +622,21 @@ if (!bluetoothAvailable()) {
 renderDevice();
 renderSolves();
 renderTimer();
+updateViewOrientation();
+
+/** Geteilter Solve im Link (#r=1&…): direkt die Rekonstruktion zeigen */
+function openSharedFromHash() {
+  if (!/[#&]r=1/.test(location.hash)) return;
+  try {
+    const shared = decodeShare(location.hash);
+    replay.onClose = () => {
+      replay.onClose = null;
+      history.replaceState(null, '', location.pathname + location.search);
+    };
+    replay.open(shared, { title: 'Geteilter Solve' });
+  } catch (err) {
+    setStatus('Der geteilte Link ist ungültig: ' + (err?.message || err));
+  }
+}
+openSharedFromHash();
+window.addEventListener('hashchange', openSharedFromHash);

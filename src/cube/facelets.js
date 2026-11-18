@@ -183,3 +183,101 @@ export function patternDataToFacelets(data) {
   fill(CORNER_SLOTS, CORNER_NAMES, data.CORNERS);
   return out.join('');
 }
+
+// ---------- Würfeldrehungen (x, y, z) ----------
+
+// x folgt R, y folgt U, z folgt F: Drehung um −90° um die jeweilige Achse
+const ROT_AXES = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] };
+const faceOfNormal = (n) => FACES.find((f) => NORMALS[f].every((v, k) => v === n[k]));
+
+/**
+ * Seitenzuordnung nach einer Würfeldrehung wie "z2" oder "x' y":
+ * map[f] = Seite, auf der die bisherige Seite f danach liegt.
+ */
+export function rotationFaceMap(rotation) {
+  const map = Object.fromEntries(FACES.map((f) => [f, f]));
+  for (const tok of rotation.split(/\s+/).filter(Boolean)) {
+    const m = /^([xyz])(2?)('?)$/.exec(tok);
+    if (!m) throw new Error('Unbekannte Drehung: ' + tok);
+    const k = m[2] ? 2 : m[3] ? 1 : 3; // in Schritten von +90°; Uhrzeigersinn = −90° = 3 · (+90°)
+    for (const f of FACES) map[f] = faceOfNormal(rot90(NORMALS[map[f]], ROT_AXES[m[1]], k));
+  }
+  return map;
+}
+
+/** Drehung, die die Kreuzseite nach unten (D) bringt; Vorderseite bleibt möglichst erhalten */
+export const CROSS_DOWN = { D: '', U: 'z2', F: "x'", B: 'x', R: 'z', L: "z'" };
+
+/** Übersetzt Züge in die Sicht nach einer Würfeldrehung */
+export function translateMoves(moves, rotation) {
+  if (!rotation) return [...moves];
+  const map = rotationFaceMap(rotation);
+  return moves.map((mv) => map[mv[0]] + mv.slice(1));
+}
+
+/** Farbnamen des Standard-Farbschemas (Weiß oben, Grün vorne) */
+export const COLOR_NAMES = { U: 'Weiß', R: 'Rot', F: 'Grün', D: 'Gelb', L: 'Orange', B: 'Blau' };
+
+// ---------- F2L-Slots ----------
+
+/**
+ * Je Kreuzseite die vier Slots (Ecke + Mittelschicht-Kante).
+ * slot.faces = die beiden Seitenfarben, slot.stickers = Feldindizes beider Steine.
+ */
+export const F2L_SLOTS = {};
+for (const f of FACES) {
+  const n = NORMALS[f];
+  const sides = FACES.filter((s) => dot(NORMALS[s], n) === 0);
+  const slots = [];
+  for (let a = 0; a < sides.length; a++) for (let b = a + 1; b < sides.length; b++) {
+    const na = NORMALS[sides[a]];
+    const nb = NORMALS[sides[b]];
+    if (dot(na, nb) !== 0) continue; // Gegenseiten bilden keinen Slot
+    const edge = na.map((v, k) => v + nb[k]);
+    const corner = edge.map((v, k) => v + n[k]);
+    const stickers = STICKERS.map((s, i) => i).filter((i) => {
+      const p = STICKERS[i].pos;
+      return p.every((v, k) => v === edge[k]) || p.every((v, k) => v === corner[k]);
+    });
+    slots.push({ faces: sides[a] + sides[b], stickers });
+  }
+  F2L_SLOTS[f] = slots;
+}
+
+/** Welche Slots der Kreuzseite f gelöst sind (Bitmaske, Reihenfolge wie F2L_SLOTS[f]) */
+export function solvedSlots(state, f) {
+  let mask = 0;
+  F2L_SLOTS[f].forEach((s, k) => {
+    if (s.stickers.every((i) => stickerOk(state, i))) mask |= 1 << k;
+  });
+  return mask;
+}
+
+/** Umkehrung einer Zugfolge ("R U2 F'" → "F U2 R'") */
+export function invertAlg(alg) {
+  return alg
+    .split(/\s+/)
+    .filter(Boolean)
+    .reverse()
+    .map((m) => {
+      const p = parseMove(m);
+      return p ? formatMove(p.face, 4 - p.amount) : m;
+    })
+    .join(' ');
+}
+
+/**
+ * Fasst für die Anzeige zwei gleiche Vierteldrehungen direkt hintereinander zu einem Doppelzug zusammen
+ * (Smartcubes melden "F2" als zwei Züge "F F"). Liefert Gruppen { text, first, last } mit Zugindizes.
+ */
+export function groupMoves(moves, offset = 0) {
+  const out = [];
+  for (let i = 0; i < moves.length; i++) {
+    const m = moves[i];
+    if (i + 1 < moves.length && moves[i + 1] === m && !m.endsWith('2')) {
+      out.push({ text: m[0] + '2', first: offset + i, last: offset + i + 1 });
+      i++;
+    } else out.push({ text: m, first: offset + i, last: offset + i });
+  }
+  return out;
+}

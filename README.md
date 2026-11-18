@@ -15,8 +15,15 @@ Aufgebaut auf [gan-web-bluetooth](https://github.com/afedotov/gan-web-bluetooth)
   und rot als Korrektur angezeigt, R statt R2 oder L/R vertauscht wird mitverrechnet
 - **Automatische Zeitmessung**: Start beim ersten Zug, Stopp bei gelöst; Würfel-Zeitstempel werden per
   linearer Regression an die Geräteuhr angeglichen (wie csTimer)
-- **CFOP-Phasen**: Kreuz / F2L / OLL / PLL mit Zeit, Zügen und TPS (Kreuzseite wird erkannt)
-- **Statistik**: Bestzeit, Ø5, Ø12, Ø100, beste Durchschnitte, Mittel, TPS; +2 / DNF; Export/Import als JSON
+- **CFOP-Phasen**: Kreuz, **jedes F2L-Paar einzeln** (mit Slot-Farben), OLL, PLL – mit Zeit, Zügen, TPS und
+  **Erkennungszeit** (Pause vor dem ersten Zug der Phase); OLL-/PLL-Skips und X-Cross werden erkannt
+- **Rekonstruktion** jedes Solves in **Echtzeit** (0,25×–2×, Zug für Zug, Zeitleiste), die **Kreuzfarbe liegt
+  automatisch unten** – auch ohne Gyroskop. Lösung nach Phasen gegliedert, als **Link teilbar** (alles steckt im
+  Link, kein Server nötig) und in Twizzle zu öffnen
+- **Ausführliche Statistik**: Zeitraum wählbar; Bestzeit, Mittel, Median, Streuung, Ø5/12/50/100 (aktuell und
+  beste), Verlauf, Verteilung, Phasen-Tabelle (Erkennung vs. Ausführung, TPS, Anteil), Skip-Raten,
+  Lookahead (Pausen ≥ 0,5 s), Kreuzfarben, Zeiten je F2L-Slot; +2 / DNF; Export/Import als JSON
+- **Würfelansicht ohne Gyroskop**: Kreuzfarbe automatisch unten (beim Scrambeln Standardlage Weiß oben, Grün vorne)
 - Optional **15 s Inspektion** nach WCA (+2 ab 15 s, DNF ab 17 s)
 - **Akkustand**, Modell, Firmware
 - **Andere Smartcubes** (GiiKER, GoCube, Rubik's Connected, …) experimentell über cubing.js
@@ -31,6 +38,8 @@ Laut gan-web-bluetooth 3.0.2:
 | Gen2 | GAN Mini ui FreePlay, GAN12 ui FreePlay, GAN12 ui, GAN356 i Carry S, GAN356 i Carry, GAN356 i 3, Monster Go 3Ai, MoYu AI 2023 |
 | Gen3 | GAN356 i Carry 2 |
 | Gen4 | GAN12 ui Maglev, GAN14 ui FreePlay |
+
+Mit echter Hardware getestet: **GAN i4** und **GAN356 i Carry S**.
 
 Andere GAN-Modelle funktionieren, sofern sie eines dieser drei Protokolle sprechen (die App erkennt das selbst).
 Meldet die App „unbekanntes Protokoll“, nutzt der Würfel ein noch nicht unterstütztes Protokoll.
@@ -67,7 +76,13 @@ Jeder Push wird getestet und gebaut; der Stand von `main` wird automatisch auf G
 |---|---|
 | `src/cube/facelets.js` | Sticker-Modell des Würfels (aus 3D-Geometrie), Phasenerkennung, Umwandlung zu cubing.js |
 | `src/cube/scramble-tracker.js` | Scramble-Führung mit Fehlerkorrektur |
-| `src/cube/solve-recorder.js` | Zeitmessung (Uhrenabgleich) und CFOP-Phasen |
+| `src/cube/solve-recorder.js` | Zeitmessung (Uhrenabgleich) |
+| `src/cube/analysis.js` | CFOP-Auswertung: Kreuz, F2L-Paare einzeln, OLL, PLL, Erkennungszeiten, Skips |
+| `src/solve-data.js` | Speicherformat der Solves (v1 alt, v2 mit Zugzeiten) |
+| `src/stats-detail.js` | Ausführliche Statistik |
+| `src/share.js` | Solve als Link kodieren/dekodieren |
+| `src/ui/replay.js` | Rekonstruktion (Echtzeit-Wiedergabe, Kreuz unten, Teilen) |
+| `src/ui/stats-view.js` | Statistik-Ansicht mit Diagrammen |
 | `src/cube/connection.js` | GAN / andere Smartcubes / virtueller Würfel mit einheitlichen Ereignissen |
 | `src/ui/cube-view.js` | 3D-Darstellung mit Gyroskop |
 | `src/main.js` | Ablauf, Oberfläche, Statistik, Speicherung (localStorage) |

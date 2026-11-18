@@ -35,6 +35,26 @@ function qFromEuler(xd, yd, zd) {
 
 const HOME = qFromEuler(15, -20, 0);
 
+// Drehung der Ansicht, damit die Kreuzseite unten liegt (three.js: x → R, y → U, z → F)
+const H = Math.SQRT1_2;
+const CROSS_DOWN_Q = {
+  D: { x: 0, y: 0, z: 0, w: 1 },
+  U: { x: 0, y: 0, z: 1, w: 0 }, // z2
+  F: { x: H, y: 0, z: 0, w: H }, // x' (+90° um x)
+  B: { x: -H, y: 0, z: 0, w: H }, // x
+  R: { x: 0, y: 0, z: -H, w: H }, // z
+  L: { x: 0, y: 0, z: H, w: H }, // z'
+};
+
+/** Zugfolge, die vom gelösten Würfel zum Zustand führt (für Setups) */
+export async function setupAlgFor(facelets) {
+  if (facelets === SOLVED) return '';
+  const kpuzzle = await cube3x3x3.kpuzzle();
+  const pattern = new KPattern(kpuzzle, faceletsToPatternData(facelets));
+  const solution = await experimentalSolve3x3x3IgnoringCenters(pattern);
+  return solution.invert().toString();
+}
+
 export class CubeView {
   constructor(container) {
     this.player = new TwistyPlayer({
@@ -56,6 +76,8 @@ export class CubeView {
 
     this.basis = null;
     this.target = HOME;
+    this.base = HOME; // Lage ohne Gyroskop (siehe setDownFace)
+    this.gyroSeen = false;
     this.gyroEnabled = true;
     // Schräge Grundansicht immer anwenden, auch ohne Gyroskop
     this.gyroActive = true;
@@ -91,6 +113,7 @@ export class CubeView {
   /** Lage aus dem Gyroskop (GAN-Koordinaten: +X rot, +Y blau, +Z weiß) */
   setGyro(q) {
     if (!this.gyroEnabled) return;
+    this.gyroSeen = true;
     // GAN → three.js: y und z tauschen (Vorzeichen wie in gan-cube-sample)
     const quat = qnorm({ x: q.x, y: q.z, z: -q.y, w: q.w });
     if (!this.basis) this.basis = qconj(quat);
@@ -100,15 +123,32 @@ export class CubeView {
   /** Aktuelle Lage gilt ab jetzt als Grundstellung (weiß oben, grün vorne) */
   resetGyro() {
     this.basis = null;
-    this.target = HOME;
+    this.target = this.base;
   }
 
   setGyroEnabled(on) {
     this.gyroEnabled = on;
     if (!on) {
-      this.target = HOME;
+      this.target = this.base;
       this.basis = null;
+      this.gyroSeen = false;
     }
+  }
+
+  /**
+   * Feste Ansicht ohne Gyroskop: Seite `face` liegt unten (null = Standard, Weiß oben).
+   * Liefert der Würfel Gyro-Daten, bestimmen diese die Lage.
+   */
+  setDownFace(face) {
+    this.base = face ? qmul(HOME, CROSS_DOWN_Q[face]) : HOME;
+    if (!this.gyroSeen) this.target = this.base;
+  }
+
+  /** Neue Verbindung: wieder auf Gyro-Daten warten */
+  resetGyroSeen() {
+    this.gyroSeen = false;
+    this.basis = null;
+    this.target = this.base;
   }
 
   async #animate() {
