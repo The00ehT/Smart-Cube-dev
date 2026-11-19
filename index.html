@@ -291,7 +291,8 @@
             <div class="skin-grid">
               <label class="select-row">Stil
                 <select id="skin-style">
-                  <option value="stickerless">Stickerless</option>
+                  <option value="gan">GAN-Stil (spitze Ecken)</option>
+                  <option value="stickerless">Stickerless (rund)</option>
                   <option value="classic">Klassisch (Sticker)</option>
                   <option value="tiles">Fliesen</option>
                 </select>
@@ -310,12 +311,26 @@
                   <option value="pastel">Pastell</option>
                 </select>
               </label>
+              <label class="select-row">Design
+                <select id="skin-theme">
+                  <option value="colors">Farben</option>
+                  <option value="neon">Neon</option>
+                  <option value="galaxy">Galaxie</option>
+                  <option value="cow">Kuh 🐄</option>
+                  <option value="custom">Eigene Bilder</option>
+                </select>
+              </label>
               <label class="select-row">Oberfläche
                 <select id="skin-finish">
                   <option value="gloss">Glänzend</option>
                   <option value="matte">Matt</option>
                 </select>
               </label>
+            </div>
+            <div class="skin-images" id="skin-images" hidden></div>
+            <div class="avatar-actions">
+              <label class="file-button ghost">🏷 Logo fürs Mittelstück<input type="file" id="skin-logo" accept="image/*" hidden /></label>
+              <button type="button" class="ghost" id="skin-logo-clear" hidden>Logo entfernen</button>
             </div>
           </div>
         </div>

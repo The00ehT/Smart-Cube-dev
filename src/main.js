@@ -190,6 +190,8 @@ function onMove(e) {
 
   switch (app.phase) {
     case 'scrambling':
+      // Scramble wird noch berechnet: Zug zählt nur für den Zustand (Hinweis erscheint, falls nicht gelöst)
+      if (!app.tracker) break;
       app.tracker.push(e.move);
       if (app.tracker.done) enterReady();
       renderScramble();
@@ -1032,17 +1034,20 @@ $('solves-mode').addEventListener('click', (e) => {
 // ---------------- Würfel-Aussehen ----------------
 
 const PRESET_NAMES = {
-  stickerless: 'Stickerless',
+  gan: 'GAN',
   classic: L('Klassisch', 'Classic'),
   tiles: L('Fliesen', 'Tiles'),
-  white: L('Weiß', 'White'),
   pastel: L('Pastell', 'Pastel'),
+  neon: 'Neon',
+  galaxy: L('Galaxie', 'Galaxy'),
+  cow: L('Kuh 🐄', 'Cow 🐄'),
 };
+const SKIN_KEYS = ['style', 'body', 'scheme', 'finish', 'theme'];
 let skinPreview = null;
-const currentSkin = () => ({ ...SKIN_PRESETS.stickerless, ...(settings.skin || {}) });
+const currentSkin = () => ({ ...SKIN_PRESETS.gan, ...(settings.skin || {}) });
 function applySkin(skin) {
   settings.skin = skin;
-  save(SETTINGS_KEY, settings);
+  if (!save(SETTINGS_KEY, settings)) toast(L('Speicher voll – Bilder bitte kleiner wählen.', 'Storage full – please use smaller images.'));
   setDefaultSkin(skin);
   view.setSkin(skin);
   ghostView?.setSkin(skin);
@@ -1054,17 +1059,60 @@ function renderSkinUi() {
   const sk = currentSkin();
   $('skin-presets').innerHTML = Object.entries(SKIN_PRESETS)
     .map(([k, p]) => {
-      const on = Object.keys(p).every((f) => p[f] === sk[f]);
+      const on = SKIN_KEYS.every((f) => p[f] === sk[f]);
       return `<button type="button" data-preset="${k}" class="${on ? 'on' : ''}">${PRESET_NAMES[k]}</button>`;
     })
     .join('');
-  for (const f of ['style', 'body', 'scheme', 'finish']) $(`skin-${f}`).value = sk[f];
+  for (const f of SKIN_KEYS) $(`skin-${f}`).value = sk[f];
+  // Eigene Bilder je Seite
+  const box = $('skin-images');
+  box.hidden = sk.theme !== 'custom';
+  if (!box.hidden) {
+    box.innerHTML = ['U', 'F', 'R', 'D', 'B', 'L']
+      .map((f) => {
+        const img = sk.images?.[f];
+        return `<label class="skin-img" title="${COLOR_NAMES[f]}">
+          <span class="skin-img-prev" style="${img ? `background-image:url(${img})` : ''}"><i class="chip-color c-${f}"></i></span>
+          <span class="small">${COLOR_NAMES[f]}</span>
+          <input type="file" accept="image/*" data-face="${f}" hidden /></label>`;
+      })
+      .join('');
+  }
+  $('skin-logo-clear').hidden = !sk.logo;
 }
+$('skin-images').addEventListener('change', async (e) => {
+  const f = e.target.dataset.face;
+  const file = e.target.files?.[0];
+  if (!f || !file) return;
+  try {
+    const url = await resizeImage(file, 384);
+    const sk = currentSkin();
+    applySkin({ ...sk, images: { ...(sk.images || {}), [f]: url } });
+  } catch (err) {
+    toast(String(err.message || err));
+  }
+});
+$('skin-logo').addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    applySkin({ ...currentSkin(), logo: await resizeImage(file, 256, 'image/png') });
+  } catch (err) {
+    toast(String(err.message || err));
+  }
+});
+$('skin-logo-clear').addEventListener('click', () => {
+  const sk = { ...currentSkin() };
+  delete sk.logo;
+  applySkin(sk);
+});
 $('skin-presets').addEventListener('click', (e) => {
   const b = e.target.closest('[data-preset]');
-  if (b) applySkin({ ...SKIN_PRESETS[b.dataset.preset] });
+  // Vorlage übernehmen, eigene Bilder und Logo behalten
+  if (b) applySkin({ ...currentSkin(), ...SKIN_PRESETS[b.dataset.preset] });
 });
-for (const f of ['style', 'body', 'scheme', 'finish']) {
+for (const f of SKIN_KEYS) {
   $(`skin-${f}`).addEventListener('change', (e) => applySkin({ ...currentSkin(), [f]: e.target.value }));
 }
 $('btn-settings').addEventListener('click', () => {

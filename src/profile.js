@@ -30,7 +30,7 @@ export function avatarHtml(p = profile) {
 }
 
 /** Bilddatei → quadratisch zugeschnitten, 128 × 128, als JPEG-Daten-URL */
-export function resizeImage(file, size = 128) {
+export function resizeImage(file, size = 128, type = 'image/jpeg') {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
@@ -40,7 +40,7 @@ export function resizeImage(file, size = 128) {
       c.width = c.height = size;
       c.getContext('2d').drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, size, size);
       URL.revokeObjectURL(url);
-      resolve(c.toDataURL('image/jpeg', 0.85));
+      resolve(c.toDataURL(type, 0.85));
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);

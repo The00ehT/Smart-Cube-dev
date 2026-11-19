@@ -376,6 +376,19 @@ const stickerId = (state, i) => PIECE_OF[i].map((j) => state[j]).sort().join('')
 const HOME = new Map(STICKERS.map((_, i) => [stickerId(SOLVED, i), i]));
 /** Für jede Position: Ausgangsposition des Stickers, der dort liegt */
 const sigma = (state) => STICKERS.map((_, i) => HOME.get(stickerId(state, i)));
+/** Für jede Position: Index des Feldes, von dem der dort liegende Sticker ursprünglich stammt */
+export const homeOf = sigma;
+/** Felder desselben Steins (Feldindex → Liste) */
+export const PIECE_STICKERS = PIECE_OF;
+/** Ausrichtung jeder Seite von außen gesehen: right = Richtung steigender Spalte, up = Richtung kleinerer Zeile */
+export const FACE_FRAME = Object.fromEntries(
+  FACES.map((f, k) => {
+    const p0 = STICKERS[k * 9].pos;
+    const right = STICKERS[k * 9 + 1].pos.map((v, i) => v - p0[i]);
+    const up = STICKERS[k * 9 + 3].pos.map((v, i) => p0[i] - v);
+    return [f, { right, up, normal: NORMALS[f] }];
+  }),
+);
 
 /**
  * Zustand, den eine Zugfolge X vom gelösten Würfel aus erzeugt, wenn X den Würfel von `from` nach `to` bringt.

@@ -758,3 +758,8 @@ body.solving .solve-metrics { display: none !important; }
 @media (max-width: 760px) {
   dialog.big-dialog, dialog.settings-dialog { max-width: none; max-height: none; }
 }
+
+.skin-images { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.skin-img { display: grid; justify-items: center; gap: 2px; cursor: pointer; }
+.skin-img-prev { width: 44px; height: 44px; border-radius: 10px; background: var(--chip) center / cover; border: 1px dashed var(--line); display: flex; align-items: flex-end; justify-content: flex-end; padding: 3px; }
+@media (max-width: 700px) { .skin-images { grid-template-columns: repeat(3, 1fr); } }
