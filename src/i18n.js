@@ -48,6 +48,8 @@ const STATIC = {
   'Als gelöst markieren': 'Mark as solved',
   'Ausrichten': 'Reset',
   'Modus': 'Mode',
+  '🗑 Alle Bilder zurücksetzen': '🗑 Reset all images',
+  'Zum Drehen ziehen': 'Drag to rotate',
   '🔍 Was wäre besser gewesen?': '🔍 What could have been better?',
   '🔍 Analyse': '🔍 Analysis',
   'Modus wählen': 'Choose mode',

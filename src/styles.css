@@ -1067,3 +1067,21 @@ body.solving .mode-chip { display: none; }
 @media (max-width: 700px) {
   .in-colors { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* Skin-Auswahl mit 3D-Vorschaubildern */
+.skin-box { grid-template-columns: 190px 1fr; align-items: start; }
+.skin-preview { width: 190px; height: 190px; touch-action: none; cursor: grab; border-radius: 14px; background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 70%); }
+.skin-preview:active { cursor: grabbing; }
+.skin-presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px; }
+.skin-presets .skin-card {
+  display: grid; justify-items: center; gap: 2px; padding: 4px 4px 6px; font-size: 12px; font-weight: 600;
+  background: var(--panel); border: 1.5px solid transparent; border-radius: 12px; color: var(--text);
+}
+.skin-presets .skin-card img { width: 64px; height: 64px; display: block; }
+.skin-presets .skin-card img:not([src]) { background: var(--chip); border-radius: 10px; }
+.skin-presets .skin-card.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+@media (max-width: 700px) {
+  .skin-box { grid-template-columns: 1fr; }
+  .skin-preview { width: 220px; height: 220px; }
+  .skin-presets { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}

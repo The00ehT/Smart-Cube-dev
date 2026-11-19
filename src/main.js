@@ -1300,13 +1300,49 @@ function applySkin(skin) {
   skinPreview?.setSkin(skin);
   for (const c of roomView.cards.values()) c.cube?.setSkin(skin);
   renderSkinUi();
+  if ($('settings-dialog').open) renderPresetThumbs();
 }
+/** 3D-Vorschaubilder der Vorlagen (einmal erzeugt, mit eigenem Logo/eigenen Bildern) */
+const presetThumbs = {};
+let thumbsKey = '';
+let thumbsBusy = false;
+async function renderPresetThumbs() {
+  if (thumbsBusy) return;
+  const sk = currentSkin();
+  const key = `${(sk.logo || '').length}|${Object.values(sk.images || {}).map((x) => x.length).join(',')}`;
+  if (key === thumbsKey && Object.keys(presetThumbs).length) return;
+  thumbsKey = key;
+  thumbsBusy = true;
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;left:-1000px;top:0;width:144px;height:144px;pointer-events:none';
+  document.body.append(box);
+  const cv = new CubeView(box);
+  try {
+    cv.setState(applyAlg(SOLVED, "R U R' U'"));
+    for (const [k, p] of Object.entries(SKIN_PRESETS)) {
+      cv.setSkin({ ...sk, ...p });
+      await cv.cube.skinReady;
+      presetThumbs[k] = cv.cube.snapshot();
+      const img = document.querySelector(`#skin-presets [data-preset="${k}"] img`);
+      if (img) img.src = presetThumbs[k];
+    }
+  } catch (err) {
+    console.warn('Vorschaubilder:', err);
+  } finally {
+    cv.cube.dispose();
+    box.remove();
+    thumbsBusy = false;
+  }
+  renderPresetThumbs(); // falls sich Bilder/Logo inzwischen geändert haben
+}
+
 function renderSkinUi() {
   const sk = currentSkin();
   $('skin-presets').innerHTML = Object.entries(SKIN_PRESETS)
     .map(([k, p]) => {
       const on = SKIN_KEYS.every((f) => p[f] === sk[f]);
-      return `<button type="button" data-preset="${k}" class="${on ? 'on' : ''}">${PRESET_NAMES[k]}</button>`;
+      return `<button type="button" data-preset="${k}" class="skin-card${on ? ' on' : ''}" aria-pressed="${on}">
+        <img alt="" ${presetThumbs[k] ? `src="${presetThumbs[k]}"` : ''} /><span>${PRESET_NAMES[k]}</span></button>`;
     })
     .join('');
   for (const f of SKIN_KEYS) $(`skin-${f}`).value = sk[f];
@@ -1325,7 +1361,20 @@ function renderSkinUi() {
       .join('');
   }
   $('skin-logo-clear').hidden = !sk.logo;
+  $('skin-images-clear').hidden = sk.theme !== 'custom' || !Object.keys(sk.images || {}).length;
 }
+$('skin-images-clear').addEventListener('click', () => {
+  const before = currentSkin();
+  undoable(
+    L('Alle eigenen Bilder entfernt.', 'All custom images removed.'),
+    () => {
+      const sk = { ...before };
+      delete sk.images;
+      applySkin(sk);
+    },
+    () => applySkin(before),
+  );
+});
 $('skin-images').addEventListener('change', async (e) => {
   const f = e.target.dataset.face;
   const file = e.target.files?.[0];
@@ -1367,7 +1416,28 @@ $('btn-settings').addEventListener('click', () => {
     if (!skinPreview) {
       skinPreview = new CubeView($('skin-preview'));
       skinPreview.setState(applyAlg(SOLVED, "R U R' U'"));
+      skinPreview.cube.setSpin(0.5);
+      // Mit dem Finger drehen; danach dreht sie sich langsam weiter
+      const el = $('skin-preview');
+      let last = null;
+      el.addEventListener('pointerdown', (e) => {
+        last = [e.clientX, e.clientY];
+        skinPreview.cube.dragging = true;
+        el.setPointerCapture(e.pointerId);
+      });
+      el.addEventListener('pointermove', (e) => {
+        if (!last) return;
+        skinPreview.cube.rotateBy((e.clientX - last[0]) * 0.012, (e.clientY - last[1]) * 0.012);
+        last = [e.clientX, e.clientY];
+      });
+      const up = () => {
+        last = null;
+        skinPreview.cube.dragging = false;
+      };
+      el.addEventListener('pointerup', up);
+      el.addEventListener('pointercancel', up);
     }
+    renderPresetThumbs();
   });
 });
 renderSkinUi();

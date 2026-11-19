@@ -46,7 +46,7 @@ export function setDefaultSkin(skin) {
 const STYLES = {
   gan: { bodyR: 0.035, size: 0.95, rIn: 0.2, rEdge: 0.1, rCorner: 0.025, depth: 0.012, off: 0.489 },
   stickerless: { bodyR: 0.14, size: 0.9, rIn: 0.16, rEdge: 0.16, rCorner: 0.16, depth: 0, off: 0.487 },
-  classic: { bodyR: 0.08, size: 0.82, rIn: 0.1, rEdge: 0.1, rCorner: 0.1, depth: 0, off: 0.487 },
+  classic: { bodyR: 0.08, size: 0.82, rIn: 0.1, rEdge: 0.1, rCorner: 0.1, depth: 0, off: 0.494 },
   tiles: { bodyR: 0.14, size: 0.78, rIn: 0.14, rEdge: 0.14, rCorner: 0.14, depth: 0.035, off: 0.47 },
 };
 
@@ -179,8 +179,9 @@ export class Cube3D {
     this.faceTex = null;
     this.stickerTex = [];
     const token = (this.skinToken = (this.skinToken || 0) + 1);
+    this.skinReady = Promise.resolve();
     if (theme && theme !== 'colors' || this.skin.logo) {
-      faceImages(theme || 'colors', this.colors, { images: this.skin.images, logo: this.skin.logo }).then((imgs) => {
+      this.skinReady = faceImages(theme || 'colors', this.colors, { images: this.skin.images, logo: this.skin.logo }).then((imgs) => {
         if (token !== this.skinToken || this.disposed) return;
         this.faceTex = {};
         for (const f of FACES) {
@@ -193,7 +194,7 @@ export class Cube3D {
         const env = theme === 'galaxy' ? 0.12 : finish === 'matte' ? 0.15 : 0.35;
         this.texMats = this.stickers.map(() => new Mat(theme === 'neon' ? {} : { roughness: theme === 'galaxy' ? 0.5 : rough, metalness: 0, envMapIntensity: env }));
         this.paint();
-      });
+      }).catch(() => {});
     }
     this.paint();
   }
@@ -305,6 +306,29 @@ export class Cube3D {
     }
   }
 
+  /** Sofort ein Bild der aktuellen Ansicht (für Vorschaubilder) */
+  snapshot(type = 'image/png') {
+    this.finishAnim(true);
+    this.root.quaternion.copy(this.target);
+    this.renderer.render(this.scene, this.camera);
+    return this.renderer.domElement.toDataURL(type);
+  }
+
+  /** Langsam um die senkrechte Achse drehen (rad/s, 0 = aus) */
+  setSpin(radPerSec) {
+    this.spin = radPerSec;
+    this.lastFrame = null;
+  }
+
+  /** Von Hand drehen (Ziehen mit dem Finger): Winkel um die senkrechte und waagerechte Achse */
+  rotateBy(ay, ax) {
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), ay);
+    q.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), ax));
+    this.target.premultiply(q);
+    this.root.quaternion.premultiply(q);
+    this.dirty = true;
+  }
+
   /** Ziel-Lage der ganzen Gruppe (wird weich angesteuert) */
   setOrientation(q) {
     this.target.set(q.x, q.y, q.z, q.w);
@@ -325,6 +349,11 @@ export class Cube3D {
 
   frame(now) {
     if (this.disposed) return;
+    if (this.spin) {
+      const dt = this.lastFrame == null ? 0 : Math.min(0.1, (now - this.lastFrame) / 1000);
+      this.lastFrame = now;
+      if (dt > 0 && !this.dragging) this.rotateBy(this.spin * dt, 0);
+    }
     if (!this.anim && this.queue.length) this.startAnim(this.queue.shift());
     if (this.anim) {
       const a = this.anim;
