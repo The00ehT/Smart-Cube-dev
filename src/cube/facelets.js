@@ -128,8 +128,8 @@ export function phaseStatus(state) {
 // ---------- Umwandlung in cubing.js KPattern ----------
 
 // Reihenfolge und Stickerreihenfolge der Steine in cubing.js (Reid-Notation)
-const EDGE_NAMES = ['UF', 'UR', 'UB', 'UL', 'DF', 'DR', 'DB', 'DL', 'FR', 'FL', 'BR', 'BL'];
-const CORNER_NAMES = ['UFR', 'URB', 'UBL', 'ULF', 'DRF', 'DFL', 'DLB', 'DBR'];
+export const EDGE_NAMES = ['UF', 'UR', 'UB', 'UL', 'DF', 'DR', 'DB', 'DL', 'FR', 'FL', 'BR', 'BL'];
+export const CORNER_NAMES = ['UFR', 'URB', 'UBL', 'ULF', 'DRF', 'DFL', 'DLB', 'DBR'];
 
 /** Feldindizes eines Steins in der Reihenfolge der Buchstaben seines Namens */
 function slotFacelets(name) {
@@ -280,4 +280,110 @@ export function groupMoves(moves, offset = 0) {
     } else out.push({ text: m, first: offset + i, last: offset + i });
   }
   return out;
+}
+
+// ---------- Erweiterte Notation: weite Züge, Mittelschichten, Drehungen ----------
+
+/**
+ * Permutationen für alle Zugarten (Uhrzeigersinn aus Sicht der namensgebenden Seite):
+ *   U R F D L B   eine Schicht
+ *   Uw … / u …    zwei Schichten
+ *   M (wie L), E (wie D), S (wie F)   Mittelschicht
+ *   x (wie R), y (wie U), z (wie F)   ganzer Würfel
+ */
+const ANY = {};
+{
+  const make = (axisFace, select) => {
+    const n = NORMALS[axisFace];
+    return STICKERS.map((s, i) => {
+      if (!select(dot(s.pos, n))) return i;
+      return INDEX.get(key(rot90(s.pos, n, -1), rot90(s.normal, n, -1)));
+    });
+  };
+  for (const f of FACES) {
+    ANY[f] = make(f, (d) => d === 1);
+    ANY[f + 'w'] = make(f, (d) => d >= 0);
+  }
+  ANY.M = make('L', (d) => d === 0);
+  ANY.E = make('D', (d) => d === 0);
+  ANY.S = make('F', (d) => d === 0);
+  ANY.x = make('R', () => true);
+  ANY.y = make('U', () => true);
+  ANY.z = make('F', () => true);
+}
+
+/** Zerlegt einen beliebigen Zug ("Rw2", "r'", "M2", "y'") → { base, amount } oder null */
+export function parseAnyMove(tok) {
+  const m = /^([URFDLB]w|[URFDLB]|[urfdlb]|[MES]|[xyz])(2?)('?)$/.exec(tok.trim());
+  if (!m) return null;
+  let base = m[1];
+  if (/^[urfdlb]$/.test(base)) base = base.toUpperCase() + 'w';
+  const amount = m[2] ? 2 : m[3] ? 3 : 1;
+  return { base, amount };
+}
+
+/** Zerlegt einen Algorithmus-Text in Züge (Klammern, Kommas und Zeilenumbrüche werden ignoriert) */
+export function tokenizeAlg(alg) {
+  return String(alg || '')
+    .replace(/\/\/.*$/gm, ' ')
+    .replace(/[()[\],]/g, ' ')
+    .replace(/’|´|`/g, "'")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+/** Prüft einen Algorithmus-Text; liefert die ungültigen Teile */
+export function invalidTokens(alg) {
+  return tokenizeAlg(alg).filter((t) => !parseAnyMove(t));
+}
+
+export function applyAnyMove(state, tok) {
+  const mv = typeof tok === 'string' ? parseAnyMove(tok) : tok;
+  if (!mv) throw new Error('Unbekannter Zug: ' + tok);
+  const p = ANY[mv.base];
+  let s = state;
+  for (let k = 0; k < mv.amount; k++) {
+    const out = new Array(54);
+    for (let i = 0; i < 54; i++) out[p[i]] = s[i];
+    s = out.join('');
+  }
+  return s;
+}
+
+export function applyAnyAlg(state, alg) {
+  return tokenizeAlg(alg).reduce(applyAnyMove, state);
+}
+
+/** Umkehrung mit beliebiger Notation */
+export function invertAnyAlg(alg) {
+  return tokenizeAlg(alg)
+    .reverse()
+    .map((t) => {
+      const p = parseAnyMove(t);
+      if (!p) return t;
+      const name = t.replace(/[2']/g, '');
+      return name + (p.amount === 2 ? '2' : p.amount === 1 ? "'" : '');
+    })
+    .join(' ');
+}
+
+// ---------- Relativer Zustand ----------
+
+// Für jedes Feld: die Felder desselben Steins (zum Wiedererkennen eines Stickers an seinen Farben)
+const PIECE_OF = STICKERS.map((s) => STICKERS.map((t, j) => (t.pos.every((v, k) => v === s.pos[k]) ? j : -1)).filter((j) => j >= 0));
+const stickerId = (state, i) => PIECE_OF[i].map((j) => state[j]).sort().join('') + ':' + state[i];
+const HOME = new Map(STICKERS.map((_, i) => [stickerId(SOLVED, i), i]));
+/** Für jede Position: Ausgangsposition des Stickers, der dort liegt */
+const sigma = (state) => STICKERS.map((_, i) => HOME.get(stickerId(state, i)));
+
+/**
+ * Zustand, den eine Zugfolge X vom gelösten Würfel aus erzeugt, wenn X den Würfel von `from` nach `to` bringt.
+ * Damit lässt sich ein Setup vom aktuellen Zustand aus berechnen (setupAlgFor(relativeState(…))).
+ */
+export function relativeState(from, to) {
+  const sf = sigma(from);
+  const st = sigma(to);
+  const inv = new Array(54);
+  sf.forEach((h, i) => (inv[h] = i));
+  return st.map((h) => SOLVED[inv[h]]).join('');
 }

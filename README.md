@@ -29,6 +29,14 @@ Aufgebaut auf [gan-web-bluetooth](https://github.com/afedotov/gan-web-bluetooth)
   Lösen zu (Würfel und Zeit) und die Zeiten landen in einer gemeinsamen Tabelle mit Siegen und Ø. Die Verbindung
   läuft über WebRTC direkt zwischen den Geräten (PeerJS; nur der Verbindungsaufbau nutzt den öffentlichen
   PeerJS-Server). Zum Testen mit eigenem Server: `?peer=host:port`
+- **Algorithmen** (eigener Tab): alle 21 PLL und 57 OLL mit Bild, Wahrscheinlichkeit und – aus deinen Solves –
+  Häufigkeit, Ø Zeit, Ø Erkennung und Ø Ausführung je Fall; eigene Algorithmen eintippen oder **am Würfel ausführen**
+  (Notation wird mitgeschrieben und geprüft, ob sie den Fall löst); freie eigene Algorithmen
+- **Trainer**: stellt den Fall per berechnetem Setup her (vom aktuellen Zustand aus), misst Erkennung und Ausführung,
+  langsame und neue Fälle kommen öfter
+- **Archiv**: gute Lösungen nach dem Solve mit einem Tipp sichern; Tabelle mit Zeit, Scramble, Zügen, TPS, Fällen und
+  Notiz, sortierbar nach Zeit oder Änderungsdatum
+- **Leichte Scrambles**: 2 Kreuzkanten vorgelöst oder X-Cross üben (2 Kreuzkanten + 1 Paar), für die eigene Kreuzfarbe
 - **Profil** mit Name und Avatar (Emoji oder eigenes Foto); der Name erscheint auf geteilten Rekonstruktionen
 - **Hell-/Dunkelmodus** (automatisch nach System oder fest)
 - **Kuchendiagramme**: Zeitverteilung Kreuz/F2L/OLL/PLL, F2L-Paare, Erkennen vs. Drehen
@@ -93,6 +101,10 @@ Jeder Push wird getestet und gebaut; der Stand von `main` wird automatisch auf G
 | `src/ui/replay.js` | Rekonstruktion (Echtzeit-Wiedergabe, Kreuz unten, Teilen) |
 | `src/ui/stats-view.js` | Statistik-Ansicht mit Diagrammen |
 | `src/cube/gyro.js` | Würfeldrehungen und Griffwechsel aus den Gyroskop-Daten |
+| `src/cube/ll-cases.js` | OLL-/PLL-Fälle, Erkennung, Wahrscheinlichkeiten, Prüfen von Algorithmen |
+| `src/cube/easy-scramble.js` | Leichte Scrambles (Kreuzteile/Paar vorgelöst) |
+| `src/algs.js`, `src/ui/algs-view.js`, `src/ui/trainer.js` | Algorithmen, Fall-Statistik, Trainer |
+| `src/archive.js`, `src/ui/archive-view.js` | Archiv |
 | `src/room.js` | Online-Räume (PeerJS/WebRTC, Gastgeber verteilt Scrambles und Ergebnisse) |
 | `src/ui/room-view.js` | Raum-Ansicht mit Live-Würfeln und Rundentabelle |
 | `src/cube/connection.js` | GAN / andere Smartcubes / virtueller Würfel mit einheitlichen Ereignissen |

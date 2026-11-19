@@ -21,7 +21,7 @@
         <svg class="logo" viewBox="0 0 30 30" aria-hidden="true"><rect x="1" y="1" width="8" height="8" rx="2" fill="#e5484d"/><rect x="11" y="1" width="8" height="8" rx="2" fill="#f5f5f5"/><rect x="21" y="1" width="8" height="8" rx="2" fill="#30a46c"/><rect x="1" y="11" width="8" height="8" rx="2" fill="#f5d90a"/><rect x="11" y="11" width="8" height="8" rx="2" fill="#0091ff"/><rect x="21" y="11" width="8" height="8" rx="2" fill="#f76b15"/><rect x="1" y="21" width="8" height="8" rx="2" fill="#f5f5f5"/><rect x="11" y="21" width="8" height="8" rx="2" fill="#30a46c"/><rect x="21" y="21" width="8" height="8" rx="2" fill="#e5484d"/></svg>
         <h1>Smartcube</h1>
       </div>
-      <nav class="tabs-top" role="tablist" aria-label="Bereiche"><button type="button" role="tab" data-tab="timer" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 2M9.5 2.5h5M12 2.5V6"/></svg><span>Timer</span></button><button type="button" role="tab" data-tab="stats" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 2.6A9 9 0 0 1 21.4 9H15z"/></svg><span>Statistik</span></button><button type="button" role="tab" data-tab="solves" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg><span>Solves</span></button><button type="button" role="tab" data-tab="room" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><circle cx="17" cy="9" r="2.6"/><path d="M16.5 14.6c2.6.1 4.5 1.8 5 4.4"/></svg><span>Raum</span><i class="tab-dot" hidden></i></button></nav>
+      <nav class="tabs-top" role="tablist" aria-label="Bereiche"><button type="button" role="tab" data-tab="timer" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 2M9.5 2.5h5M12 2.5V6"/></svg><span>Timer</span></button><button type="button" role="tab" data-tab="stats" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 2.6A9 9 0 0 1 21.4 9H15z"/></svg><span>Statistik</span></button><button type="button" role="tab" data-tab="solves" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg><span>Solves</span></button><button type="button" role="tab" data-tab="algs" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6"/><path d="M14 17.2h6.5M17.2 14v6.5"/></svg><span>Algorithmen</span></button><button type="button" role="tab" data-tab="room" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><circle cx="17" cy="9" r="2.6"/><path d="M16.5 14.6c2.6.1 4.5 1.8 5 4.4"/></svg><span>Raum</span><i class="tab-dot" hidden></i></button></nav>
       <div class="top-right">
         <div class="device" id="device" title="Würfel">
           <span class="dot"></span>
@@ -76,6 +76,7 @@
               <div class="timer" id="timer">0.00</div>
               <div class="status" id="status">Verbinde deinen Würfel, um loszulegen.</div>
               <div class="splits" id="splits"></div>
+              <button type="button" class="ghost archive-btn" id="btn-archive" hidden>☆ Rekonstruktion archivieren</button>
             </div>
 
             <div class="quick" id="stats-quick"></div>
@@ -120,10 +121,18 @@
             <button id="btn-clear" class="ghost danger">Alle löschen</button>
           </div>
         </div>
-        <div class="card list-card">
+        <div class="seg-control solves-mode" id="solves-mode">
+          <button type="button" data-mode="all" class="on">Alle Solves</button>
+          <button type="button" data-mode="archive">★ Archiv</button>
+        </div>
+        <div class="card list-card" id="solves-all">
           <ol class="solves" id="solves" reversed></ol>
         </div>
+        <div class="card" id="archive-view" hidden></div>
       </section>
+
+      <!-- ============ Algorithmen ============ -->
+      <section class="tab" id="tab-algs" data-tab="algs" hidden></section>
 
       <!-- ============ Raum ============ -->
       <section class="tab" id="tab-room" data-tab="room" hidden>
@@ -145,7 +154,7 @@
       </section>
     </main>
 
-    <nav class="tabbar" role="tablist" aria-label="Bereiche"><button type="button" role="tab" data-tab="timer" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 2M9.5 2.5h5M12 2.5V6"/></svg><span>Timer</span></button><button type="button" role="tab" data-tab="stats" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 2.6A9 9 0 0 1 21.4 9H15z"/></svg><span>Statistik</span></button><button type="button" role="tab" data-tab="solves" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg><span>Solves</span></button><button type="button" role="tab" data-tab="room" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><circle cx="17" cy="9" r="2.6"/><path d="M16.5 14.6c2.6.1 4.5 1.8 5 4.4"/></svg><span>Raum</span><i class="tab-dot" hidden></i></button></nav>
+    <nav class="tabbar" role="tablist" aria-label="Bereiche"><button type="button" role="tab" data-tab="timer" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 2M9.5 2.5h5M12 2.5V6"/></svg><span>Timer</span></button><button type="button" role="tab" data-tab="stats" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 2.6A9 9 0 0 1 21.4 9H15z"/></svg><span>Statistik</span></button><button type="button" role="tab" data-tab="solves" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg><span>Solves</span></button><button type="button" role="tab" data-tab="algs" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6"/><path d="M14 17.2h6.5M17.2 14v6.5"/></svg><span>Algorithmen</span></button><button type="button" role="tab" data-tab="room" aria-selected="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><circle cx="17" cy="9" r="2.6"/><path d="M16.5 14.6c2.6.1 4.5 1.8 5 4.4"/></svg><span>Raum</span><i class="tab-dot" hidden></i></button></nav>
 
     <dialog id="mac-dialog">
       <form method="dialog">
@@ -179,6 +188,7 @@
         <div class="label">Lösung</div>
         <div class="alg" id="sd-solution"></div>
         <button type="button" id="sd-replay" class="primary">▶ Rekonstruktion ansehen &amp; teilen</button>
+        <button type="button" id="sd-archive" class="ghost">☆ Im Archiv speichern</button>
         <menu>
           <button value="ok-pen" id="sd-ok">OK</button>
           <button value="p2" id="sd-plus2">+2</button>
@@ -199,18 +209,25 @@
       <section class="set-sec">
         <h3>Profil</h3>
         <div class="profile-edit">
-          <span class="avatar big" id="avatar-preview"></span>
+          <button type="button" class="avatar-edit" id="avatar-edit" aria-expanded="false" title="Profilbild ändern">
+            <span class="avatar big" id="avatar-preview"></span>
+            <span class="avatar-pen" aria-hidden="true">✎</span>
+          </button>
           <div class="profile-fields">
             <label class="select-row">Name
               <input type="text" id="opt-name" maxlength="24" placeholder="Dein Name" autocomplete="nickname" />
             </label>
-            <div class="avatar-actions">
-              <label class="file-button">Foto wählen<input type="file" id="avatar-file" accept="image/*" hidden /></label>
-              <button type="button" id="avatar-clear">Entfernen</button>
-            </div>
+            <span class="small">Tippe auf das Bild, um es zu ändern.</span>
           </div>
         </div>
-        <div class="emoji-grid" id="emoji-grid" role="group" aria-label="Avatar auswählen"></div>
+        <div class="avatar-editor" id="avatar-editor" hidden>
+          <div class="emoji-grid" id="emoji-grid" role="group" aria-label="Avatar auswählen"></div>
+          <div class="avatar-actions">
+            <label class="file-button">📷 Eigenes Foto<input type="file" id="avatar-file" accept="image/*" hidden /></label>
+            <button type="button" id="avatar-clear" class="ghost">Entfernen</button>
+            <button type="button" id="avatar-done" class="primary">Fertig</button>
+          </div>
+        </div>
         <p class="small">Dein Name steht auf geteilten Rekonstruktionen. Das Foto bleibt nur auf diesem Gerät.</p>
       </section>
 
@@ -236,6 +253,28 @@
       </section>
 
       <section class="set-sec">
+        <h3>Training</h3>
+        <label class="select-row">Deine Kreuzfarbe (für Algorithmen, Training und leichte Scrambles)
+          <select id="opt-cross">
+            <option value="auto">Automatisch (häufigste aus deinen Solves)</option>
+            <option value="U">Weiß</option>
+            <option value="D">Gelb</option>
+            <option value="F">Grün</option>
+            <option value="B">Blau</option>
+            <option value="R">Rot</option>
+            <option value="L">Orange</option>
+          </select>
+        </label>
+        <label class="select-row">Scramble-Art
+          <select id="opt-scramble-type">
+            <option value="wca">Normal (WCA-Zufallszustand)</option>
+            <option value="cross2">Leicht: 2 Kreuzkanten schon gelöst</option>
+            <option value="xcross">X-Cross üben: 2 Kreuzkanten + 1 Paar gelöst</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="set-sec">
         <h3>Timer</h3>
         <label class="toggle"><input type="checkbox" id="opt-inspection" /> 15 s Inspektion (WCA: +2 ab 15 s, DNF ab 17 s)</label>
         <label class="toggle"><input type="checkbox" id="opt-auto-scramble" checked /> Nach jedem Solve automatisch neues Scramble</label>
@@ -251,5 +290,7 @@
     </dialog>
 
     <dialog id="replay-dialog" class="big-dialog"></dialog>
+    <dialog id="case-dialog" class="big-dialog case-dialog"></dialog>
+    <dialog id="trainer-dialog" class="big-dialog trainer-dialog"></dialog>
   </body>
 </html>

@@ -17,12 +17,18 @@ import { donut, phaseSegments } from './ui/donut.js';
 import { profile, saveProfile, avatarHtml, resizeImage, EMOJIS } from './profile.js';
 import { Room, normalizeCode } from './room.js';
 import { RoomView } from './ui/room-view.js';
+import { AlgsView } from './ui/algs-view.js';
+import { Trainer } from './ui/trainer.js';
+import { ArchiveView } from './ui/archive-view.js';
+import { isArchived, addToArchive, removeFromArchive } from './archive.js';
+import { easyState } from './cube/easy-scramble.js';
+import { setupAlgFor } from './ui/cube-view.js';
 
 const $ = (id) => document.getElementById(id);
 const SOLVES_KEY = 'smartcube.solves.v1';
 const SETTINGS_KEY = 'smartcube.settings.v1';
 
-const settings = { inspection: false, autoScramble: true, hideTime: false, gyro: true, viewDown: 'auto', theme: 'auto', replayGyro: true, ...load(SETTINGS_KEY, {}) };
+const settings = { inspection: false, autoScramble: true, hideTime: false, gyro: true, viewDown: 'auto', theme: 'auto', replayGyro: true, crossColor: 'auto', scrambleType: 'wca', ...load(SETTINGS_KEY, {}) };
 let solves = load(SOLVES_KEY, []);
 
 const app = {
@@ -43,6 +49,24 @@ const view = new CubeView($('cube'));
 view.setGyroEnabled(settings.gyro);
 const replay = new Replay($('replay-dialog'));
 const statsView = new StatsView($('stats-view'));
+const trainer = new Trainer($('trainer-dialog'), {
+  state: () => app.state,
+  crossFace: () => crossFace(),
+  connected: () => !!app.conn,
+  now: () => now(),
+});
+const algsView = new AlgsView($('tab-algs'), $('case-dialog'), {
+  solves: () => solves,
+  crossFace: () => crossFace(),
+  connected: () => !!app.conn,
+  train: (ids, title) => trainer.start(ids, title),
+});
+const archiveView = new ArchiveView($('archive-view'), {
+  open: (a) => {
+    const data = a && replayData(a);
+    if (data) replay.open({ ...data, name: profile.name }, { title: 'Archiv' });
+  },
+});
 
 // ---------------- Verbindung ----------------
 
@@ -149,6 +173,10 @@ function onMove(e) {
   if (app.lastMoves.length > 40) app.lastMoves.shift();
   $('last-moves').textContent = app.lastMoves.join(' ');
 
+  // Algorithmus am Würfel aufnehmen oder trainieren: dann kein Solve-Ablauf
+  if (algsView.recording && $('case-dialog').open) return void algsView.recordMove(e.move);
+  if (trainer.active && trainer.onMove(e, app.state)) return;
+
   switch (app.phase) {
     case 'scrambling':
       app.tracker.push(e.move);
@@ -176,6 +204,20 @@ function maybeResync() {
   }
 }
 
+/** Leichtes Scramble: Kreuzkanten (und ggf. ein Paar) der eigenen Kreuzfarbe schon gelöst */
+async function easyScramble(type) {
+  const target = easyState(applyAlg(SOLVED, await randomScramble()), crossFace(), type);
+  return setupAlgFor(target);
+}
+
+/** Kreuzfarbe des Nutzers: Einstellung oder häufigste der letzten 50 Solves (Standard Weiß) */
+function crossFace() {
+  if (settings.crossColor && settings.crossColor !== 'auto') return settings.crossColor;
+  const count = {};
+  for (const s of solves.slice(-50)) if (s.crossFace) count[s.crossFace] = (count[s.crossFace] || 0) + 1;
+  return Object.entries(count).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'U';
+}
+
 async function randomScramble() {
   const { randomScrambleForEvent } = await import('cubing/scramble');
   return (await randomScrambleForEvent('333')).toString();
@@ -193,8 +235,17 @@ async function newScramble(given) {
   app.scramble = '';
   $('scramble').innerHTML = '<span class="msg">Scramble wird erzeugt …</span>';
   renderTimer();
-  const alg = typeof given === 'string' ? given : await randomScramble();
+  let alg;
+  const easy = typeof given !== 'string' && settings.scrambleType !== 'wca';
+  try {
+    alg = typeof given === 'string' ? given : easy ? await easyScramble(settings.scrambleType) : await randomScramble();
+  } catch (err) {
+    console.error(err);
+    alg = await randomScramble();
+  }
   if (app.phase !== 'scrambling') return; // inzwischen abgebrochen
+  app.scrambleType = easy ? settings.scrambleType : 'wca';
+  $('scramble-label').textContent = easy ? (settings.scrambleType === 'xcross' ? 'Scramble · X-Cross üben' : 'Scramble · leicht') : 'Scramble';
   app.scramble = alg;
   app.tracker = new ScrambleTracker(alg);
   app.scrambleFromSolved = isSolved(app.state);
@@ -253,6 +304,7 @@ function finishSolve() {
     penalty: app.inspectionPenalty || 0,
     scramble: app.scramble,
     device: app.conn?.name || '',
+    ...(app.scrambleType && app.scrambleType !== 'wca' && app.scramble ? { scrambleType: app.scrambleType } : {}),
   });
   solves.push(solve);
   persistSolves();
@@ -263,6 +315,7 @@ function finishSolve() {
   updateViewOrientation();
   renderTimer();
   renderSplits(solve);
+  renderArchiveBtn();
   renderSolves();
   const pb = best(solves) === effectiveTime(solve) && solves.length > 1;
   const summary = () => `${formatSolve(solve)} · ${solve.moveCount} Züge · ${solve.tps.toFixed(2)} TPS${pb ? ' · Neue Bestzeit! 🎉' : ''}`;
@@ -412,6 +465,24 @@ function tick() {
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
+
+/** Knopf unter der Zeit: letzten Solve ins Archiv */
+function renderArchiveBtn() {
+  const b = $('btn-archive');
+  const s = app.lastSolve;
+  b.hidden = !s || !hasDetail(s) || !solves.includes(s);
+  const on = isArchived(s);
+  b.textContent = on ? '★ Im Archiv' : '☆ Rekonstruktion archivieren';
+  b.classList.toggle('on', on);
+}
+$('btn-archive').addEventListener('click', () => {
+  const s = app.lastSolve;
+  if (!s) return;
+  if (isArchived(s)) removeFromArchive(s.id);
+  else addToArchive(s);
+  renderArchiveBtn();
+  if (!$('archive-view').hidden) archiveView.render();
+});
 
 function renderSplits(solve) {
   const el = $('splits');
@@ -569,13 +640,28 @@ function openSolve(i) {
     s.xcross ? 'X-Cross' : '',
     s.gyro ? `${s.gyro.rotations.length} Würfeldrehungen${s.gyro.rotations.length ? ' (' + s.gyro.rotations.map((r) => r.name).join(', ') + ')' : ''}` : '',
     s.gyro ? `~${s.gyro.regrips.length} Griffwechsel` : '',
+    s.ll?.oll ? `OLL ${s.ll.oll}` : s.ll?.oll === 0 ? 'OLL-Skip' : '',
+    s.ll?.pll ? (s.ll.pll === 'Skip' ? 'PLL-Skip' : `${s.ll.pll}-Perm`) : '',
+    s.scrambleType ? (s.scrambleType === 'xcross' ? 'X-Cross-Scramble' : 'leichtes Scramble') : '',
   ].filter(Boolean);
   $('sd-info').innerHTML = extra.map((x) => `<span>${x}</span>`).join('');
   $('sd-scramble').textContent = s.scramble || '(eigenes Scramble)';
   $('sd-solution').textContent = s.solution ? groupMoves(s.solution.split(' ').filter(Boolean)).map((g) => g.text).join(' ') : '–';
   $('sd-replay').hidden = !replayData(s);
+  $('sd-archive').hidden = !hasDetail(s);
+  $('sd-archive').textContent = isArchived(s) ? '★ Im Archiv (entfernen)' : '☆ Im Archiv speichern';
   dlg.showModal();
 }
+
+$('sd-archive').addEventListener('click', () => {
+  const s = solves[Number($('solve-dialog').dataset.index)];
+  if (!s) return;
+  if (isArchived(s)) removeFromArchive(s.id);
+  else addToArchive(s);
+  $('sd-archive').textContent = isArchived(s) ? '★ Im Archiv (entfernen)' : '☆ Im Archiv speichern';
+  renderArchiveBtn();
+  if (!$('archive-view').hidden) archiveView.render();
+});
 
 $('sd-replay').addEventListener('click', (e) => {
   e.preventDefault();
@@ -685,9 +771,36 @@ $('file-import').addEventListener('change', async (e) => {
   }
 });
 
+// ---------------- Solves: Liste oder Archiv ----------------
+
+$('solves-mode').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-mode]');
+  if (!b) return;
+  const arch = b.dataset.mode === 'archive';
+  $('solves-mode').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+  $('solves-all').hidden = arch;
+  $('archive-view').hidden = !arch;
+  document.querySelectorAll('#tab-solves .tab-actions').forEach((x) => (x.hidden = arch));
+  if (arch) archiveView.render();
+});
+
+// ---------------- Training-Einstellungen ----------------
+
+$('opt-cross').value = settings.crossColor;
+$('opt-cross').addEventListener('change', (e) => {
+  settings.crossColor = e.target.value;
+  save(SETTINGS_KEY, settings);
+});
+$('opt-scramble-type').value = settings.scrambleType;
+$('opt-scramble-type').addEventListener('change', (e) => {
+  settings.scrambleType = e.target.value;
+  save(SETTINGS_KEY, settings);
+  if (!app.room && (app.phase === 'scrambling' || app.phase === 'idle' || app.phase === 'done')) newScramble();
+});
+
 // ---------------- Tabs ----------------
 
-const TABS = ['timer', 'stats', 'solves', 'room'];
+const TABS = ['timer', 'stats', 'solves', 'algs', 'room'];
 app.tab = 'timer';
 function showTab(name) {
   if (!TABS.includes(name)) name = 'timer';
@@ -695,6 +808,13 @@ function showTab(name) {
   for (const sec of document.querySelectorAll('main > .tab')) sec.hidden = sec.dataset.tab !== name;
   for (const b of document.querySelectorAll('[role=tab][data-tab]')) b.setAttribute('aria-selected', String(b.dataset.tab === name));
   if (name === 'stats') statsView.open(solves);
+  if (name === 'algs') {
+    const before = solves.filter((x) => x.ll === undefined).length;
+    algsView.render();
+    // Fälle älterer Solves wurden nachträglich erkannt: einmal speichern
+    if (before && solves.filter((x) => x.ll === undefined).length < before) persistSolves();
+  }
+  if (name === 'solves' && !$('archive-view').hidden) archiveView.render();
   window.scrollTo({ top: 0 });
   try {
     sessionStorage.setItem('smartcube.tab', name);
@@ -733,6 +853,14 @@ function storeProfile() {
   renderProfile();
 }
 $('emoji-grid').innerHTML = EMOJIS.map((e) => `<button type="button" data-e="${e}" aria-label="Avatar ${e}">${e}</button>`).join('');
+function toggleAvatarEditor(open) {
+  const ed = $('avatar-editor');
+  ed.hidden = open === undefined ? !ed.hidden : !open;
+  $('avatar-edit').setAttribute('aria-expanded', String(!ed.hidden));
+}
+$('avatar-edit').addEventListener('click', () => toggleAvatarEditor());
+$('avatar-done').addEventListener('click', () => toggleAvatarEditor(false));
+$('settings-dialog').addEventListener('close', () => toggleAvatarEditor(false));
 $('emoji-grid').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-e]');
   if (!b) return;
@@ -806,7 +934,7 @@ $('pad-grid').addEventListener('click', (e) => {
 });
 const KEYS = { i: 'R', k: "R'", j: 'U', f: "U'", h: 'F', g: "F'", d: 'L', e: "L'", s: 'D', l: "D'", w: 'B', o: "B'" };
 document.addEventListener('keydown', (e) => {
-  if (e.target.closest('input, textarea, dialog') || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.target.closest('input, textarea, select') || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === 'Escape') return cancelSolve();
   const m = KEYS[e.key.toLowerCase()];
   if (m && app.conn?.kind === 'virtual') {

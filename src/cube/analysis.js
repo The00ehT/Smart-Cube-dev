@@ -5,7 +5,8 @@
  * Arbeitet nur mit Startzustand, Zügen und Zeiten – damit lässt sich jeder gespeicherte
  * oder geteilte Solve jederzeit neu auswerten.
  */
-import { FACES, applyMove, phaseStatus, solvedSlots, F2L_SLOTS, isSolved } from './facelets.js';
+import { FACES, applyMove, applyAnyAlg, phaseStatus, solvedSlots, F2L_SLOTS, isSolved, CROSS_DOWN } from './facelets.js';
+import { identifyOll, identifyPll, f2lSolved, llOriented } from './ll-cases.js';
 
 const popcount = (m) => ((m & 1) + ((m >> 1) & 1) + ((m >> 2) & 1) + ((m >> 3) & 1));
 const OPPOSITE = { U: 'D', D: 'U', R: 'L', L: 'R', F: 'B', B: 'F' };
@@ -101,6 +102,18 @@ export function analyzeSolve(start, moves, times) {
   pll.skip = pll.moves === 0 || moves.slice(pll.start, pll.end + 1).every((m) => m[0] === llFace);
   const xcross = phases[1].moves === 0 && phases[0].moves > 0;
 
+  // OLL-/PLL-Fall: Zustand zu Beginn der Phase, gedreht auf Kreuz unten
+  const down = (i) => applyAnyAlg(at(i), CROSS_DOWN[face]);
+  let ll = { oll: null, pll: null };
+  try {
+    const sOll = down(phases[4].end);
+    const sPll = down(phases[5].end);
+    if (f2lSolved(sOll)) ll.oll = oll.moves === 0 ? 0 : identifyOll(sOll);
+    if (f2lSolved(sPll) && llOriented(sPll)) ll.pll = identifyPll(sPll);
+  } catch {
+    ll = { oll: null, pll: null };
+  }
+
   const total = n ? times[last] : 0;
   return {
     crossFace: face,
@@ -109,6 +122,7 @@ export function analyzeSolve(start, moves, times) {
     moveCount: n,
     tps: total > 0 ? (n / total) * 1000 : 0,
     xcross,
+    ll,
     solved: isSolved(states[n]),
   };
 }
