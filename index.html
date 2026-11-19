@@ -78,6 +78,7 @@
               <div class="status" id="status">Verbinde deinen Würfel, um loszulegen.</div>
               <div class="live-bar" id="live-bar" hidden></div>
               <div class="splits" id="splits"></div>
+              <div class="solve-metrics" id="solve-metrics" hidden></div>
               <button type="button" class="ghost archive-btn" id="btn-archive" hidden>☆ Rekonstruktion archivieren</button>
             </div>
 
@@ -195,6 +196,7 @@
       <form method="dialog">
         <h2 id="sd-time"></h2>
         <div class="small" id="sd-date"></div>
+        <div class="solve-metrics in-dialog" id="sd-metrics"></div>
         <div id="sd-pie"></div>
         <table class="phase-table" id="sd-phases"></table>
         <div class="kv" id="sd-info"></div>
@@ -219,6 +221,21 @@
     </dialog>
 
     <script type="module" src="./src/main.js"></script>
+    <dialog id="profile-dialog" class="settings-dialog profile-dialog">
+      <div class="rp-head">
+        <div class="pv-head">
+          <span class="avatar big" id="pv-avatar"></span>
+          <div><h2 id="pv-name"></h2><div class="small" id="pv-sub"></div></div>
+        </div>
+        <button class="rp-close" id="pv-close" aria-label="Schließen">✕</button>
+      </div>
+      <div class="stats pv-tiles" id="pv-tiles"></div>
+      <h3 class="sub-h">Stärkenprofil</h3>
+      <div id="pv-radar"></div>
+      <div id="pv-skills"></div>
+      <menu><button type="button" id="pv-edit">Profil bearbeiten</button></menu>
+    </dialog>
+
     <dialog id="settings-dialog" class="settings-dialog">
       <div class="rp-head">
         <h2>Einstellungen</h2>

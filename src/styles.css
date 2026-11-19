@@ -685,3 +685,47 @@ body.solving .coach-tip, body.solving .archive-btn { display: none !important; }
   .slot-name { min-width: 0; width: 100%; }
   .algs-set button { padding: 7px 2px; }
 }
+
+/* ---------- Solve-Bilanz ---------- */
+.solve-metrics { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 12px; }
+.solve-metrics .sm { display: grid; justify-items: center; align-content: center; gap: 1px; min-width: 64px; padding: 6px 8px; border-radius: 12px; background: var(--panel-2); }
+.solve-metrics .sm b { font-size: 17px; }
+.solve-metrics .sm span { font-size: 11px; color: var(--muted); }
+.solve-metrics.in-dialog { justify-content: flex-start; margin: 8px 0; }
+body.solving .solve-metrics { display: none !important; }
+.gauge circle { fill: none; stroke-width: 4.5; }
+.gauge .g-bg { stroke: var(--chip); }
+.gauge .g-fg { stroke-linecap: round; }
+.gauge.good .g-fg { stroke: var(--good); }
+.gauge.mid .g-fg { stroke: var(--warn); }
+.gauge.low .g-fg { stroke: var(--bad); }
+.gauge text { font: 700 12px var(--num-font); fill: var(--text); }
+
+/* ---------- Profil ---------- */
+.pv-head { display: flex; gap: 14px; align-items: center; }
+.pv-head h2 { margin: 0 0 2px; }
+.pv-tiles { grid-template-columns: repeat(3, 1fr); }
+.radar { width: 100%; max-width: 440px; display: block; margin: 0 auto; overflow: visible; }
+.radar .rd-grid { fill: none; stroke: var(--line); stroke-width: 1; }
+.radar .rd-now { fill: color-mix(in srgb, var(--accent) 22%, transparent); stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+.radar .rd-prev { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 4; }
+.radar .rd-dot { fill: var(--accent); stroke: var(--panel); stroke-width: 2; }
+.radar .rd-label { font: 600 15px var(--num-font); fill: var(--text); }
+.radar .rd-val { font: 700 14px var(--num-font); fill: var(--muted); }
+.rd-legend { justify-content: center; margin-top: 6px; }
+.lg-area { width: 14px; height: 10px; border-radius: 3px; display: inline-block; }
+.lg-area.now { background: color-mix(in srgb, var(--accent) 35%, transparent); border: 2px solid var(--accent); }
+.lg-area.prev { border: 2px dashed var(--muted); }
+.skill-list { display: grid; gap: 8px; margin-top: 14px; }
+.skill-row { display: grid; grid-template-columns: 7.5em 1fr 2.2em 3em; gap: 4px 10px; align-items: center; }
+.skill-name { font-weight: 600; }
+.skill-bar { height: 8px; border-radius: 4px; background: var(--chip); overflow: hidden; }
+.skill-bar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+.skill-d { font-size: 12px; font-weight: 700; }
+.skill-d.up { color: var(--good); }
+.skill-d.down { color: var(--bad); }
+.skill-detail { grid-column: 1 / -1; margin-top: -4px; }
+@media (max-width: 700px) {
+  .pv-tiles { grid-template-columns: repeat(2, 1fr); }
+  .skill-row { grid-template-columns: 6.5em 1fr 2em 2.6em; }
+}

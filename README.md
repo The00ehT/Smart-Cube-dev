@@ -38,6 +38,9 @@ Aufgebaut auf [gan-web-bluetooth](https://github.com/afedotov/gan-web-bluetooth)
 - **Schwächen üben**: findet deine langsamsten Fälle (aus Solves und Training) und trainiert sie gezielt
 - **Coach**: Hinweise aus deinen Daten (größter Hebel, Erkennung, Pausen, Kreuz, Drehungen, Fortschritt) mit passender Aktion
 - **Geister-Rennen**: gegen die eigene Bestzeit oder einen geteilten Solve – gleicher Startzustand, der Geist löst live mit
+- **Solve-Bilanz** nach jedem Solve: Züge (HTM), TPS, Drehtempo (ohne Pausen), Flüssigkeit 0–100, Erkennung, Pausen
+- **Profil mit Stärkenprofil** (Netzdiagramm): Kreuz, Lookahead, Erkennung, Drehtempo, Flüssigkeit, Effizienz, Konstanz –
+  letzte 50 Solves im Vergleich zu den 50 davor
 - **Live-Phasen** beim Lösen, **Rekord-Feier** (Konfetti, Klang) und **Teilen-Karte** als Bild
 - **Rückgängig** statt Rückfragen beim Löschen
 - **Trainer**: stellt den Fall per berechnetem Setup her (vom aktuellen Zustand aus), misst Erkennung und Ausführung,
@@ -113,6 +116,7 @@ Jeder Push wird getestet und gebaut; der Stand von `main` wird automatisch auf G
 | `src/cube/easy-scramble.js` | Leichte Scrambles (Kreuzteile/Paar vorgelöst) |
 | `src/algs.js`, `src/ui/algs-view.js`, `src/ui/trainer.js` | Algorithmen, Fall-Statistik, Trainer |
 | `src/archive.js`, `src/ui/archive-view.js` | Archiv |
+| `src/metrics.js`, `src/ui/radar.js` | Kennzahlen je Solve, Stärkenprofil, Netzdiagramm |
 | `src/room.js` | Online-Räume (PeerJS/WebRTC, Gastgeber verteilt Scrambles und Ergebnisse) |
 | `src/ui/room-view.js` | Raum-Ansicht mit Live-Würfeln und Rundentabelle |
 | `src/cube/connection.js` | GAN / andere Smartcubes / virtueller Würfel mit einheitlichen Ereignissen |

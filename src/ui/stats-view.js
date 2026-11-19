@@ -9,6 +9,7 @@ import { PHASE_NAMES } from '../cube/analysis.js';
 import { COLOR_NAMES } from '../cube/facelets.js';
 import { colorChip } from './replay.js';
 import { donut, phaseSegments } from './donut.js';
+import { metricsOf } from '../metrics.js';
 
 const RANGES = [
   ['12', 12],
@@ -62,6 +63,7 @@ export class StatsView {
       return;
     }
     const s = detailStats(sel);
+    this.sel = sel;
     const offset = all.length - sel.length;
     body.innerHTML = [
       this.tiles(s, all),
@@ -86,6 +88,11 @@ export class StatsView {
       ['Ø TPS', num(s.tps, 2)],
       ['+2 / DNF', `${s.plus2} / ${s.dnf}`],
     ];
+    const ms = this.sel.map(metricsOf).filter(Boolean);
+    if (ms.length) {
+      const av = (f) => ms.reduce((x, m) => x + (f(m) ?? 0), 0) / ms.length;
+      items.push(['Ø Flüssigkeit', String(Math.round(av((m) => m.fluency)))], ['Ø Züge (HTM)', num(av((m) => m.htm))], ['Ø Drehtempo', num(av((m) => m.etps), 2)]);
+    }
     const aos = [5, 12, 50, 100]
       .map((n) => `<tr><td>Ø ${n}</td><td>${cur(n)}</td><td>${bestAo(n)}</td></tr>`)
       .join('');

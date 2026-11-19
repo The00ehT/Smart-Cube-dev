@@ -27,6 +27,8 @@ import { setupAlgFor } from './ui/cube-view.js';
 import { toast, undoable } from './ui/toast.js';
 import { confetti, chime, shareSolveImage } from './ui/celebrate.js';
 import { coachInsights } from './coach.js';
+import { metricsOf, skillProfile, SKILLS } from './metrics.js';
+import { radarSvg } from './ui/radar.js';
 
 const $ = (id) => document.getElementById(id);
 const SOLVES_KEY = 'smartcube.solves.v1';
@@ -325,6 +327,7 @@ function finishSolve() {
   updateViewOrientation();
   renderTimer();
   renderSplits(solve);
+  renderSolveMetrics($('solve-metrics'), solve);
   renderArchiveBtn();
   renderSolves();
   const pb = best(solves) === effectiveTime(solve) && solves.length > 1;
@@ -650,6 +653,31 @@ function tick() {
 }
 requestAnimationFrame(tick);
 
+/** Kleiner Ring 0–100 (Flüssigkeit) */
+function gauge(v) {
+  const r = 15;
+  const len = 2 * Math.PI * r;
+  const cls = v >= 75 ? 'good' : v >= 50 ? 'mid' : 'low';
+  return `<svg class="gauge ${cls}" viewBox="0 0 40 40" width="40" height="40" aria-hidden="true">
+    <circle cx="20" cy="20" r="${r}" class="g-bg"/><circle cx="20" cy="20" r="${r}" class="g-fg" stroke-dasharray="${((v / 100) * len).toFixed(1)} ${len.toFixed(1)}" transform="rotate(-90 20 20)"/>
+    <text x="20" y="24.5" text-anchor="middle">${v}</text></svg>`;
+}
+
+/** Bilanz eines Solves: Züge, TPS, Drehtempo, Flüssigkeit, Erkennung, Pausen */
+function renderSolveMetrics(el, solve) {
+  const m = solve && metricsOf(solve);
+  el.hidden = !m;
+  if (!m) return;
+  const tile = (v, k, title) => `<div class="sm" title="${title}"><b>${v}</b><span>${k}</span></div>`;
+  el.innerHTML = `
+    <div class="sm sm-fl" title="Anteil der Zeit, in der du ohne Stocken gedreht hast">${m.fluency == null ? '' : gauge(m.fluency)}<span>Flüssigkeit</span></div>
+    ${tile(m.htm, 'Züge', `Zugzahl in HTM (Doppelzüge als ein Zug) · ${m.qtm} Vierteldrehungen`)}
+    ${tile(m.tps.toFixed(1).replace('.', ','), 'TPS', 'Züge pro Sekunde, gesamt')}
+    ${tile(m.etps == null ? '–' : m.etps.toFixed(1).replace('.', ','), 'Drehtempo', 'Züge pro Sekunde ohne Erkennungspausen')}
+    ${tile(formatTime(m.recog), 'Erkennung', 'Summe aller Pausen vor den Phasen (F2L-Paare, OLL, PLL)')}
+    ${tile(m.pauses, 'Pausen', 'Pausen von mindestens 0,5 s')}`;
+}
+
 /** Knopf unter der Zeit: letzten Solve ins Archiv */
 function renderArchiveBtn() {
   const b = $('btn-archive');
@@ -831,6 +859,7 @@ function openSolve(i) {
   $('sd-info').innerHTML = extra.map((x) => `<span>${x}</span>`).join('');
   $('sd-scramble').textContent = s.scramble || '(eigenes Scramble)';
   $('sd-solution').textContent = s.solution ? groupMoves(s.solution.split(' ').filter(Boolean)).map((g) => g.text).join(' ') : '–';
+  renderSolveMetrics($('sd-metrics'), s);
   $('sd-replay').hidden = !replayData(s);
   $('sd-archive').hidden = !hasDetail(s);
   $('sd-ghost').hidden = !hasDetail(s);
@@ -1046,7 +1075,63 @@ try {
 const settingsDlg = $('settings-dialog');
 const openSettings = () => settingsDlg.showModal();
 $('btn-settings').addEventListener('click', openSettings);
-$('profile-chip').addEventListener('click', openSettings);
+$('profile-chip').addEventListener('click', () => openProfile());
+$('pv-close').addEventListener('click', () => $('profile-dialog').close());
+$('pv-edit').addEventListener('click', () => {
+  $('profile-dialog').close();
+  openSettings();
+});
+
+/** Profil: Kennzahlen und Stärkenprofil (letzte 50 Solves, Vergleich mit den 50 davor) */
+function openProfile() {
+  $('pv-avatar').innerHTML = avatarHtml();
+  $('pv-name').textContent = profile.name || 'Dein Profil';
+  const det = solves.filter(hasDetail);
+  const recent = det.slice(-50);
+  const older = det.slice(-100, -50);
+  const prof = skillProfile(recent);
+  const prevProf = older.length >= 10 ? skillProfile(older) : null;
+  $('pv-sub').textContent = `${solves.length} Solves${prof ? ` · Profil aus den letzten ${prof.n}` : ''}`;
+  const ms = recent.map(metricsOf).filter(Boolean);
+  const avgOf = (f) => (ms.length ? ms.reduce((a, m) => a + (f(m) ?? 0), 0) / ms.length : null);
+  const tiles = [
+    ['Bestzeit', formatTime(best(solves))],
+    ['Ø 12', formatTime(averageOf(solves, 12))],
+    ['Ø Flüssigkeit', ms.length ? String(Math.round(avgOf((m) => m.fluency))) : '–'],
+    ['Ø Züge', ms.length ? String(Math.round(avgOf((m) => m.htm))) : '–'],
+    ['Ø TPS', ms.length ? avgOf((m) => m.tps).toFixed(2).replace('.', ',') : '–'],
+    ['Ø Drehtempo', ms.length ? avgOf((m) => m.etps).toFixed(2).replace('.', ',') : '–'],
+  ];
+  $('pv-tiles').innerHTML = tiles.map(([k, v]) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`).join('');
+  if (!prof) {
+    $('pv-radar').innerHTML = `<p class="small">Nach 5 Solves mit deinem Smartcube erscheint hier dein Stärkenprofil (noch ${Math.max(0, 5 - det.length)}).</p>`;
+    $('pv-skills').innerHTML = '';
+  } else {
+    const now = SKILLS.map((k) => prof.scores[k.key]);
+    const prev = prevProf ? SKILLS.map((k) => prevProf.scores[k.key]) : null;
+    $('pv-radar').innerHTML = radarSvg(SKILLS, now, prev) +
+      `<div class="legend rd-legend"><span><i class="lg-area now"></i>letzte ${prof.n} Solves</span>${prev ? `<span><i class="lg-area prev"></i>die ${prevProf.n} davor</span>` : ''}</div>`;
+    const v = prof.values;
+    const detail = {
+      cross: `${v.crossMoves.toFixed(1).replace('.', ',')} Züge, ${formatTime(v.crossTime)}`,
+      lookahead: v.pairRecog == null ? '–' : `${formatTime(v.pairRecog)} Pause vor jedem Paar`,
+      recog: `${formatTime(v.llRecog)} vor OLL und PLL`,
+      tps: v.etps == null ? '–' : `${v.etps.toFixed(1).replace('.', ',')} Züge/s beim Drehen`,
+      fluency: v.fluency == null ? '–' : `${Math.round(v.fluency)} von 100`,
+      efficiency: `${Math.round(v.htm)} Züge (HTM)`,
+      consistency: prof.cv == null ? '–' : `±${Math.round(prof.cv * 100)} % Streuung`,
+    };
+    const ranked = SKILLS.map((k, i) => ({ ...k, v: now[i], d: prev ? now[i] - prev[i] : null })).sort((a, b) => b.v - a.v);
+    const row = (k, tag) => `<div class="skill-row"><span class="skill-name">${k.name}</span>
+      <span class="skill-bar"><i style="width:${Math.round(k.v)}%"></i></span><b>${Math.round(k.v)}</b>
+      ${k.d != null && Math.abs(k.d) >= 3 ? `<span class="skill-d ${k.d > 0 ? 'up' : 'down'}">${k.d > 0 ? '▲' : '▼'} ${Math.abs(Math.round(k.d))}</span>` : '<span class="skill-d"></span>'}
+      <span class="small skill-detail">${detail[k.key]}${tag ? ` · ${tag}` : ''}</span></div>`;
+    $('pv-skills').innerHTML = `<div class="skill-list">${ranked.map((k, i) => row(k, i < 2 ? 'Stärke' : i >= ranked.length - 2 ? 'ausbaufähig' : '')).join('')}</div>
+      <p class="small">Skalen grob von „Einsteiger“ (0) bis „sehr schnell“ (100). ${prev ? '▲▼ = Veränderung gegenüber den Solves davor.' : ''}</p>`;
+  }
+  $('profile-dialog').showModal();
+  persistSolves(); // nachträglich berechnete Kennzahlen sichern
+}
 $('settings-close').addEventListener('click', () => settingsDlg.close());
 
 function renderProfile() {
