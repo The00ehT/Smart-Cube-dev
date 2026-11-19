@@ -1041,6 +1041,7 @@ const PRESET_NAMES = {
   neon: 'Neon',
   galaxy: L('Galaxie', 'Galaxy'),
   cow: L('Kuh 🐄', 'Cow 🐄'),
+  pcb: 'PCB',
 };
 const SKIN_KEYS = ['style', 'body', 'scheme', 'finish', 'theme'];
 let skinPreview = null;

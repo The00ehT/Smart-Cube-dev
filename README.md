@@ -50,7 +50,7 @@ Aufgebaut auf [gan-web-bluetooth](https://github.com/afedotov/gan-web-bluetooth)
 - **Leichte Scrambles**: 2 Kreuzkanten vorgelöst oder X-Cross üben (2 Kreuzkanten + 1 Paar), für die eigene Kreuzfarbe
 - **Eigener 3D-Würfel** (three.js, ohne externe Modelle): Stile GAN (spitze Würfelecken, runde Innenecken),
   Stickerless, Klassisch, Fliesen; Körper schwarz/grau/weiß; Farbschemata Kräftig/Standard/Pastell; glänzend oder matt;
-  Designs Neon, Galaxie, Kuh und eigene Bilder je Seite (wie ein Bilderwürfel: Bildteile wandern samt Drehung mit);
+  Designs Neon, Galaxie, Platine (PCB), Kuh und eigene Bilder je Seite (wie ein Bilderwürfel: Bildteile wandern samt Drehung mit);
   eigenes Logo fürs Mittelstück – mit Live-Vorschau in den Einstellungen
 - **Offline**: Service Worker speichert die ganze App (inkl. Scramble-Generator); Offline-Prüfung in den Einstellungen
   zeigt, ob der Browser das unterstützt; als App installierbar (Manifest, App-Symbol)

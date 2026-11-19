@@ -141,6 +141,7 @@ const STATIC = {
   Design: 'Design',
   Galaxie: 'Galaxy',
   'Kuh 🐄': 'Cow 🐄',
+  'Platine (PCB)': 'Circuit board (PCB)',
   'Eigene Bilder': 'Own images',
   '🏷 Logo fürs Mittelstück': '🏷 Logo for center piece',
   'Logo entfernen': 'Remove logo',

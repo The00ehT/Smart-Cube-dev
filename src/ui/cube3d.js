@@ -10,7 +10,7 @@
  *   body    'black' | 'gray' | 'white'
  *   scheme  'bright' | 'standard' | 'pastel'        (Farben)
  *   finish  'gloss' | 'matte'
- *   theme   'colors' | 'cow' | 'neon' | 'galaxy' | 'custom'   (Design; Bilder werden wie bei einem
+ *   theme   'colors' | 'cow' | 'neon' | 'galaxy' | 'pcb' | 'custom'   (Design; Bilder werden wie bei einem
  *           Bilderwürfel zerteilt und wandern samt Drehung mit ihrem Stein)
  *   images  { U: dataUrl, … } für 'custom', logo: dataUrl fürs weiße Mittelstück
  */
@@ -34,6 +34,7 @@ export const SKIN_PRESETS = {
   neon: { style: 'gan', body: 'black', scheme: 'bright', finish: 'gloss', theme: 'neon' },
   galaxy: { style: 'gan', body: 'black', scheme: 'bright', finish: 'gloss', theme: 'galaxy' },
   cow: { style: 'gan', body: 'black', scheme: 'bright', finish: 'matte', theme: 'cow' },
+  pcb: { style: 'gan', body: 'black', scheme: 'bright', finish: 'gloss', theme: 'pcb' },
 };
 export let DEFAULT_SKIN = SKIN_PRESETS.gan;
 /** Aussehen für alle neu erzeugten Würfel (z. B. aus den Einstellungen) */

@@ -5,6 +5,7 @@
  *   cow     Kuh: vorne ein Kuhgesicht, sonst Kuhflecken (leicht in der Seitenfarbe getönt → lösbar)
  *   neon    Neon/Cyberpunk: dunkle Felder mit leuchtendem Rand
  *   galaxy  Sternenhimmel mit Nebel in der Seitenfarbe
+ *   pcb     Platine: Lötstopplack je Seite, Leiterbahnen, Vias, SMD-Bauteile, Chip in der Mitte
  *   custom  eigene Bilder je Seite (fehlende Seiten: einfarbig)
  */
 const N = 512;
@@ -211,6 +212,171 @@ function galaxyFace(face, color) {
   return c;
 }
 
+// ---------- Platine (PCB) ----------
+
+// Lötstopplack je Seite (echte Platinenfarben), Bestückungsdruck hell auf dunklem Lack, dunkel auf hellem
+const PCB = {
+  U: { mask: '#e9e9e4', silk: '#1b1b1b' },
+  D: { mask: '#e2c11a', silk: '#1b1b1b' },
+  F: { mask: '#1d7a3c', silk: '#f4f4f0' },
+  B: { mask: '#1c4e9c', silk: '#f4f4f0' },
+  R: { mask: '#b01f2a', silk: '#f4f4f0' },
+  L: { mask: '#d8661b', silk: '#1b1b1b' },
+};
+const GOLD = '#d9b04a';
+const GOLD_HI = '#f2d27a';
+
+function pcbFace(face) {
+  const [c, x] = canvas();
+  const { mask, silk } = PCB[face];
+  const rnd = rng(face.charCodeAt(0) * 131 + 17);
+  const G = 16; // Raster
+  const snap = (v) => Math.round(v / G) * G;
+  // Lack mit leichter Struktur
+  x.fillStyle = mask;
+  x.fillRect(0, 0, N, N);
+  for (let i = 0; i < 1400; i++) {
+    x.fillStyle = `rgba(${rnd() < 0.5 ? '255,255,255' : '0,0,0'},${0.03 + rnd() * 0.03})`;
+    x.fillRect(rnd() * N, rnd() * N, 2, 2);
+  }
+  // Kupfer unter dem Lack: auf dunklem Lack heller, auf hellem Lack dunkler
+  const light = silk !== '#f4f4f0';
+  const trace = light ? mix(mask, '#000000', 0.16) : mix(mask, '#ffffff', 0.28);
+  const traceDark = light ? mix(mask, '#000000', 0.3) : mix(mask, '#000000', 0.18);
+
+  // Leiterbahnen: Rasterwege mit 45°-Knicken, enden in Vias
+  const vias = [];
+  for (let t = 0; t < 26; t++) {
+    let px = snap(rnd() * N);
+    let py = snap(rnd() * N);
+    const pts = [[px, py]];
+    let dir = Math.floor(rnd() * 4);
+    for (let seg = 0; seg < 3 + Math.floor(rnd() * 4); seg++) {
+      const len = G * (2 + Math.floor(rnd() * 8));
+      const dx = [1, 0, -1, 0][dir];
+      const dy = [0, 1, 0, -1][dir];
+      // 45°-Übergang
+      if (seg > 0) {
+        const diag = G;
+        px += dx * diag + (pts.length > 1 ? 0 : 0);
+        py += dy * diag;
+        pts.push([px, py]);
+      }
+      px += dx * len;
+      py += dy * len;
+      pts.push([px, py]);
+      dir = (dir + (rnd() < 0.5 ? 1 : 3)) % 4;
+    }
+    const w = rnd() < 0.25 ? 9 : 5;
+    x.lineCap = 'round';
+    x.lineJoin = 'round';
+    x.strokeStyle = traceDark;
+    x.lineWidth = w + 3;
+    x.beginPath();
+    pts.forEach(([a, b], i) => (i ? x.lineTo(a, b) : x.moveTo(a, b)));
+    x.stroke();
+    x.strokeStyle = trace;
+    x.lineWidth = w;
+    x.stroke();
+    vias.push(pts[0], pts[pts.length - 1]);
+  }
+  // Vias: Goldring mit Bohrung
+  for (const [vx, vy] of vias) {
+    x.fillStyle = GOLD;
+    x.beginPath();
+    x.arc(vx, vy, 8, 0, Math.PI * 2);
+    x.fill();
+    x.fillStyle = GOLD_HI;
+    x.beginPath();
+    x.arc(vx - 2, vy - 2, 4, 0, Math.PI * 2);
+    x.fill();
+    x.fillStyle = '#2a2a2a';
+    x.beginPath();
+    x.arc(vx, vy, 3.5, 0, Math.PI * 2);
+    x.fill();
+  }
+  // Bauteile: SMD-Widerstände/Kondensatoren mit Bestückungsdruck
+  x.font = 'bold 15px ui-monospace, Menlo, Consolas, monospace';
+  x.textBaseline = 'middle';
+  for (let k = 0; k < 14; k++) {
+    const cx = 40 + rnd() * (N - 80);
+    const cy = 40 + rnd() * (N - 80);
+    if (Math.hypot(cx - N / 2, cy - N / 2) < 110) continue; // Platz für den Chip
+    const vert = rnd() < 0.5;
+    const isCap = rnd() < 0.4;
+    const pw = 12;
+    const ph = 14;
+    const gap = 18;
+    x.save();
+    x.translate(cx, cy);
+    if (vert) x.rotate(Math.PI / 2);
+    // Bestückungsrahmen
+    x.strokeStyle = silk;
+    x.lineWidth = 2;
+    x.strokeRect(-gap - pw - 4, -ph / 2 - 4, 2 * (gap + pw + 4), ph + 8);
+    // Pads
+    for (const s of [-1, 1]) {
+      x.fillStyle = GOLD;
+      x.fillRect(s * gap - (s < 0 ? pw : 0), -ph / 2, pw, ph);
+      x.fillStyle = GOLD_HI;
+      x.fillRect(s * gap - (s < 0 ? pw : 0) + 2, -ph / 2 + 2, pw - 6, 3);
+    }
+    // Bauteilkörper
+    x.fillStyle = isCap ? '#b9875a' : '#1e1e1e';
+    x.fillRect(-gap + 2, -ph / 2 + 1, 2 * gap - 4, ph - 2);
+    if (!isCap) {
+      x.fillStyle = '#f4f4f0';
+      x.font = 'bold 9px ui-monospace, Menlo, monospace';
+      x.textAlign = 'center';
+      x.fillText(String(Math.floor(rnd() * 900 + 100)), 0, 1);
+    }
+    x.restore();
+    // Beschriftung
+    x.fillStyle = silk;
+    x.font = 'bold 15px ui-monospace, Menlo, Consolas, monospace';
+    x.textAlign = 'left';
+    x.fillText(`${isCap ? 'C' : 'R'}${Math.floor(rnd() * 40 + 1)}`, cx + (vert ? 16 : -24), cy + (vert ? 0 : -24));
+  }
+  // Chip (QFP) mitten auf der Seite
+  const s = 112;
+  const cx0 = N / 2 - s / 2;
+  const cy0 = N / 2 - s / 2;
+  x.fillStyle = GOLD;
+  for (let i = 0; i < 10; i++) {
+    const o = 12 + i * ((s - 24) / 9);
+    x.fillRect(cx0 + o - 3, cy0 - 18, 6, 18);
+    x.fillRect(cx0 + o - 3, cy0 + s, 6, 18);
+    x.fillRect(cx0 - 18, cy0 + o - 3, 18, 6);
+    x.fillRect(cx0 + s, cy0 + o - 3, 18, 6);
+  }
+  const body = x.createLinearGradient(cx0, cy0, cx0 + s, cy0 + s);
+  body.addColorStop(0, '#2b2b2e');
+  body.addColorStop(1, '#141416');
+  x.fillStyle = body;
+  x.beginPath();
+  x.roundRect(cx0, cy0, s, s, 6);
+  x.fill();
+  x.fillStyle = '#3a3a3e';
+  x.beginPath();
+  x.arc(cx0 + 16, cy0 + 16, 6, 0, Math.PI * 2);
+  x.fill();
+  x.fillStyle = '#c9c9c9';
+  x.textAlign = 'center';
+  x.font = 'bold 18px ui-monospace, Menlo, Consolas, monospace';
+  x.fillText('SC-333', N / 2, N / 2 - 8);
+  x.font = '13px ui-monospace, Menlo, Consolas, monospace';
+  x.fillText(`${face}-2026`, N / 2, N / 2 + 16);
+  // Bestückungsdruck um den Chip und Platinenname
+  x.strokeStyle = silk;
+  x.lineWidth = 2;
+  x.strokeRect(cx0 - 26, cy0 - 26, s + 52, s + 52);
+  x.fillStyle = silk;
+  x.textAlign = 'left';
+  x.font = 'bold 15px ui-monospace, Menlo, Consolas, monospace';
+  x.fillText('U1', cx0 - 24, cy0 - 38);
+  return c;
+}
+
 function plainFace(color) {
   const [c, x] = canvas();
   x.fillStyle = color;
@@ -253,6 +419,7 @@ export async function faceImages(theme, colors, opts = {}) {
     if (theme === 'cow') out[f] = cowFace(f, colors[f]);
     else if (theme === 'neon') out[f] = neonFace(f);
     else if (theme === 'galaxy') out[f] = galaxyFace(f, colors[f]);
+    else if (theme === 'pcb') out[f] = pcbFace(f);
     else if (theme === 'custom') out[f] = await imageFace(opts.images?.[f], colors[f]);
     else out[f] = plainFace(colors[f]);
   }
