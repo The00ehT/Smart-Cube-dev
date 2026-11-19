@@ -46,6 +46,8 @@ const STATIC = {
   '☆ Rekonstruktion archivieren': '☆ Save reconstruction',
   'Ausrichtung zurücksetzen': 'Reset orientation',
   'Als gelöst markieren': 'Mark as solved',
+  'Ausrichten': 'Reset',
+  'Gelöst': 'Solved',
   "Tastatur: I/K = R/R', J/F = U/U', H/G = F/F', D/E = L/L', S/L = D/D', W/O = B/B'": "Keyboard: I/K = R/R', J/F = U/U', H/G = F/F', D/E = L/L', S/L = D/D', W/O = B/B'",
   'Letzte Züge & Gerät': 'Last moves & device',
   'Alle löschen': 'Delete all',

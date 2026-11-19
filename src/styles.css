@@ -665,7 +665,7 @@ dialog.big-dialog { width: min(1100px, calc(100vw - 24px)); max-width: none; max
 .ghost-time { font: 750 26px/1 var(--num-font); }
 .ghost-stop { position: absolute; top: 8px; right: 8px; }
 .ghost-info .live-bar { margin: 0; max-width: none; }
-body.solving .ghost-card { display: flex !important; max-width: 520px; margin: 0 auto; width: 100%; }
+body.solving .ghost-card:not([hidden]) { display: flex !important; max-width: 520px; margin: 0 auto; width: 100%; }
 
 /* ---------- Coach ---------- */
 .coach-h { margin: 0 0 10px; font-size: 17px; }
@@ -844,3 +844,67 @@ body.solving .solve-metrics { display: none !important; }
 }
 /* Knöpfe im Ergebnis immer sichtbar (am Handy beim Scrollen unten fixiert) */
 .res-actions { position: sticky; bottom: -14px; background: var(--panel); padding: 10px 0 4px; margin-bottom: -4px; }
+
+/* ---------- Timer-Tab: feste Ansicht ohne Scrollen ---------- */
+.ca-ic, .ca-sh { display: none; }
+.ca-ic { font-size: 16px; line-height: 1; }
+body.tab-timer { height: 100vh; height: 100dvh; overflow: hidden; display: flex; flex-direction: column; }
+body.tab-timer .topbar { flex: none; }
+body.tab-timer .app { flex: 1; min-height: 0; width: 100%; overflow: hidden; }
+body.tab-timer #tab-timer { height: 100%; display: flex; flex-direction: column; animation: none; }
+body.tab-timer #tab-timer > * { flex: none; }
+body.tab-timer #tab-timer > .timer-layout { flex: 1 1 0; min-height: 0; }
+/* Desktop: zwei Spalten in voller Höhe, Würfel füllt seine Karte */
+body.tab-timer .timer-layout { grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+body.tab-timer .timer-card { overflow: auto; align-content: start; }
+body.tab-timer .cube-card { display: flex; flex-direction: column; min-height: 0; }
+body.tab-timer .cube { flex: 1 1 0; min-height: 160px; max-height: none; aspect-ratio: auto; }
+/* Fokus-Modus am Desktop: Zeit oben, Würfel füllt den Rest */
+body.tab-timer.solving .timer-layout { grid-template-rows: auto minmax(0, 1fr); }
+body.tab-timer.solving .timer-card { overflow: visible; }
+
+@media (max-width: 960px) and (min-width: 701px) {
+  body.tab-timer .timer-layout { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+}
+
+@media (max-width: 700px) {
+  body.tab-timer .app { padding-top: 8px; padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 6px); overflow-y: auto; overscroll-behavior: contain; }
+  body.tab-timer #tab-timer { gap: 8px; }
+  /* Karten auflösen und neu ordnen: Scramble · Würfel · Zeit · Kurzstatistik */
+  body.tab-timer .timer-layout { display: flex; flex-direction: column; gap: 6px; }
+  body.tab-timer .timer-card, body.tab-timer .cube-card { display: contents; }
+  body.tab-timer .scramble-box { order: 1; background: var(--panel); border-radius: 16px; box-shadow: var(--shadow); padding: 10px 12px; }
+  body.tab-timer .scramble { margin-top: 8px; min-height: 0; gap: 5px; }
+  body.tab-timer .scramble-head .label { display: none; }
+  body.tab-timer .scramble-buttons { display: flex; gap: 6px; flex-wrap: nowrap; width: 100%; }
+  body.tab-timer .scramble-buttons button { flex: 1 1 auto; white-space: nowrap; font-size: 12.5px; padding: 6px 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  body.tab-timer .scramble .mv { font-size: 15px; min-width: 30px; padding: 4px 5px; }
+  body.tab-timer .progress { margin-top: 8px; }
+  body.tab-timer .cube { order: 2; flex: 1 1 0; min-height: 110px; }
+  body.tab-timer .cube-actions { order: 3; gap: 6px; flex-wrap: nowrap; }
+  body.tab-timer .cube-actions button { padding: 5px 10px; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  body.tab-timer .ca-ic { display: inline; }
+  body.tab-timer .ca-tx { display: none; }
+  body.tab-timer .ca-sh { display: inline; font-size: 12.5px; }
+  body.tab-timer #btn-disconnect-2 .ca-tx { display: inline; font-size: 12.5px; }
+  body.tab-timer .timer-wrap { order: 4; padding: 0; }
+  body.tab-timer .timer { font-size: clamp(56px, 17vw, 76px); }
+  body.tab-timer .status { margin-top: 2px; font-size: 13px; min-height: 1.2em; }
+  body.tab-timer .live-bar { margin-top: 6px; }
+  body.tab-timer .ghost-card { order: 5; padding: 6px 10px; }
+  body.tab-timer .ghost-cube { width: 64px; height: 64px; }
+  body.tab-timer .quick { order: 6; border-top: 0; padding-top: 0; }
+  body.tab-timer .quick b { font-size: 16px; }
+  body.tab-timer .pad { order: 7; }
+  body.tab-timer .pad-grid { gap: 4px; }
+  body.tab-timer .pad-grid button { padding: 6px 0; font-size: 14px; }
+  body.tab-timer .pad .hint { display: none; }
+  /* Details stehen im Ergebnis-Overlay nach dem Solve */
+  body.tab-timer .recent, body.tab-timer .splits, body.tab-timer .solve-metrics,
+  body.tab-timer .archive-btn, body.tab-timer .coach-tip { display: none !important; }
+  body.tab-timer .connect-card { padding: 12px; }
+  body.tab-timer .connect-text .small { display: none; }
+  body.tab-timer .notice { font-size: 12px; line-height: 1.35; padding: 6px 10px; }
+  /* Beim Lösen: Würfel und Zeit groß */
+  body.tab-timer.solving .timer { font-size: clamp(72px, 22vw, 104px); }
+}

@@ -1276,6 +1276,8 @@ function showTab(name) {
   if (!TABS.includes(name)) name = 'timer';
   app.tab = name;
   for (const sec of document.querySelectorAll('main > .tab')) sec.hidden = sec.dataset.tab !== name;
+  // Timer-Tab ist eine feste Ansicht ohne Scrollen (siehe styles.css: body.tab-timer)
+  for (const t of TABS) document.body.classList.toggle(`tab-${t}`, t === name);
   for (const b of document.querySelectorAll('[role=tab][data-tab]')) b.setAttribute('aria-selected', String(b.dataset.tab === name));
   if (name === 'stats') statsView.open(solves);
   if (name === 'algs') {

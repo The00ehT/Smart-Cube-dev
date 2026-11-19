@@ -316,6 +316,9 @@ export class Cube3D {
     const h = this.container.clientHeight || w;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
+    // Hochformat: Sichtfeld so weiten, dass der Würfel auch in der Breite ganz hineinpasst
+    const half = (24 / 2) * (Math.PI / 180);
+    this.camera.fov = w < h ? (2 * Math.atan(Math.tan(half) / (w / h)) * 180) / Math.PI : 24;
     this.camera.updateProjectionMatrix();
     this.dirty = true;
   }
