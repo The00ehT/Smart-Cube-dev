@@ -2,12 +2,13 @@
  * Archiv-Ansicht: Tabelle mit Zeit, Scramble, Zügen, TPS, Fällen und Datum; sortierbar nach Zeit oder
  * Änderungsdatum. Ein Tipp auf eine Zeile öffnet die Rekonstruktion.
  */
+import { L, locale } from '../i18n.js';
 import { archive, removeFromArchive, updateArchived, restoreArchived } from '../archive.js';
 import { undoable } from './toast.js';
 import { formatSolve, effectiveTime, DNF } from '../stats.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-const fmtDate = (iso) => new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
+const fmtDate = (iso) => new Date(iso).toLocaleDateString(locale, { day: '2-digit', month: '2-digit', year: '2-digit' });
 
 export class ArchiveView {
   /** @param h { open(entry) } */
@@ -26,7 +27,7 @@ export class ArchiveView {
       if (note) {
         e.stopPropagation();
         const a = archive.find((x) => String(x.solveId) === note.dataset.note);
-        const text = prompt('Notiz zu diesem Solve:', a?.note || '');
+        const text = prompt(L('Notiz zu diesem Solve:', 'Note for this solve:'), a?.note || '');
         if (text !== null) updateArchived(a.solveId, { note: text.slice(0, 200) });
         return this.render();
       }
@@ -34,7 +35,7 @@ export class ArchiveView {
       if (del) {
         e.stopPropagation();
         const entry = archive.find((x) => String(x.solveId) === del.dataset.del);
-        undoable('Aus dem Archiv entfernt', () => removeFromArchive(entry.solveId), () => {
+        undoable(L('Aus dem Archiv entfernt', 'Removed from archive'), () => removeFromArchive(entry.solveId), () => {
           restoreArchived(entry);
           this.render();
         });
@@ -49,9 +50,8 @@ export class ArchiveView {
     if (!archive.length) {
       this.root.innerHTML = `<div class="empty-state">
         <div class="empty-icon">★</div>
-        <b>Noch nichts archiviert</b>
-        <p class="small">Nach jedem Solve kannst du unter der Zeit auf „☆ Archivieren“ tippen. Die Rekonstruktion bleibt dann
-          dauerhaft hier – auch wenn du die Solve-Liste löschst.</p></div>`;
+        <b>${L('Noch nichts archiviert', 'Nothing archived yet')}</b>
+        <p class="small">${L('Nach jedem Solve kannst du unter der Zeit auf „☆ Rekonstruktion archivieren“ tippen. Die Rekonstruktion bleibt dann dauerhaft hier – auch wenn du die Solve-Liste löschst.', 'After every solve, tap “☆ Save reconstruction” below the time. It stays here for good – even if you clear your solve list.')}</p></div>`;
       return;
     }
     const { key, dir } = this.sort;
@@ -63,21 +63,21 @@ export class ArchiveView {
         const ll = a.ll ? [a.ll.oll ? `OLL ${a.ll.oll}` : a.ll.oll === 0 ? 'OLL-Skip' : '', a.ll.pll ? (a.ll.pll === 'Skip' ? 'PLL-Skip' : a.ll.pll) : ''].filter(Boolean).join(' · ') : '';
         return `<tr data-id="${a.solveId}">
           <td class="ar-time">${formatSolve(a)}</td>
-          <td class="ar-scr">${esc(a.scramble || '(eigenes Scramble)')}${a.note ? `<div class="ar-note">„${esc(a.note)}“</div>` : ''}</td>
-          <td>${a.moveCount ?? '–'}</td>
+          <td class="ar-scr">${esc(a.scramble || L('(eigenes Scramble)', '(own scramble)'))}${a.note ? `<div class="ar-note">„${esc(a.note)}“</div>` : ''}</td>
+          <td>${a.metrics?.htm ?? a.moveCount ?? '–'}</td>
           <td>${(a.tps ?? 0).toFixed(2)}</td>
           <td class="small">${esc(ll)}</td>
           <td class="small">${fmtDate(a.changedAt)}</td>
-          <td class="ar-act"><button type="button" class="ghost small-btn" data-note="${a.solveId}" title="Notiz">✎</button><button type="button" class="ghost small-btn" data-del="${a.solveId}" title="Entfernen">✕</button></td>
+          <td class="ar-act"><button type="button" class="ghost small-btn" data-note="${a.solveId}" title="${L('Notiz', 'Note')}">✎</button><button type="button" class="ghost small-btn" data-del="${a.solveId}" title="${L('Entfernen', 'Remove')}">✕</button></td>
         </tr>`;
       })
       .join('');
     this.root.innerHTML = `<div class="table-wrap"><table class="phase-table archive-table">
       <tr>
-        <th data-sort="time" class="sortable">Zeit${arrow('time')}</th>
-        <th>Scramble</th><th>Züge</th><th>TPS</th><th>Fälle</th>
-        <th data-sort="changed" class="sortable">Geändert${arrow('changed')}</th><th></th>
+        <th data-sort="time" class="sortable">${L('Zeit', 'Time')}${arrow('time')}</th>
+        <th>Scramble</th><th>${L('Züge', 'Moves')}</th><th>TPS</th><th>${L('Fälle', 'Cases')}</th>
+        <th data-sort="changed" class="sortable">${L('Geändert', 'Modified')}${arrow('changed')}</th><th></th>
       </tr>${rows}</table></div>
-      <p class="small">${archive.length} archivierte ${archive.length === 1 ? 'Lösung' : 'Lösungen'} · Tippe auf „Zeit“ oder „Geändert“ zum Sortieren, auf eine Zeile für die Rekonstruktion.</p>`;
+      <p class="small">${L(`${archive.length} archiviert · Tippe auf „Zeit“ oder „Geändert“ zum Sortieren, auf eine Zeile für die Rekonstruktion.`, `${archive.length} archived · Tap “Time” or “Modified” to sort, a row to open the reconstruction.`)}</p>`;
   }
 }

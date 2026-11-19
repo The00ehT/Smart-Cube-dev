@@ -3,6 +3,7 @@
  * Browser verraten die MAC nur mit Chrome-Flag; sonst fragen wir einmal
  * nach und merken sie uns pro Würfelname.
  */
+import { L } from '../i18n.js';
 import { load, save } from '../storage.js';
 
 const KEY = 'smartcube.macs.v1';
@@ -28,7 +29,7 @@ export function askMac(device) {
   const dlg = document.getElementById('mac-dialog');
   const input = dlg.querySelector('input');
   const err = dlg.querySelector('.error');
-  dlg.querySelector('.device-name').textContent = device.name || 'Würfel';
+  dlg.querySelector('.device-name').textContent = device.name || L('Würfel', 'cube');
   input.value = getStoredMac(device) || '';
   err.textContent = '';
   dlg.showModal();

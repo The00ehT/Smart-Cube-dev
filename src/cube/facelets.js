@@ -1,3 +1,4 @@
+import { L as tr } from '../i18n.js';
 /**
  * Sticker-Modell des 3x3-Würfels im Kociemba-Format:
  * 54 Zeichen, Reihenfolge der Seiten U R F D L B, je 9 Felder zeilenweise.
@@ -216,7 +217,7 @@ export function translateMoves(moves, rotation) {
 }
 
 /** Farbnamen des Standard-Farbschemas (Weiß oben, Grün vorne) */
-export const COLOR_NAMES = { U: 'Weiß', R: 'Rot', F: 'Grün', D: 'Gelb', L: 'Orange', B: 'Blau' };
+export const COLOR_NAMES = { U: tr('Weiß', 'White'), R: tr('Rot', 'Red'), F: tr('Grün', 'Green'), D: tr('Gelb', 'Yellow'), L: 'Orange', B: tr('Blau', 'Blue') };
 
 // ---------- F2L-Slots ----------
 

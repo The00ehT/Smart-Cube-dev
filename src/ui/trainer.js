@@ -4,6 +4,7 @@
  * Erkennung (Pause bis zum ersten Zug) und Ausführung (erster Zug bis gelöst).
  * Langsame und neue Fälle kommen öfter dran.
  */
+import { L } from '../i18n.js';
 import { ScrambleTracker } from '../cube/scramble-tracker.js';
 import { applyAnyAlg, CROSS_DOWN, isSolved, relativeState } from '../cube/facelets.js';
 import { stateForAlg, bodyCaseState, solvedUpToAuf, f2lSolved, llOriented, CASE_STATE } from '../cube/ll-cases.js';
@@ -24,7 +25,7 @@ export class Trainer {
     dlg.innerHTML = `
       <div class="rp-head">
         <div><h2 class="tr-title">Training</h2><div class="small tr-sub"></div></div>
-        <button type="button" class="rp-close" aria-label="Beenden">✕</button>
+        <button type="button" class="rp-close" aria-label="${L('Beenden', 'Stop')}">✕</button>
       </div>
       <div class="tr-main">
         <div class="tr-phase label"></div>
@@ -33,12 +34,12 @@ export class Trainer {
         <div class="tr-msg small"></div>
         <div class="tr-result"></div>
         <div class="tr-buttons">
-          <button type="button" class="ghost" data-act="skip">Anderer Fall</button>
-          <button type="button" class="primary" data-act="next" hidden>Weiter</button>
+          <button type="button" class="ghost" data-act="skip">${L('Anderer Fall', 'Other case')}</button>
+          <button type="button" class="primary" data-act="next" hidden>${L('Weiter', 'Next')}</button>
         </div>
-        <label class="toggle small"><input type="checkbox" class="tr-auto" checked /> automatisch weiter</label>
+        <label class="toggle small"><input type="checkbox" class="tr-auto" checked /> ${L('automatisch weiter', 'auto next')}</label>
       </div>
-      <h3 class="sub-h">Diese Runde</h3>
+      <h3 class="sub-h">${L('Diese Runde', 'This session')}</h3>
       <div class="table-wrap"><table class="phase-table tr-log"></table></div>`;
     dlg.querySelector('.rp-close').onclick = () => dlg.close();
     dlg.addEventListener('close', () => this.stop());
@@ -52,11 +53,11 @@ export class Trainer {
     this.session = [];
     this.active = true;
     this.dlg.querySelector('.tr-title').textContent = `Training · ${title}`;
-    this.dlg.querySelector('.tr-sub').textContent = `${ids.length} ${ids.length === 1 ? 'Fall' : 'Fälle'} · langsame und neue Fälle kommen öfter`;
+    this.dlg.querySelector('.tr-sub').textContent = L(`${ids.length} ${ids.length === 1 ? 'Fall' : 'Fälle'} · langsame und neue Fälle kommen öfter`, `${ids.length} ${ids.length === 1 ? 'case' : 'cases'} · slow and new cases come up more often`);
     this.renderLog();
     if (!this.dlg.open) this.dlg.showModal();
     if (!this.h.connected()) {
-      this.show('Kein Würfel', '', 'Verbinde zuerst deinen Würfel (oder den virtuellen Würfel) im Timer-Tab.');
+      this.show(L('Kein Würfel', 'No cube'), '', L('Verbinde zuerst deinen Würfel (oder den virtuellen Würfel) im Timer-Tab.', 'Connect your cube (or the virtual cube) in the Timer tab first.'));
       return;
     }
     this.nextCase();
@@ -91,7 +92,7 @@ export class Trainer {
     this.caseId = id;
     this.moves = 0;
     this.phase = 'prepare';
-    this.show('Setup wird berechnet …', '', '');
+    this.show(L('Setup wird berechnet …', 'Computing setup …'), '', '');
     // Der Fall, den dein Haupt-Algorithmus löst
     const viewerCase = stateForAlg(mainAlg(id));
     const target = bodyCaseState(viewerCase, this.h.crossFace());
@@ -105,7 +106,7 @@ export class Trainer {
       this.renderSetup();
     } catch (err) {
       console.error(err);
-      this.show('Fehler', '', 'Setup konnte nicht berechnet werden: ' + (err?.message || err));
+      this.show(L('Fehler', 'Error'), '', L('Setup konnte nicht berechnet werden: ', 'Could not compute setup: ') + (err?.message || err));
     }
   }
 
@@ -128,9 +129,9 @@ export class Trainer {
         .remainingMoves()
         .map((m, i) => `<span class="mv${m.correction ? ' correction' : ''}${i === 0 ? ' next' : ''}">${m.text}</span>`)
         .join('');
-      this.show('Setup ausführen', html, 'Halte den Würfel wie beim Lösen (Kreuz unten). Der Fall bleibt bis zum Ende versteckt.');
+      this.show(L('Setup ausführen', 'Apply setup'), html, L('Halte den Würfel wie beim Lösen (Cross unten). Der Fall bleibt bis zum Ende versteckt.', 'Hold the cube like when solving (cross down). The case stays hidden until the end.'));
     } else if (this.phase === 'ready') {
-      this.show('Erkennen und lösen!', '', 'Die Zeit startet mit deinem ersten Zug.');
+      this.show(L('Erkennen und lösen!', 'Recognize and solve!'), '', L('Die Zeit startet mit deinem ersten Zug.', 'The timer starts with your first move.'));
       this.dlg.querySelector('.tr-timer').classList.add('ready');
     }
   }
@@ -150,7 +151,7 @@ export class Trainer {
       this.phase = 'running';
       this.firstAt = t;
       this.moves = 1;
-      this.dlg.querySelector('.tr-phase').textContent = 'Läuft …';
+      this.dlg.querySelector('.tr-phase').textContent = L('Läuft …', 'Running …');
       this.dlg.querySelector('.tr-msg').textContent = '';
       this.dlg.querySelector('.tr-timer').className = 'tr-timer';
       this.checkDone(stateAfter, t);
@@ -174,7 +175,7 @@ export class Trainer {
       this.showResult(exec, recog);
       this.renderLog();
     } else if (this.moves > 40) {
-      this.dlg.querySelector('.tr-msg').textContent = 'Das sieht nicht nach dem Fall aus – „Anderer Fall“ startet neu.';
+      this.dlg.querySelector('.tr-msg').textContent = L('Das sieht nicht nach dem Fall aus – „Anderer Fall“ startet neu.', 'That doesn’t look like the case – “Other case” starts over.');
     }
   }
 
@@ -184,7 +185,7 @@ export class Trainer {
     const tm = d.querySelector('.tr-timer');
     tm.textContent = formatTime(exec);
     tm.className = 'tr-timer done';
-    d.querySelector('.tr-phase').textContent = '✓ Gelöst';
+    d.querySelector('.tr-phase').textContent = L('✓ Gelöst', '✓ Solved');
     const set = id.slice(0, 3);
     const hist = (algData.train[id] || []).slice(-12).map((x) => x.exec);
     d.querySelector('.tr-result').innerHTML = `
@@ -192,8 +193,8 @@ export class Trainer {
         ${caseDiagram(id, 64)}
         <div>
           <b>${esc(caseName(id))}</b>
-          <div class="small">Erkennung ${formatTime(recog)} · Ausführung ${formatTime(exec)} · ${this.moves} Züge</div>
-          <div class="small">Ø der letzten ${hist.length}: ${formatTime(avg(hist))}</div>
+          <div class="small">Recog ${formatTime(recog)} · Exec ${formatTime(exec)} · ${this.moves} ${L('Züge', 'moves')}</div>
+          <div class="small">${L('Ø der letzten', 'Ø of last')} ${hist.length}: ${formatTime(avg(hist))}</div>
           <div class="alg-text small">${esc(mainAlg(id))}</div>
         </div>
       </div>`;
@@ -210,8 +211,8 @@ export class Trainer {
       .join('');
     const mean = avg(this.session.map((r) => r.exec));
     this.dlg.querySelector('.tr-log').innerHTML = this.session.length
-      ? `<tr><th>Fall</th><th>Erkennung</th><th>Ausführung</th></tr>${rows}<tr class="sum"><td>Ø (${this.session.length})</td><td>${formatTime(avg(this.session.map((r) => r.recog)))}</td><td>${formatTime(mean)}</td></tr>`
-      : '<tr><td class="small">Noch keine Fälle in dieser Runde.</td></tr>';
+      ? `<tr><th>${L('Fall', 'Case')}</th><th>Recog</th><th>Exec</th></tr>${rows}<tr class="sum"><td>Ø (${this.session.length})</td><td>${formatTime(avg(this.session.map((r) => r.recog)))}</td><td>${formatTime(mean)}</td></tr>`
+      : `<tr><td class="small">${L('Noch keine Fälle in dieser Runde.', 'No cases yet in this session.')}</td></tr>`;
   }
 
   tick() {

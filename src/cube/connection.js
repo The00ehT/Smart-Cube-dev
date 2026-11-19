@@ -11,6 +11,7 @@
  */
 import { connectGanCube, now } from 'gan-web-bluetooth';
 import { askMac, getStoredMac, storeMac } from '../ui/mac-dialog.js';
+import { L } from '../i18n.js';
 import { SOLVED, patternDataToFacelets } from './facelets.js';
 
 export const bluetoothAvailable = () => typeof navigator !== 'undefined' && !!navigator.bluetooth;
@@ -123,7 +124,7 @@ export async function connectOther(emit) {
 export function connectVirtual(emit) {
   return {
     kind: 'virtual',
-    name: 'Virtueller Würfel',
+    name: L('Virtueller Würfel', 'Virtual cube'),
     supportsGyro: false,
     supportsReset: true,
     turn(move) {

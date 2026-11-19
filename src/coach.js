@@ -2,6 +2,7 @@
  * Coach: kurze, konkrete Hinweise aus den eigenen Daten, jeweils mit passender Aktion.
  * Bewertet wird immer relativ zu dir selbst bzw. zu einer typischen CFOP-Aufteilung.
  */
+import { L, dec, pctText } from './i18n.js';
 import { hasDetail, phasesOf } from './solve-data.js';
 import { llStats } from './case-stats.js';
 import { weakCases } from './weakness.js';
@@ -9,10 +10,10 @@ import { pauses } from './cube/analysis.js';
 import { averageOf, formatTime } from './stats.js';
 
 const avg = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
-const pct = (x) => `${Math.round(x * 100)} %`;
+const pct = (x) => pctText(x);
 // Typische Aufteilung schneller CFOP-Löser (grob)
 const TYPICAL = { cross: 0.13, f2l: 0.5, oll: 0.16, pll: 0.21 };
-const NAMES = { cross: 'Kreuz', f2l: 'F2L', oll: 'OLL', pll: 'PLL' };
+const NAMES = { cross: 'Cross', f2l: 'F2L', oll: 'OLL', pll: 'PLL' };
 
 /**
  * @returns [{ icon, title, text, action?: { label, kind, arg } }] – wichtigster Hinweis zuerst
@@ -22,7 +23,7 @@ export function coachInsights(solves) {
   const det = solves.filter(hasDetail).slice(-50);
   const out = [];
   if (det.length < 5) {
-    return [{ icon: '👋', title: 'Lass uns starten', text: `Nach 5 Solves mit deinem Smartcube findet der Coach heraus, wo du am meisten Zeit gewinnen kannst (noch ${5 - det.length}).` }];
+    return [{ icon: '👋', title: L('Lass uns starten', 'Let’s get started'), text: L(`Nach 5 Solves mit deinem Smartcube findet der Coach heraus, wo du am meisten Zeit gewinnen kannst (noch ${5 - det.length}).`, `After 5 solves with your smart cube the coach finds where you can gain the most time (${5 - det.length} to go).`) }];
   }
 
   // 1) Phase mit dem größten Anteil über dem Üblichen
@@ -41,14 +42,14 @@ export function coachInsights(solves) {
   if (over > 0.04) {
     const action =
       worst === 'cross'
-        ? { label: 'Leichte Scrambles', kind: 'easy-scramble' }
+        ? { label: L('Leichte Scrambles', 'Easy scrambles'), kind: 'easy-scramble' }
         : worst === 'f2l'
-          ? { label: 'F2L trainieren', kind: 'train-set', arg: 'F2L' }
-          : { label: `${NAMES[worst]} trainieren`, kind: 'train-set', arg: worst.toUpperCase() };
+          ? { label: L('F2L trainieren', 'Train F2L'), kind: 'train-set', arg: 'F2L' }
+          : { label: L(`${NAMES[worst]} trainieren`, `Train ${NAMES[worst]}`), kind: 'train-set', arg: worst.toUpperCase() };
     out.push({
       icon: '📊',
-      title: `${NAMES[worst]} ist dein größter Hebel`,
-      text: `${NAMES[worst]} braucht ${pct(share[worst])} deiner Zeit – typisch sind etwa ${pct(TYPICAL[worst])}.`,
+      title: L(`${NAMES[worst]} ist dein größter Hebel`, `${NAMES[worst]} is your biggest lever`),
+      text: L(`${NAMES[worst]} braucht ${pct(share[worst])} deiner Zeit – typisch sind etwa ${pct(TYPICAL[worst])}.`, `${NAMES[worst]} takes ${pct(share[worst])} of your time – typical is about ${pct(TYPICAL[worst])}.`),
       action,
       weight: over * 10,
     });
@@ -63,9 +64,9 @@ export function coachInsights(solves) {
     if (t.recog > 450 && ratio > 0.3) {
       out.push({
         icon: '👀',
-        title: `${set}-Erkennung kostet Zeit`,
-        text: `Vor jeder ${set} wartest du im Schnitt ${formatTime(t.recog)} – ${pct(ratio)} der ganzen ${set}-Phase. Erkennungstraining hilft hier am schnellsten.`,
-        action: { label: `${set} trainieren`, kind: 'train-set', arg: set },
+        title: L(`${set}-Recog kostet Zeit`, `${set} recog costs time`),
+        text: L(`Vor jeder ${set} wartest du im Schnitt ${formatTime(t.recog)} – ${pct(ratio)} der ganzen ${set}-Phase. Recog-Training hilft hier am schnellsten.`, `Before each ${set} you wait ${formatTime(t.recog)} on average – ${pct(ratio)} of the whole ${set} phase. Recognition training helps fastest here.`),
+        action: { label: L(`${set} trainieren`, `Train ${set}`), kind: 'train-set', arg: set },
         weight: ratio * 3 + t.recog / 1000,
       });
     }
@@ -78,8 +79,8 @@ export function coachInsights(solves) {
   if (perSolve >= 3) {
     out.push({
       icon: '🐢',
-      title: 'Weniger Pausen, mehr Fluss',
-      text: `Du stoppst ${perSolve.toFixed(1).replace('.', ',')}× pro Solve für mindestens 0,5 s (zusammen ${formatTime(pauseTime)}). Dreh in F2L bewusst langsamer und such dabei schon das nächste Paar.`,
+      title: L('Weniger Pausen, mehr Flow', 'Fewer pauses, more flow'),
+      text: L(`Du stoppst ${dec(perSolve)}× pro Solve für mindestens 0,5 s (zusammen ${formatTime(pauseTime)}). Dreh in F2L bewusst langsamer und such dabei schon das nächste Paar.`, `You stop ${dec(perSolve)}× per solve for at least 0.5 s (${formatTime(pauseTime)} in total). Turn slower in F2L on purpose and look for the next pair while turning.`),
       weight: pauseTime / 1500,
     });
   }
@@ -89,9 +90,9 @@ export function coachInsights(solves) {
   if (crossMoves > 9) {
     out.push({
       icon: '✚',
-      title: 'Kreuz effizienter planen',
-      text: `Dein Kreuz braucht im Schnitt ${crossMoves.toFixed(1).replace('.', ',')} Züge – mit Planung in der Inspektion gehen meist 6–8.`,
-      action: { label: 'Leichte Scrambles', kind: 'easy-scramble' },
+      title: L('Cross effizienter planen', 'Plan the cross more efficiently'),
+      text: L(`Dein Cross braucht im Schnitt ${dec(crossMoves)} Züge – mit Planung in der Inspektion gehen meist 6–8.`, `Your cross takes ${dec(crossMoves)} moves on average – with planning in inspection 6–8 is usually possible.`),
+      action: { label: L('Leichte Scrambles', 'Easy scrambles'), kind: 'easy-scramble' },
       weight: (crossMoves - 8) / 2,
     });
   }
@@ -103,9 +104,9 @@ export function coachInsights(solves) {
     if (rot > 4) {
       out.push({
         icon: '🔄',
-        title: 'Weniger drehen',
-        text: `Im Schnitt drehst du den Würfel ${rot.toFixed(1).replace('.', ',')}× pro Solve. Viele F2L-Fälle gehen auch ohne Drehung – schau dir die Alternativen in der F2L-Datenbank an.`,
-        action: { label: 'F2L ansehen', kind: 'train-set', arg: 'F2L' },
+        title: L('Weniger Rotations', 'Fewer rotations'),
+        text: L(`Im Schnitt drehst du den Würfel ${dec(rot)}× pro Solve. Viele F2L-Fälle gehen auch ohne Rotation – schau dir die Alternativen in der F2L-Datenbank an.`, `You rotate the cube ${dec(rot)}× per solve on average. Many F2L cases work without rotation – check the alternatives in the F2L database.`),
+        action: { label: L('F2L ansehen', 'View F2L'), kind: 'train-set', arg: 'F2L' },
         weight: rot / 5,
       });
     }
@@ -116,9 +117,9 @@ export function coachInsights(solves) {
   if (weak.length) {
     out.push({
       icon: '🎯',
-      title: 'Deine langsamsten Fälle',
-      text: weak.map((w) => w.name).join(', ') + ' – ein paar Minuten gezieltes Training bringen hier viel.',
-      action: { label: 'Schwächen üben', kind: 'weak' },
+      title: L('Deine langsamsten Fälle', 'Your slowest cases'),
+      text: weak.map((w) => w.name).join(', ') + L(' – ein paar Minuten gezieltes Training bringen hier viel.', ' – a few minutes of focused training pay off here.'),
+      action: { label: L('Schwächen üben', 'Train weaknesses'), kind: 'weak' },
       weight: 1.2,
     });
   }
@@ -130,8 +131,8 @@ export function coachInsights(solves) {
     if (now && before && Number.isFinite(now) && Number.isFinite(before) && before - now > 100) {
       out.push({
         icon: '🚀',
-        title: 'Du wirst schneller!',
-        text: `Dein Ø12 ist ${formatTime(before - now)} besser als vor 12 Solves (${formatTime(now)} statt ${formatTime(before)}).`,
+        title: L('Du wirst schneller!', 'You’re getting faster!'),
+        text: L(`Dein Ø12 ist ${formatTime(before - now)} besser als vor 12 Solves (${formatTime(now)} statt ${formatTime(before)}).`, `Your ao12 is ${formatTime(before - now)} better than 12 solves ago (${formatTime(now)} vs ${formatTime(before)}).`),
         weight: 0.5,
       });
     }

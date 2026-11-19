@@ -3,6 +3,7 @@
  * Erkennung vs. Ausführung), Skips, Lookahead, Kreuzfarben und F2L-Slots.
  * Diagramme sind schlichtes SVG mit Hover-Tooltip.
  */
+import { L, dec } from '../i18n.js';
 import { formatTime, averageOf, bestAverage } from '../stats.js';
 import { detailStats, series } from '../stats-detail.js';
 import { PHASE_NAMES } from '../cube/analysis.js';
@@ -15,10 +16,10 @@ const RANGES = [
   ['12', 12],
   ['50', 50],
   ['100', 100],
-  ['Alle', Infinity],
+  [L('Alle', 'All'), Infinity],
 ];
 const pct = (x) => (x == null ? '–' : `${Math.round(x * 100)} %`);
-const num = (x, d = 1) => (x == null ? '–' : x.toFixed(d).replace('.', ','));
+const num = (x, d = 1) => dec(x, d);
 const t = (x) => (x == null ? '–' : formatTime(x));
 const PHASE_CLASS = (key) => (/^p\d$/.test(key) ? 'pair' : key);
 
@@ -28,7 +29,7 @@ export class StatsView {
     this.dlg = root;
     this.range = 100;
     root.innerHTML = `
-      <div class="sv-range" role="group" aria-label="Zeitraum"></div>
+      <div class="sv-range" role="group" aria-label="${L('Zeitraum', 'Range')}"></div>
       <div class="sv-body"></div>
       <div class="sv-tip" hidden></div>`;
     const dialog = root;
@@ -52,14 +53,14 @@ export class StatsView {
   render() {
     const all = this.all;
     this.dlg.querySelector('.sv-range').innerHTML =
-      '<span class="label">Zeitraum: letzte</span>' +
+      `<span class="label">${L('Zeitraum: letzte', 'Last')}</span>` +
       RANGES.map(
         ([label, n]) => `<button data-n="${n}" class="${n === this.range ? 'on' : ''}" aria-pressed="${n === this.range}">${label}</button>`,
       ).join('');
     const sel = Number.isFinite(this.range) ? all.slice(-this.range) : all;
     const body = this.dlg.querySelector('.sv-body');
     if (!sel.length) {
-      body.innerHTML = '<p class="small">Noch keine Solves.</p>';
+      body.innerHTML = `<p class="small">${L('Noch keine Solves.', 'No solves yet.')}</p>`;
       return;
     }
     const s = detailStats(sel);
@@ -79,27 +80,26 @@ export class StatsView {
     const bestAo = (n) => t(bestAverage(all, n));
     const items = [
       ['Solves', String(s.n)],
-      ['Bestzeit', t(s.best)],
-      ['Mittel', t(s.mean)],
+      [L('Bestzeit', 'Best'), t(s.best)],
+      [L('Mittel', 'Mean'), t(s.mean)],
       ['Median', t(s.median)],
-      ['Streuung (σ)', t(s.stdev)],
-      ['Schlechteste', t(s.worst)],
-      ['Ø Züge', num(s.moves)],
+      [L('Streuung (σ)', 'Std dev (σ)'), t(s.stdev)],
+      [L('Schlechteste', 'Worst'), t(s.worst)],
       ['Ø TPS', num(s.tps, 2)],
       ['+2 / DNF', `${s.plus2} / ${s.dnf}`],
     ];
     const ms = this.sel.map(metricsOf).filter(Boolean);
     if (ms.length) {
       const av = (f) => ms.reduce((x, m) => x + (f(m) ?? 0), 0) / ms.length;
-      items.push(['Ø Flüssigkeit', String(Math.round(av((m) => m.fluency)))], ['Ø Züge (HTM)', num(av((m) => m.htm))], ['Ø Drehtempo', num(av((m) => m.etps), 2)]);
+      items.push(['Ø Fluency', String(Math.round(av((m) => m.fluency)))], [L('Ø Züge', 'Ø moves'), num(av((m) => m.htm))], ['Ø Exec TPS', num(av((m) => m.etps), 2)]);
     }
     const aos = [5, 12, 50, 100]
       .map((n) => `<tr><td>Ø ${n}</td><td>${cur(n)}</td><td>${bestAo(n)}</td></tr>`)
       .join('');
     return `<section class="sv-sec">
       <div class="stats sv-tiles">${items.map(([k, v]) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`).join('')}</div>
-      <table class="phase-table sv-ao"><tr><th>Durchschnitt</th><th>Aktuell</th><th>Bester</th></tr>${aos}</table>
-      <p class="small">Durchschnitte immer über alle ${all.length} Solves; alles andere über die gewählten.</p>
+      <table class="phase-table sv-ao"><tr><th>${L('Schnitt', 'Average')}</th><th>${L('Aktuell', 'Current')}</th><th>${L('Bester', 'Best')}</th></tr>${aos}</table>
+      <p class="small">${L(`Durchschnitte immer über alle ${all.length} Solves; alles andere über die gewählten.`, `Averages always over all ${all.length} solves; everything else over the selected ones.`)}</p>
     </section>`;
   }
 
@@ -144,14 +144,14 @@ export class StatsView {
     const colW = (W - P.l - P.r) / Math.max(1, data.length - 1);
     const hits = data
       .map((p, i) => {
-        const tip = `Solve ${p.i + 1}|Zeit ${p.time == null ? 'DNF' : formatTime(p.time)}|Ø5 ${t(p.ao5)}|Ø12 ${t(p.ao12)}`;
+        const tip = `Solve ${p.i + 1}|${L('Zeit', 'Time')} ${p.time == null ? 'DNF' : formatTime(p.time)}|Ø5 ${t(p.ao5)}|Ø12 ${t(p.ao12)}`;
         return `<rect class="hit" x="${(x(i) - colW / 2).toFixed(1)}" y="${P.t}" width="${Math.max(colW, 4).toFixed(1)}" height="${H - P.t - P.b}" data-tip="${tip}" data-x="${x(i).toFixed(1)}"/>`;
       })
       .join('');
     return `<section class="sv-sec">
-      <h3>Verlauf</h3>
-      <div class="legend"><span><i class="lg-dot"></i>Einzelzeit</span><span><i class="lg-line s1"></i>Ø 5</span><span><i class="lg-line s2"></i>Ø 12</span></div>
-      <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Verlauf der Zeiten">
+      <h3>${L('Verlauf', 'Progress')}</h3>
+      <div class="legend"><span><i class="lg-dot"></i>${L('Einzelzeit', 'Single')}</span><span><i class="lg-line s1"></i>Ø 5</span><span><i class="lg-line s2"></i>Ø 12</span></div>
+      <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${L('Verlauf der Zeiten', 'Times over time')}">
         ${grid}${dots}
         <path class="ln s1" d="${line('ao5')}"/><path class="ln s2" d="${line('ao12')}"/>
         <line class="cross" y1="${P.t}" y2="${H - P.b}" x1="-10" x2="-10"/>
@@ -192,8 +192,8 @@ export class StatsView {
       .map((b, i) => (i % every ? '' : `<text class="axis" x="${P.l + i * bw}" y="${H - 6}">${formatTime(b.from)}</text>`))
       .join('');
     return `<section class="sv-sec">
-      <h3>Verteilung</h3>
-      <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Verteilung der Zeiten">
+      <h3>${L('Verteilung', 'Distribution')}</h3>
+      <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${L('Verteilung der Zeiten', 'Time distribution')}">
         <line class="base" x1="${P.l}" x2="${W - P.r}" y1="${H - P.b}" y2="${H - P.b}"/>${bars}${labels}
       </svg>
     </section>`;
@@ -201,29 +201,29 @@ export class StatsView {
 
   phaseSection(s) {
     if (!s.detailed) {
-      return `<section class="sv-sec"><h3>Phasen</h3><p class="small">Detaildaten (F2L-Paare, Erkennungszeiten) gibt es für Solves ab diesem Update.</p></section>`;
+      return `<section class="sv-sec"><h3>${L('Phasen', 'Phases')}</h3><p class="small">${L('Detaildaten (F2L-Paare, Recog) gibt es für Solves mit Zugzeiten.', 'Detailed data (F2L pairs, recog) is available for solves with move times.')}</p></section>`;
     }
     const ph = Object.fromEntries(s.phases.map((p) => [p.key, p]));
     const avgSum = (k) => ph[k].time || 0;
     const totalAvg = avgSum('cross') + avgSum('f2l') + avgSum('oll') + avgSum('pll');
     const pie = donut(
       phaseSegments({ cross: avgSum('cross'), f2l: avgSum('f2l'), oll: avgSum('oll'), pll: avgSum('pll') }),
-      { value: t(totalAvg), label: 'Ø gesamt' },
+      { value: t(totalAvg), label: L('Ø gesamt', 'Ø total') },
       { size: 200 },
     );
     const recogSum = ['p1', 'p2', 'p3', 'p4', 'oll', 'pll'].reduce((a, k) => a + (ph[k].recog || 0), 0);
     const pie2 = donut(
       [
-        { label: 'Drehen', value: Math.max(0, totalAvg - recogSum), cls: 'ph-exec' },
-        { label: 'Erkennen / Pausen', value: recogSum, cls: 'ph-recog' },
+        { label: L('Drehen', 'Turning'), value: Math.max(0, totalAvg - recogSum), cls: 'ph-exec' },
+        { label: L('Recog / Pausen', 'Recog / pauses'), value: recogSum, cls: 'ph-recog' },
       ],
-      { value: t(recogSum), label: 'Ø Erkennung' },
-      { size: 200, aria: 'Erkennen und Drehen' },
+      { value: t(recogSum), label: 'Ø Recog' },
+      { size: 200, aria: L('Recog und Drehen', 'Recog vs turning') },
     );
     const pairsPie = donut(
-      ['p1', 'p2', 'p3', 'p4'].map((k, i) => ({ label: `Paar ${i + 1}`, value: ph[k].time || 0, cls: `ph-pair pair-${i + 1}` })),
+      ['p1', 'p2', 'p3', 'p4'].map((k, i) => ({ label: `${L('Paar', 'Pair')} ${i + 1}`, value: ph[k].time || 0, cls: `ph-pair pair-${i + 1}` })),
       { value: t(avgSum('f2l')), label: 'Ø F2L' },
-      { size: 200, aria: 'F2L-Paare' },
+      { size: 200, aria: L('F2L-Paare', 'F2L pairs') },
     );
     const rows = ['cross', 'p1', 'p2', 'p3', 'p4', 'f2l', 'oll', 'pll']
       .map((k) => {
@@ -233,22 +233,22 @@ export class StatsView {
       })
       .join('');
     return `<section class="sv-sec">
-      <h3>Phasen <span class="small">(${s.detailed} Solves mit Detaildaten)</span></h3>
+      <h3>${L('Phasen', 'Phases')} <span class="small">(${L(`${s.detailed} Solves mit Detaildaten`, `${s.detailed} solves with details`)})</span></h3>
       <div class="pies">
-        <figure><figcaption>Wofür geht die Zeit drauf?</figcaption>${pie}</figure>
-        <figure><figcaption>F2L-Paare</figcaption>${pairsPie}</figure>
-        <figure><figcaption>Erkennen vs. Drehen</figcaption>${pie2}</figure>
+        <figure><figcaption>${L('Wofür geht die Zeit drauf?', 'Where does the time go?')}</figcaption>${pie}</figure>
+        <figure><figcaption>${L('F2L-Paare', 'F2L pairs')}</figcaption>${pairsPie}</figure>
+        <figure><figcaption>${L('Recog vs. Drehen', 'Recog vs. turning')}</figcaption>${pie2}</figure>
       </div>
       <div class="sv-ll">
-        <div class="stat big"><div class="v">${t(ph.oll.recog)}</div><div class="k">Ø Erkennung OLL</div></div>
-        <div class="stat big"><div class="v">${t(ph.pll.recog)}</div><div class="k">Ø Erkennung PLL</div></div>
-        <div class="stat big"><div class="v">${t(ph.p1.recog != null ? (ph.p1.recog + ph.p2.recog + ph.p3.recog + ph.p4.recog) / 4 : null)}</div><div class="k">Ø Pause vor F2L-Paar</div></div>
+        <div class="stat big"><div class="v">${t(ph.oll.recog)}</div><div class="k">Ø OLL Recog</div></div>
+        <div class="stat big"><div class="v">${t(ph.pll.recog)}</div><div class="k">Ø PLL Recog</div></div>
+        <div class="stat big"><div class="v">${t(ph.p1.recog != null ? (ph.p1.recog + ph.p2.recog + ph.p3.recog + ph.p4.recog) / 4 : null)}</div><div class="k">${L('Ø Pause vor F2L-Paar', 'Ø pause before F2L pair')}</div></div>
       </div>
       <div class="table-wrap"><table class="phase-table">
-        <tr><th>Phase</th><th>Ø Zeit</th><th>Erkennung</th><th>Ausführung</th><th>Ø Züge</th><th>TPS Ausf.</th><th>Beste</th><th>Anteil</th></tr>
+        <tr><th>Phase</th><th>Ø</th><th>Recog</th><th>Exec</th><th>${L('Züge', 'Moves')}</th><th>Exec TPS</th><th>${L('Beste', 'Best')}</th><th>%</th></tr>
         ${rows}
       </table></div>
-      <p class="small">Erkennung = Pause zwischen dem letzten Zug der vorigen Phase und dem ersten Zug dieser Phase (Würfeldrehungen ohne Gyro zählen mit hinein). Beim Kreuz ist das die Inspektion und wird nicht gemessen.</p>
+      <p class="small">${L('Recog = Pause zwischen dem letzten Zug der vorigen Phase und dem ersten Zug dieser Phase (Rotations ohne Gyro zählen mit). Beim Cross ist das die Inspektion und wird nicht gemessen.', 'Recog = pause between the last move of the previous phase and the first move of this phase (rotations without gyro are included). For the cross this is inspection and not measured.')}</p>
     </section>`;
   }
 
@@ -257,19 +257,19 @@ export class StatsView {
       ['OLL-Skip', pct(s.ollSkip)],
       ['PLL-Skip', pct(s.pllSkip)],
       ['X-Cross', pct(s.xcross)],
-      ['Pausen ≥ 0,5 s / Solve', num(s.lookahead?.perSolve)],
-      ['Pausenzeit / Solve', t(s.lookahead?.timePerSolve)],
+      [L('Pausen ≥ 0,5 s / Solve', 'Pauses ≥ 0.5 s / solve'), num(s.lookahead?.perSolve)],
+      [L('Pausenzeit / Solve', 'Pause time / solve'), t(s.lookahead?.timePerSolve)],
     ];
     const g = s.gyro;
     const gyroSec = g
       ? `<section class="sv-sec">
-      <h3>Gyroskop <span class="small">(${g.n} Solves mit Lagedaten)</span></h3>
+      <h3>Gyro <span class="small">(${L(`${g.n} Solves mit Lagedaten`, `${g.n} solves with orientation data`)})</span></h3>
       <div class="stats">
-        <div class="stat"><div class="v">${num(g.rotations)}</div><div class="k">Ø Würfeldrehungen / Solve</div></div>
-        <div class="stat"><div class="v">${num(g.regrips)}</div><div class="k">Ø Griffwechsel / Solve (geschätzt)</div></div>
-        ${['cross', 'f2l', 'oll', 'pll'].map((k) => `<div class="stat"><div class="v">${num(g.perPhase[k])}</div><div class="k">Ø Drehungen ${PHASE_NAMES[k]}</div></div>`).join('')}
+        <div class="stat"><div class="v">${num(g.rotations)}</div><div class="k">Ø Rotations / Solve</div></div>
+        <div class="stat"><div class="v">${num(g.regrips)}</div><div class="k">${L('Ø Regrips / Solve (geschätzt)', 'Ø regrips / solve (est.)')}</div></div>
+        ${['cross', 'f2l', 'oll', 'pll'].map((k) => `<div class="stat"><div class="v">${num(g.perPhase[k])}</div><div class="k">Ø Rotations ${PHASE_NAMES[k]}</div></div>`).join('')}
       </div>
-      ${g.kinds.length ? `<p class="small">Häufigste Drehungen: ${g.kinds.slice(0, 6).map(([n, c]) => `<b>${n}</b> ${c}×`).join(' · ')}</p>` : ''}
+      ${g.kinds.length ? `<p class="small">${L('Häufigste Rotations', 'Most common rotations')}: ${g.kinds.slice(0, 6).map(([n, c]) => `<b>${n}</b> ${c}×`).join(' · ')}</p>` : ''}
     </section>`
       : '';
     const faces = Object.entries(s.crossFaces).sort((a, b) => b[1].n - a[1].n);
@@ -286,12 +286,12 @@ export class StatsView {
     </section>
     <section class="sv-sec sv-two">
       <div>
-        <h3>Kreuzfarben</h3>
-        <table class="phase-table"><tr><th>Farbe</th><th>Solves</th><th>Anteil</th><th>Ø Zeit</th></tr>${crossRows || '<tr><td colspan="4">–</td></tr>'}</table>
+        <h3>${L('Cross-Farben', 'Cross colors')}</h3>
+        <table class="phase-table"><tr><th>${L('Farbe', 'Color')}</th><th>Solves</th><th>%</th><th>Ø</th></tr>${crossRows || '<tr><td colspan="4">–</td></tr>'}</table>
       </div>
       <div>
         <h3>F2L-Slots</h3>
-        <table class="phase-table"><tr><th>Slot</th><th>Paare</th><th>Ø Zeit</th></tr>${slotRows || '<tr><td colspan="3">–</td></tr>'}</table>
+        <table class="phase-table"><tr><th>Slot</th><th>${L('Paare', 'Pairs')}</th><th>Ø</th></tr>${slotRows || '<tr><td colspan="3">–</td></tr>'}</table>
       </div>
     </section>`;
   }

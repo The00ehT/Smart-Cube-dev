@@ -48,6 +48,8 @@ Aufgebaut auf [gan-web-bluetooth](https://github.com/afedotov/gan-web-bluetooth)
 - **Archiv**: gute Lösungen nach dem Solve mit einem Tipp sichern; Tabelle mit Zeit, Scramble, Zügen, TPS, Fällen und
   Notiz, sortierbar nach Zeit oder Änderungsdatum
 - **Leichte Scrambles**: 2 Kreuzkanten vorgelöst oder X-Cross üben (2 Kreuzkanten + 1 Paar), für die eigene Kreuzfarbe
+- **Sprache**: Deutsch oder Englisch (Einstellungen → Darstellung; Standard nach Gerätesprache). Kurze Fachbegriffe wie
+  Cross, Recog, Exec TPS, Fluency, Rotations und Regrips auch in der deutschen Oberfläche
 - **Profil** mit Name und Avatar (Emoji oder eigenes Foto); der Name erscheint auf geteilten Rekonstruktionen
 - **Hell-/Dunkelmodus** (automatisch nach System oder fest)
 - **Kuchendiagramme**: Zeitverteilung Kreuz/F2L/OLL/PLL, F2L-Paare, Erkennen vs. Drehen

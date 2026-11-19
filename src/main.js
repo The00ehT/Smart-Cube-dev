@@ -27,10 +27,13 @@ import { setupAlgFor } from './ui/cube-view.js';
 import { toast, undoable } from './ui/toast.js';
 import { confetti, chime, shareSolveImage } from './ui/celebrate.js';
 import { coachInsights } from './coach.js';
+import { L, locale, dec, translateStatic, lang } from './i18n.js';
+const MV = L('Züge', 'moves');
 import { metricsOf, skillProfile, SKILLS } from './metrics.js';
 import { radarSvg } from './ui/radar.js';
 
 const $ = (id) => document.getElementById(id);
+translateStatic(); // feste Texte der Seite (bei Englisch)
 const SOLVES_KEY = 'smartcube.solves.v1';
 const SETTINGS_KEY = 'smartcube.settings.v1';
 
@@ -112,7 +115,7 @@ function onCubeEvent(e) {
 async function connect(kind) {
   document.querySelector('.more')?.removeAttribute('open');
   if (app.conn) await disconnect();
-  setStatus('Verbinde …');
+  setStatus(L('Verbinde …', 'Connecting …'));
   try {
     if (kind === 'gan') app.conn = await connectGan(onCubeEvent);
     else if (kind === 'other') app.conn = await connectOther(onCubeEvent);
@@ -124,9 +127,9 @@ async function connect(kind) {
   } catch (err) {
     app.conn = null;
     const msg = String(err?.message || err);
-    if (err?.name === 'NotFoundError' || /cancel/i.test(msg)) setStatus('Verbindung abgebrochen.');
-    else if (/target BLE services/i.test(msg)) setStatus('Dieser Würfel nutzt ein unbekanntes Protokoll – bitte melde das Modell, dann kann es ergänzt werden.');
-    else setStatus('Verbindung fehlgeschlagen: ' + msg);
+    if (err?.name === 'NotFoundError' || /cancel/i.test(msg)) setStatus(L('Verbindung abgebrochen.', 'Connection cancelled.'));
+    else if (/target BLE services/i.test(msg)) setStatus(L('Dieser Würfel nutzt ein unbekanntes Protokoll – bitte melde das Modell, dann kann es ergänzt werden.', 'This cube uses an unknown protocol – please report the model so it can be added.'));
+    else setStatus(L('Verbindung fehlgeschlagen: ', 'Connection failed: ') + msg);
     console.error(err);
     renderDevice();
     return;
@@ -134,7 +137,7 @@ async function connect(kind) {
   view.resetGyroSeen();
   renderDevice();
   renderHardware();
-  if (app.phase === 'idle') setStatus(isSolved(app.state) ? 'Verbunden. Hol dir ein Scramble.' : 'Verbunden.');
+  if (app.phase === 'idle') setStatus(isSolved(app.state) ? L('Verbunden. Hol dir ein Scramble.', 'Connected. Grab a scramble.') : L('Verbunden.', 'Connected.'));
   if (app.conn.kind === 'gan') {
     clearInterval(app.batteryTimer);
     app.batteryTimer = setInterval(() => app.conn?.requestBattery().catch(() => {}), 60000);
@@ -158,9 +161,9 @@ function onDisconnected() {
   clearInterval(app.batteryTimer);
   if (app.phase === 'running') {
     app.phase = 'idle';
-    setStatus('Verbindung verloren – Solve abgebrochen.');
+    setStatus(L('Verbindung verloren – Solve abgebrochen.', 'Connection lost – solve cancelled.'));
   } else {
-    setStatus('Getrennt.');
+    setStatus(L('Getrennt.', 'Disconnected.'));
   }
   renderDevice();
   renderHardware();
@@ -235,14 +238,14 @@ async function randomScramble() {
 async function newScramble(given, opts = {}) {
   if (!opts.ghost && app.ghost) endGhost();
   if (app.room && typeof given !== 'string') {
-    setStatus('Im Raum gibt der Gastgeber die Scrambles vor.');
+    setStatus(L('Im Raum gibt der Gastgeber die Scrambles vor.', 'In a room the host sets the scrambles.'));
     return;
   }
   app.phase = 'scrambling';
   updateViewOrientation();
   app.tracker = null;
   app.scramble = '';
-  $('scramble').innerHTML = '<span class="msg">Scramble wird erzeugt …</span>';
+  $('scramble').innerHTML = `<span class="msg">${L('Scramble wird erzeugt …', 'Generating scramble …')}</span>`;
   renderTimer();
   let alg;
   const easy = typeof given !== 'string' && settings.scrambleType !== 'wca';
@@ -254,22 +257,22 @@ async function newScramble(given, opts = {}) {
   }
   if (app.phase !== 'scrambling') return; // inzwischen abgebrochen
   app.scrambleType = easy ? settings.scrambleType : 'wca';
-  $('scramble-label').textContent = opts.ghost ? 'Scramble · gegen den Geist' : easy ? (settings.scrambleType === 'xcross' ? 'Scramble · X-Cross üben' : 'Scramble · leicht') : 'Scramble';
+  $('scramble-label').textContent = opts.ghost ? L('Scramble · gegen den Geist', 'Scramble · vs ghost') : easy ? (settings.scrambleType === 'xcross' ? L('Scramble · X-Cross üben', 'Scramble · X-cross practice') : L('Scramble · leicht', 'Scramble · easy')) : 'Scramble';
   app.scramble = alg;
   app.tracker = new ScrambleTracker(alg);
   app.scrambleFromSolved = isSolved(app.state);
   renderScramble();
-  setStatus(app.conn ? 'Verdrehe den Würfel wie angezeigt.' : 'Verbinde einen Würfel, damit das Scramble verfolgt wird.');
+  setStatus(app.conn ? L('Verdrehe den Würfel wie angezeigt.', 'Apply the scramble shown.') : L('Verbinde einen Würfel, damit das Scramble verfolgt wird.', 'Connect a cube so the scramble can be tracked.'));
 }
 
 function ownScramble() {
   if (isSolved(app.state) && app.conn) {
-    setStatus('Verdrehe den Würfel – danach „Eigenes Scramble“ drücken, der nächste Zug startet die Zeit.');
+    setStatus(L('Verdrehe den Würfel – danach „Eigenes Scramble“ drücken, der nächste Zug startet die Zeit.', 'Scramble the cube – then tap “Own”, the next move starts the timer.'));
     return;
   }
   app.scramble = '';
   app.tracker = null;
-  $('scramble').innerHTML = '<span class="msg">Eigenes Scramble</span>';
+  $('scramble').innerHTML = `<span class="msg">${L('Eigenes Scramble', 'Own scramble')}</span>`;
   $('scramble-progress').style.width = '100%';
   enterReady();
 }
@@ -279,10 +282,10 @@ function enterReady() {
   if (settings.inspection) {
     app.phase = 'inspecting';
     app.inspectionStart = now();
-    setStatus('Inspektion läuft – der erste Zug startet die Zeit.');
+    setStatus(L('Inspektion läuft – der erste Zug startet die Zeit.', 'Inspection running – the first move starts the timer.'));
   } else {
     app.phase = 'ready';
-    setStatus('Bereit! Der erste Zug startet die Zeit.');
+    setStatus(L('Bereit! Der erste Zug startet die Zeit.', 'Ready! The first move starts the timer.'));
   }
   $('splits').innerHTML = '';
   renderTimer();
@@ -303,7 +306,7 @@ function startSolve(e, before) {
   app.liveStage = 0;
   renderLiveBar();
   if (app.ghost) startGhostRun();
-  setStatus('Läuft …');
+  setStatus(L('Läuft …', 'Running …'));
   if (isSolved(app.state)) finishSolve();
   renderTimer();
 }
@@ -338,27 +341,27 @@ function finishSolve() {
     return now5 !== null && Number.isFinite(now5) && (before === null || now5 < before) && solves.length > n;
   });
   $('live-bar').hidden = true;
-  if (pb || newAo) celebrate(solve, pb ? 'Neue Bestzeit!' : `Neuer bester Ø${newAo}!`);
+  if (pb || newAo) celebrate(solve, pb ? L('Neue Bestzeit!', 'New PB!') : L(`Neuer bester Ø${newAo}!`, `New best ao${newAo}!`));
   const ghostDone = app.ghost ? finishGhostRun(solve) : false;
-  const summary = () => `${formatSolve(solve)} · ${solve.moveCount} Züge · ${solve.tps.toFixed(2)} TPS${pb ? ' · Neue Bestzeit! 🎉' : ''}`;
+  const summary = () => `${formatSolve(solve)} · ${metricsOf(solve)?.htm ?? solve.moveCount} ${L('Züge', 'moves')} · ${solve.tps.toFixed(2)} TPS${pb ? ` · ${L('Neue Bestzeit!', 'New PB!')} 🎉` : ''}`;
   setStatus(summary());
   if (app.room) {
     app.room.result(app.roomRound, solve);
     app.roomRound = null;
-    setStatus(summary() + ' · warte auf die anderen …');
+    setStatus(summary() + L(' · warte auf die anderen …', ' · waiting for the others …'));
     app.room.live('state', { facelets: app.state });
     if (app.pendingRound) {
       const r = app.pendingRound;
       app.pendingRound = null;
       setTimeout(() => onRoomEvent(r), 1500);
     }
-  } else if (settings.autoScramble && !ghostDone) newScramble().then(() => setStatus('Letzter Solve: ' + summary()));
+  } else if (settings.autoScramble && !ghostDone) newScramble().then(() => setStatus(L('Letzter Solve: ', 'Last solve: ') + summary()));
   renderCoachTip();
 }
 
 // ---------------- Live-Phasen ----------------
 
-const STAGES = ['Kreuz', 'Paar 1', 'Paar 2', 'Paar 3', 'Paar 4', 'OLL', 'PLL'];
+const STAGES = ['Cross', 'F2L 1', 'F2L 2', 'F2L 3', 'F2L 4', 'OLL', 'PLL'];
 const STAGE_CLASS = ['ph-cross', 'ph-pair', 'ph-pair', 'ph-pair', 'ph-pair', 'ph-oll', 'ph-pll'];
 const bits = (m) => (m & 1) + ((m >> 1) & 1) + ((m >> 2) & 1) + ((m >> 3) & 1);
 
@@ -376,7 +379,7 @@ function liveStage(state) {
 
 function barHtml(stage) {
   return `<div class="lb-segs">${STAGES.map((n, i) => `<span class="lb-seg ${STAGE_CLASS[i]}${i < stage ? ' done' : i === stage ? ' cur' : ''}" title="${n}"></span>`).join('')}</div>
-    <div class="lb-label">${stage >= 7 ? 'Gelöst' : STAGES[stage]}</div>`;
+    <div class="lb-label">${stage >= 7 ? L('Gelöst', 'Solved') : STAGES[stage]}</div>`;
 }
 function renderLiveBar() {
   const el = $('live-bar');
@@ -393,7 +396,7 @@ function celebrate(solve, badge) {
   t.classList.remove('pop');
   void t.offsetWidth;
   t.classList.add('pop');
-  toast(`🎉 ${badge}`, { action: 'Als Bild teilen', onAction: () => shareSolveImage(solve, profile, badge), duration: 9000 });
+  toast(`🎉 ${badge}`, { action: L('Als Bild teilen', 'Share image'), onAction: () => shareSolveImage(solve, profile, badge), duration: 9000 });
 }
 
 // ---------------- Geister-Rennen ----------------
@@ -402,9 +405,9 @@ let ghostView = null;
 
 /** Gegen einen gespeicherten oder geteilten Solve antreten: gleicher Startzustand, Geist löst live mit */
 async function raceAgainst(g, label) {
-  if (app.room) return toast('Im Raum geht das Geister-Rennen nicht.');
-  if (!g?.start || !g.moves?.length || !g.times?.length) return toast('Für diesen Solve fehlen die Zugzeiten.');
-  if (!app.conn) return toast('Verbinde zuerst deinen Würfel.');
+  if (app.room) return toast(L('Im Raum geht das Geister-Rennen nicht.', 'Ghost races don’t work in a room.'));
+  if (!g?.start || !g.moves?.length || !g.times?.length) return toast(L('Für diesen Solve fehlen die Zugzeiten.', 'This solve has no move times.'));
+  if (!app.conn) return toast(L('Verbinde zuerst deinen Würfel.', 'Connect your cube first.'));
   showTab('timer');
   const a = analyzeSolve(g.start, g.moves, g.times);
   // Zeitpunkte, zu denen der Geist jede Stufe erreicht
@@ -414,7 +417,7 @@ async function raceAgainst(g, label) {
   $('ghost-card').hidden = false;
   $('ghost-name').textContent = label;
   $('ghost-time').textContent = formatTime(a.time);
-  $('ghost-msg').textContent = 'Scramble ausführen – der Geist startet mit deinem ersten Zug.';
+  $('ghost-msg').textContent = L('Scramble ausführen – der Geist startet mit deinem ersten Zug.', 'Apply the scramble – the ghost starts with your first move.');
   $('ghost-bar').innerHTML = barHtml(0);
   if (!ghostView) ghostView = new CubeView($('ghost-cube'));
   ghostView.setDownFace(a.crossFace);
@@ -446,8 +449,8 @@ function finishGhostRun(solve) {
   const g = app.ghost;
   g.running = false;
   const diff = solve.time - g.total;
-  const msg = diff < 0 ? `🏆 Du warst ${formatTime(-diff)} schneller!` : diff > 0 ? `Der Geist war ${formatTime(diff)} schneller.` : 'Exakt gleich schnell!';
-  $('ghost-msg').innerHTML = `${msg} <button type="button" class="link-btn" id="ghost-again">Revanche</button>`;
+  const msg = diff < 0 ? L(`🏆 Du warst ${formatTime(-diff)} schneller!`, `🏆 You were ${formatTime(-diff)} faster!`) : diff > 0 ? L(`Der Geist war ${formatTime(diff)} schneller.`, `The ghost was ${formatTime(diff)} faster.`) : L('Exakt gleich schnell!', 'Exactly the same time!');
+  $('ghost-msg').innerHTML = `${msg} <button type="button" class="link-btn" id="ghost-again">${L('Revanche', 'Rematch')}</button>`;
   $('ghost-again').onclick = () => raceAgainst(g, g.label);
   $('ghost-time').textContent = formatTime(g.total);
   $('ghost-bar').innerHTML = barHtml(7);
@@ -465,9 +468,9 @@ $('ghost-stop').addEventListener('click', () => {
 });
 $('btn-ghost').addEventListener('click', () => {
   const det = solves.filter((s) => hasDetail(s) && s.penalty !== 'DNF');
-  if (!det.length) return toast('Noch keine Bestzeit mit Zugdaten – mach erst ein paar Solves.');
+  if (!det.length) return toast(L('Noch keine Bestzeit mit Zugdaten – mach erst ein paar Solves.', 'No PB with move data yet – do a few solves first.'));
   const pbSolve = det.reduce((a, b) => (effectiveTime(b) < effectiveTime(a) ? b : a));
-  raceAgainst({ ...pbSolve, moves: pbSolve.solution.split(' ').filter(Boolean) }, `Deine Bestzeit (${formatSolve(pbSolve)})`);
+  raceAgainst({ ...pbSolve, moves: pbSolve.solution.split(' ').filter(Boolean) }, `${L('Deine Bestzeit', 'Your PB')} (${formatSolve(pbSolve)})`);
 });
 
 // ---------------- Coach ----------------
@@ -491,7 +494,7 @@ function runCoachAction(a) {
     settings.scrambleType = 'cross2';
     save(SETTINGS_KEY, settings);
     $('opt-scramble-type').value = 'cross2';
-    toast('Leichte Scrambles sind an (2 Kreuzkanten gelöst). Umstellen unter Einstellungen → Training.');
+    toast(L('Leichte Scrambles sind an (2 Kreuzkanten gelöst). Umstellen unter Einstellungen → Training.', 'Easy scrambles are on (2 cross edges solved). Change under Settings → Training.'));
     showTab('timer');
     newScramble();
   }
@@ -544,7 +547,7 @@ function gyroOfSolve(r) {
 function cancelSolve() {
   if (app.phase !== 'running' && app.phase !== 'inspecting' && app.phase !== 'ready') return;
   app.phase = 'idle';
-  setStatus('Abgebrochen.');
+  setStatus(L('Abgebrochen.', 'Cancelled.'));
   renderTimer();
 }
 
@@ -568,7 +571,7 @@ function setBattery(level) {
 function renderDevice() {
   const on = !!app.conn;
   $('device').classList.toggle('on', on);
-  $('device-label').textContent = on ? app.conn.name : 'Nicht verbunden';
+  $('device-label').textContent = on ? app.conn.name : L('Nicht verbunden', 'Not connected');
   $('connect-buttons').hidden = on;
   $('btn-disconnect').hidden = !on;
   $('btn-disconnect-2').hidden = !on;
@@ -585,12 +588,12 @@ function renderHardware() {
   }
   const info = app.hardware || {};
   const rows = [
-    ['Gerät', c.name],
-    ['Modell', info.hardwareName],
+    [L('Gerät', 'Device'), c.name],
+    [L('Modell', 'Model'), info.hardwareName],
     ['Firmware', info.softwareVersion],
     ['Hardware', info.hardwareVersion],
     ['MAC', c.mac],
-    ['Gyroskop', c.supportsGyro || info.gyroSupported ? 'ja' : info.gyroSupported === false ? 'nein' : '–'],
+    ['Gyro', c.supportsGyro || info.gyroSupported ? L('ja', 'yes') : info.gyroSupported === false ? L('nein', 'no') : '–'],
   ].filter(([, v]) => v);
   hw.innerHTML = rows.map(([k, v]) => `<span>${k}</span><span>${escapeHtml(String(v))}</span>`).join('');
 }
@@ -600,13 +603,13 @@ function renderScramble() {
   const t = app.tracker;
   if (!t) return;
   if (t.done) {
-    el.innerHTML = '<span class="msg">✓ Scramble fertig</span>';
+    el.innerHTML = `<span class="msg">✓ ${L('Scramble fertig', 'Scramble done')}</span>`;
     $('scramble-progress').style.width = '100%';
     return;
   }
   const moves = t.remainingMoves();
   const warn = !app.scrambleFromSolved && app.conn
-    ? '<div class="warn">Der Würfel war beim Erzeugen nicht gelöst – erst lösen oder „Als gelöst markieren“, dann neues Scramble.</div>'
+    ? `<div class="warn">${L('Der Würfel war beim Erzeugen nicht gelöst – erst lösen oder „Als gelöst markieren“, dann neues Scramble.', 'The cube wasn’t solved when the scramble was made – solve it or “Mark as solved”, then get a new scramble.')}</div>`
     : '';
   el.innerHTML = moves
     .map((m, i) => `<span class="mv${m.correction ? ' correction' : ''}${i === 0 ? ' next' : ''}">${m.text}</span>`)
@@ -618,7 +621,7 @@ function renderTimer() {
   const el = $('timer');
   el.className = 'timer';
   if (app.phase === 'running') {
-    el.textContent = settings.hideTime ? 'Solve …' : formatTime(now() - app.startLocal);
+    el.textContent = settings.hideTime ? L('Solve …', 'Solving …') : formatTime(now() - app.startLocal);
   } else if (app.phase === 'inspecting') {
     el.classList.add('inspect');
     const left = 15 - Math.floor((now() - app.inspectionStart) / 1000);
@@ -670,12 +673,12 @@ function renderSolveMetrics(el, solve) {
   if (!m) return;
   const tile = (v, k, title) => `<div class="sm" title="${title}"><b>${v}</b><span>${k}</span></div>`;
   el.innerHTML = `
-    <div class="sm sm-fl" title="Anteil der Zeit, in der du ohne Stocken gedreht hast">${m.fluency == null ? '' : gauge(m.fluency)}<span>Flüssigkeit</span></div>
-    ${tile(m.htm, 'Züge', `Zugzahl in HTM (Doppelzüge als ein Zug) · ${m.qtm} Vierteldrehungen`)}
-    ${tile(m.tps.toFixed(1).replace('.', ','), 'TPS', 'Züge pro Sekunde, gesamt')}
-    ${tile(m.etps == null ? '–' : m.etps.toFixed(1).replace('.', ','), 'Drehtempo', 'Züge pro Sekunde ohne Erkennungspausen')}
-    ${tile(formatTime(m.recog), 'Erkennung', 'Summe aller Pausen vor den Phasen (F2L-Paare, OLL, PLL)')}
-    ${tile(m.pauses, 'Pausen', 'Pausen von mindestens 0,5 s')}`;
+    <div class="sm sm-fl" title="${L('Anteil der Zeit, in der du ohne Stocken gedreht hast', 'Share of time you turned without stalling')}">${m.fluency == null ? '' : gauge(m.fluency)}<span>Fluency</span></div>
+    ${tile(m.htm, L('Züge', 'Moves'), L(`Zugzahl in HTM (Doppelzüge als ein Zug) · ${m.qtm} Vierteldrehungen`, `Move count in HTM (double turns count once) · ${m.qtm} quarter turns`))}
+    ${tile(dec(m.tps), 'TPS', L('Züge pro Sekunde, gesamt', 'Turns per second, overall'))}
+    ${tile(dec(m.etps), 'Exec TPS', L('Züge pro Sekunde ohne Recog-Pausen', 'Turns per second without recognition pauses'))}
+    ${tile(formatTime(m.recog), 'Recog', L('Summe aller Pausen vor den Phasen (F2L-Paare, OLL, PLL)', 'Sum of all pauses before phases (F2L pairs, OLL, PLL)'))}
+    ${tile(m.pauses, L('Pausen', 'Pauses'), L('Pausen von mindestens 0,5 s', 'Pauses of at least 0.5 s'))}`;
 }
 
 /** Knopf unter der Zeit: letzten Solve ins Archiv */
@@ -700,20 +703,20 @@ function renderSplits(solve) {
   const el = $('splits');
   if (!hasDetail(solve)) {
     el.innerHTML = (solve.phases || [])
-      .map((p) => `<div class="sp">${phaseName(p)}<b>${formatTime(p.time)}</b>${p.moves} Z.</div>`)
+      .map((p) => `<div class="sp">${phaseName(p)}<b>${formatTime(p.time)}</b>${p.moves} ${MV}</div>`)
       .join('');
     return;
   }
   const [cross, f2l, oll, pll] = phasesOf(solve, { mergeF2l: true });
   const pairs = solve.phases.slice(1, 5);
-  const recog = (p) => (p.recog > 0 ? `<small>Erk. ${formatTime(p.recog)}</small>` : '');
+  const recog = (p) => (p.recog > 0 ? `<small>Recog ${formatTime(p.recog)}</small>` : '');
   const skip = (p) => (p.skip ? '<small class="tag">Skip</small>' : '');
   el.innerHTML = `
-    <div class="sp ph-cross">Kreuz ${colorChip(solve.crossFace)}<b>${formatTime(cross.time)}</b>${cross.moves} Z.${solve.xcross ? '<small class="tag">X-Cross</small>' : ''}</div>
-    <div class="sp ph-pair">F2L<b>${formatTime(f2l.time)}</b>${f2l.moves} Z.
+    <div class="sp ph-cross">Cross ${colorChip(solve.crossFace)}<b>${formatTime(cross.time)}</b>${cross.moves} ${MV}${solve.xcross ? '<small class="tag">X-Cross</small>' : ''}</div>
+    <div class="sp ph-pair">F2L<b>${formatTime(f2l.time)}</b>${f2l.moves} ${MV}
       <small class="pairs">${pairs.map((p) => formatTime(p.time)).join(' · ')}</small></div>
-    <div class="sp ph-oll">OLL<b>${formatTime(oll.time)}</b>${oll.moves} Z.${recog(oll)}${skip(oll)}</div>
-    <div class="sp ph-pll">PLL<b>${formatTime(pll.time)}</b>${pll.moves} Z.${recog(pll)}${skip(pll)}</div>`;
+    <div class="sp ph-oll">OLL<b>${formatTime(oll.time)}</b>${oll.moves} ${MV}${recog(oll)}${skip(oll)}</div>
+    <div class="sp ph-pll">PLL<b>${formatTime(pll.time)}</b>${pll.moves} ${MV}${recog(pll)}${skip(pll)}</div>`;
 }
 
 /**
@@ -734,12 +737,12 @@ function updateViewOrientation() {
 function renderStats() {
   const cur = (n) => formatTime(averageOf(solves, n));
   const items = [
-    ['Bestzeit', formatTime(best(solves))],
+    [L('Bestzeit', 'Best'), formatTime(best(solves))],
     ['Ø 5', cur(5)],
     ['Ø 12', cur(12)],
-    ['Mittel', formatTime(mean(solves))],
-    ['Beste Ø 5', formatTime(bestAverage(solves, 5))],
-    ['Beste Ø 12', formatTime(bestAverage(solves, 12))],
+    [L('Mittel', 'Mean'), formatTime(mean(solves))],
+    [L('Beste Ø 5', 'Best ao5'), formatTime(bestAverage(solves, 5))],
+    [L('Beste Ø 12', 'Best ao12'), formatTime(bestAverage(solves, 12))],
     ['Ø 100', cur(100)],
     ['Solves', String(solves.length)],
     ['Ø TPS', solves.length ? (solves.reduce((a, s) => a + (s.tps || 0), 0) / solves.length).toFixed(2) : '–'],
@@ -748,7 +751,7 @@ function renderStats() {
   const det = solves.filter(hasDetail).slice(-12);
   if (det.length) {
     const avgOf = (i) => det.reduce((a, s) => a + s.phases[i].recog, 0) / det.length;
-    items.push(['Ø Erk. OLL', formatTime(avgOf(5))], ['Ø Erk. PLL', formatTime(avgOf(6))], ['Ø F2L', formatTime(det.reduce((a, s) => a + s.phases.slice(1, 5).reduce((b, p) => b + p.time, 0), 0) / det.length)]);
+    items.push(['Ø OLL Recog', formatTime(avgOf(5))], ['Ø PLL Recog', formatTime(avgOf(6))], ['Ø F2L', formatTime(det.reduce((a, s) => a + s.phases.slice(1, 5).reduce((b, p) => b + p.time, 0), 0) / det.length)]);
   }
   renderMiniPie(det);
   if (!$('stats')) return;
@@ -760,7 +763,7 @@ function renderQuick() {
   const items = [
     ['Ø 5', formatTime(averageOf(solves, 5))],
     ['Ø 12', formatTime(averageOf(solves, 12))],
-    ['Bestzeit', formatTime(best(solves))],
+    [L('Bestzeit', 'Best'), formatTime(best(solves))],
     ['Solves', String(solves.length)],
   ];
   $('stats-quick').innerHTML = items.map(([k, v]) => `<div><span class="k">${k}</span><b>${v}</b></div>`).join('');
@@ -777,7 +780,7 @@ function renderMiniPie(det) {
   const m = (pick) => det.reduce((a, s) => a + pick(s), 0) / det.length;
   const f2l = m((s) => s.phases.slice(1, 5).reduce((a, p) => a + p.time, 0));
   const vals = { cross: m((s) => s.phases[0].time), f2l, oll: m((s) => s.phases[5].time), pll: m((s) => s.phases[6].time) };
-  el.innerHTML = `<div class="label">Zeitverteilung · Ø letzte ${det.length}</div>` +
+  el.innerHTML = `<div class="label">${L('Zeitverteilung', 'Time split')} · Ø ${L('letzte', 'last')} ${det.length}</div>` +
     donut(phaseSegments(vals), { value: formatTime(vals.cross + vals.f2l + vals.oll + vals.pll), label: 'Ø' }, { size: 132 });
 }
 
@@ -787,7 +790,7 @@ function renderSolves() {
   if (app.tab === 'stats') statsView.open(solves);
   const list = $('solves');
   if (!solves.length) {
-    list.innerHTML = '<li class="empty">Noch keine Solves</li>';
+    list.innerHTML = `<li class="empty">${L('Noch keine Solves', 'No solves yet')}</li>`;
     return;
   }
   const rows = [];
@@ -796,14 +799,14 @@ function renderSolves() {
     const ao5 = averageOf(solves.slice(0, i + 1), 5);
     rows.push(
       `<li data-i="${i}"><span class="n">${i + 1}.</span><span class="t">${formatSolve(s)}</span>` +
-        `<span class="meta">${s.moveCount ?? '–'} Z.</span><span class="ao">${ao5 === null ? '' : 'Ø5 ' + formatTime(ao5)}</span></li>`,
+        `<span class="meta">${s.metrics?.htm ?? s.moveCount ?? '–'} ${MV}</span><span class="ao">${ao5 === null ? '' : 'Ø5 ' + formatTime(ao5)}</span></li>`,
     );
   }
   list.innerHTML = rows.join('');
 }
 
 function persistSolves() {
-  if (!save(SOLVES_KEY, solves)) setStatus('Hinweis: Solves konnten im Browser nicht gespeichert werden.');
+  if (!save(SOLVES_KEY, solves)) setStatus(L('Hinweis: Solves konnten im Browser nicht gespeichert werden.', 'Note: solves could not be saved in the browser.'));
 }
 
 function escapeHtml(s) {
@@ -829,7 +832,7 @@ function openSolve(i) {
   const dlg = $('solve-dialog');
   dlg.dataset.index = i;
   $('sd-time').textContent = `${i + 1}. ${formatSolve(s)}`;
-  $('sd-date').textContent = `${new Date(s.date).toLocaleString('de-DE')}${s.device ? ' · ' + s.device : ''}`;
+  $('sd-date').textContent = `${new Date(s.date).toLocaleString(locale)}${s.device ? ' · ' + s.device : ''}`;
   const detail = hasDetail(s);
   const rows = (s.phases || []).map((p) => {
     const name = phaseName(p) + (p.slot ? ' ' + [...p.slot].map(colorChip).join('') : '');
@@ -843,21 +846,21 @@ function openSolve(i) {
     $('sd-pie').innerHTML = donut(phaseSegments({ cross: c.time, f2l: f.time, oll: o.time, pll: pl.time }), { value: formatTime(s.time), label: 'gesamt' }, { size: 140 });
   } else $('sd-pie').innerHTML = '';
   $('sd-phases').innerHTML = rows.length
-    ? `<tr><th>Phase</th><th>Zeit</th>${detail ? '<th>Erkennung</th>' : ''}<th>Züge</th><th>TPS</th></tr>` + rows.join('')
+    ? `<tr><th>Phase</th><th>${L('Zeit', 'Time')}</th>${detail ? '<th>Recog</th>' : ''}<th>${L('Züge', 'Moves')}</th><th>TPS</th></tr>` + rows.join('')
     : '';
   const extra = [
-    `${s.moveCount ?? '–'} Züge (Vierteldrehungen)`,
+    `${metricsOf(s)?.htm ?? s.moveCount ?? '–'} ${L('Züge', 'moves')}`,
     `${(s.tps ?? 0).toFixed(2)} TPS`,
-    s.crossFace ? `Kreuz: ${colorChip(s.crossFace)} ${COLOR_NAMES[s.crossFace]}` : '',
+    s.crossFace ? `Cross: ${colorChip(s.crossFace)} ${COLOR_NAMES[s.crossFace]}` : '',
     s.xcross ? 'X-Cross' : '',
-    s.gyro ? `${s.gyro.rotations.length} Würfeldrehungen${s.gyro.rotations.length ? ' (' + s.gyro.rotations.map((r) => r.name).join(', ') + ')' : ''}` : '',
-    s.gyro ? `~${s.gyro.regrips.length} Griffwechsel` : '',
+    s.gyro ? `${s.gyro.rotations.length} Rotations${s.gyro.rotations.length ? ' (' + s.gyro.rotations.map((r) => r.name).join(', ') + ')' : ''}` : '',
+    s.gyro ? `~${s.gyro.regrips.length} Regrips` : '',
     s.ll?.oll ? `OLL ${s.ll.oll}` : s.ll?.oll === 0 ? 'OLL-Skip' : '',
     s.ll?.pll ? (s.ll.pll === 'Skip' ? 'PLL-Skip' : `${s.ll.pll}-Perm`) : '',
-    s.scrambleType ? (s.scrambleType === 'xcross' ? 'X-Cross-Scramble' : 'leichtes Scramble') : '',
+    s.scrambleType ? (s.scrambleType === 'xcross' ? 'X-Cross-Scramble' : L('leichtes Scramble', 'easy scramble')) : '',
   ].filter(Boolean);
   $('sd-info').innerHTML = extra.map((x) => `<span>${x}</span>`).join('');
-  $('sd-scramble').textContent = s.scramble || '(eigenes Scramble)';
+  $('sd-scramble').textContent = s.scramble || L('(eigenes Scramble)', '(own scramble)');
   $('sd-solution').textContent = s.solution ? groupMoves(s.solution.split(' ').filter(Boolean)).map((g) => g.text).join(' ') : '–';
   renderSolveMetrics($('sd-metrics'), s);
   $('sd-replay').hidden = !replayData(s);
@@ -910,7 +913,7 @@ $('solve-dialog').addEventListener('close', () => {
   else if (v === 'del') {
     const wasLast = app.lastSolve === s;
     undoable(
-      `Solve ${formatSolve(s)} gelöscht`,
+      L(`Solve ${formatSolve(s)} gelöscht`, `Solve ${formatSolve(s)} deleted`),
       () => {
         solves.splice(i, 1);
         if (wasLast) app.lastSolve = null;
@@ -947,7 +950,7 @@ $('btn-reset-gyro').addEventListener('click', () => view.resetGyro());
 
 $('btn-mark-solved').addEventListener('click', async () => {
   if (!app.conn) return;
-  if (!confirm('Den Würfel jetzt als gelöst markieren? Nur machen, wenn er wirklich gelöst ist.')) return;
+  if (!confirm(L('Den Würfel jetzt als gelöst markieren? Nur machen, wenn er wirklich gelöst ist.', 'Mark the cube as solved now? Only do this if it really is solved.'))) return;
   await app.conn.reset();
   app.state = SOLVED;
   view.setState(SOLVED);
@@ -971,7 +974,7 @@ bindToggle('opt-gyro', 'gyro', (on) => {
   if (!on) app.lastGyro = null;
 });
 replay.useGyro = settings.replayGyro;
-replay.onRace = (sol) => raceAgainst(sol, sol.name ? `${sol.name} (${formatTime(analyzeSolve(sol.start, sol.moves, sol.times).time)})` : 'Geteilter Solve');
+replay.onRace = (sol) => raceAgainst(sol, sol.name ? `${sol.name} (${formatTime(analyzeSolve(sol.start, sol.moves, sol.times).time)})` : L('Geteilter Solve', 'Shared solve'));
 replay.onGyroToggle = (on) => {
   settings.replayGyro = on;
   save(SETTINGS_KEY, settings);
@@ -979,7 +982,7 @@ replay.onGyroToggle = (on) => {
 
 $('btn-forget-mac').addEventListener('click', () => {
   forgetMacs();
-  setStatus('Gespeicherte MAC-Adressen gelöscht.');
+  setStatus(L('Gespeicherte MAC-Adressen gelöscht.', 'Saved MAC addresses deleted.'));
 });
 
 $('btn-export').addEventListener('click', () => {
@@ -1003,9 +1006,9 @@ $('file-import').addEventListener('change', async (e) => {
     solves = [...solves, ...added].sort((a, b) => a.id - b.id);
     persistSolves();
     renderSolves();
-    setStatus(`${added.length} Solves importiert.`);
+    setStatus(L(`${added.length} Solves importiert.`, `${added.length} solves imported.`));
   } catch {
-    setStatus('Import fehlgeschlagen: keine gültige Export-Datei.');
+    setStatus(L('Import fehlgeschlagen: keine gültige Export-Datei.', 'Import failed: not a valid export file.'));
   }
 });
 
@@ -1023,6 +1026,13 @@ $('solves-mode').addEventListener('click', (e) => {
 });
 
 // ---------------- Training-Einstellungen ----------------
+
+$('opt-lang').value = lang;
+$('opt-lang').addEventListener('change', (e) => {
+  settings.lang = e.target.value;
+  save(SETTINGS_KEY, settings);
+  location.reload(); // alle Texte neu aufbauen
+});
 
 $('opt-cross').value = settings.crossColor;
 $('opt-cross').addEventListener('change', (e) => {
@@ -1085,49 +1095,49 @@ $('pv-edit').addEventListener('click', () => {
 /** Profil: Kennzahlen und Stärkenprofil (letzte 50 Solves, Vergleich mit den 50 davor) */
 function openProfile() {
   $('pv-avatar').innerHTML = avatarHtml();
-  $('pv-name').textContent = profile.name || 'Dein Profil';
+  $('pv-name').textContent = profile.name || L('Dein Profil', 'Your profile');
   const det = solves.filter(hasDetail);
   const recent = det.slice(-50);
   const older = det.slice(-100, -50);
   const prof = skillProfile(recent);
   const prevProf = older.length >= 10 ? skillProfile(older) : null;
-  $('pv-sub').textContent = `${solves.length} Solves${prof ? ` · Profil aus den letzten ${prof.n}` : ''}`;
+  $('pv-sub').textContent = `${solves.length} Solves${prof ? ` · ${L('Profil aus den letzten', 'profile from last')} ${prof.n}` : ''}`;
   const ms = recent.map(metricsOf).filter(Boolean);
   const avgOf = (f) => (ms.length ? ms.reduce((a, m) => a + (f(m) ?? 0), 0) / ms.length : null);
   const tiles = [
-    ['Bestzeit', formatTime(best(solves))],
+    [L('Bestzeit', 'Best'), formatTime(best(solves))],
     ['Ø 12', formatTime(averageOf(solves, 12))],
-    ['Ø Flüssigkeit', ms.length ? String(Math.round(avgOf((m) => m.fluency))) : '–'],
-    ['Ø Züge', ms.length ? String(Math.round(avgOf((m) => m.htm))) : '–'],
-    ['Ø TPS', ms.length ? avgOf((m) => m.tps).toFixed(2).replace('.', ',') : '–'],
-    ['Ø Drehtempo', ms.length ? avgOf((m) => m.etps).toFixed(2).replace('.', ',') : '–'],
+    ['Ø Fluency', ms.length ? String(Math.round(avgOf((m) => m.fluency))) : '–'],
+    [L('Ø Züge', 'Ø moves'), ms.length ? String(Math.round(avgOf((m) => m.htm))) : '–'],
+    ['Ø TPS', ms.length ? dec(avgOf((m) => m.tps), 2) : '–'],
+    ['Ø Exec TPS', ms.length ? dec(avgOf((m) => m.etps), 2) : '–'],
   ];
   $('pv-tiles').innerHTML = tiles.map(([k, v]) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`).join('');
   if (!prof) {
-    $('pv-radar').innerHTML = `<p class="small">Nach 5 Solves mit deinem Smartcube erscheint hier dein Stärkenprofil (noch ${Math.max(0, 5 - det.length)}).</p>`;
+    $('pv-radar').innerHTML = `<p class="small">${L(`Nach 5 Solves mit deinem Smartcube erscheint hier dein Stärkenprofil (noch ${Math.max(0, 5 - det.length)}).`, `Your skill profile appears after 5 solves with your smart cube (${Math.max(0, 5 - det.length)} to go).`)}</p>`;
     $('pv-skills').innerHTML = '';
   } else {
     const now = SKILLS.map((k) => prof.scores[k.key]);
     const prev = prevProf ? SKILLS.map((k) => prevProf.scores[k.key]) : null;
     $('pv-radar').innerHTML = radarSvg(SKILLS, now, prev) +
-      `<div class="legend rd-legend"><span><i class="lg-area now"></i>letzte ${prof.n} Solves</span>${prev ? `<span><i class="lg-area prev"></i>die ${prevProf.n} davor</span>` : ''}</div>`;
+      `<div class="legend rd-legend"><span><i class="lg-area now"></i>${L(`letzte ${prof.n} Solves`, `last ${prof.n} solves`)}</span>${prev ? `<span><i class="lg-area prev"></i>${L(`die ${prevProf.n} davor`, `${prevProf.n} before`)}</span>` : ''}</div>`;
     const v = prof.values;
     const detail = {
-      cross: `${v.crossMoves.toFixed(1).replace('.', ',')} Züge, ${formatTime(v.crossTime)}`,
-      lookahead: v.pairRecog == null ? '–' : `${formatTime(v.pairRecog)} Pause vor jedem Paar`,
-      recog: `${formatTime(v.llRecog)} vor OLL und PLL`,
-      tps: v.etps == null ? '–' : `${v.etps.toFixed(1).replace('.', ',')} Züge/s beim Drehen`,
-      fluency: v.fluency == null ? '–' : `${Math.round(v.fluency)} von 100`,
-      efficiency: `${Math.round(v.htm)} Züge (HTM)`,
-      consistency: prof.cv == null ? '–' : `±${Math.round(prof.cv * 100)} % Streuung`,
+      cross: `${dec(v.crossMoves)} ${L('Züge', 'moves')}, ${formatTime(v.crossTime)}`,
+      lookahead: v.pairRecog == null ? '–' : L(`${formatTime(v.pairRecog)} Pause vor jedem Paar`, `${formatTime(v.pairRecog)} pause before each pair`),
+      recog: L(`${formatTime(v.llRecog)} vor OLL und PLL`, `${formatTime(v.llRecog)} before OLL and PLL`),
+      tps: v.etps == null ? '–' : `${dec(v.etps)} TPS ${L('ohne Pausen', 'without pauses')}`,
+      fluency: v.fluency == null ? '–' : `${Math.round(v.fluency)} / 100`,
+      efficiency: `${Math.round(v.htm)} ${L('Züge', 'moves')} (HTM)`,
+      consistency: prof.cv == null ? '–' : `±${Math.round(prof.cv * 100)} % ${L('Streuung', 'spread')}`,
     };
     const ranked = SKILLS.map((k, i) => ({ ...k, v: now[i], d: prev ? now[i] - prev[i] : null })).sort((a, b) => b.v - a.v);
     const row = (k, tag) => `<div class="skill-row"><span class="skill-name">${k.name}</span>
       <span class="skill-bar"><i style="width:${Math.round(k.v)}%"></i></span><b>${Math.round(k.v)}</b>
       ${k.d != null && Math.abs(k.d) >= 3 ? `<span class="skill-d ${k.d > 0 ? 'up' : 'down'}">${k.d > 0 ? '▲' : '▼'} ${Math.abs(Math.round(k.d))}</span>` : '<span class="skill-d"></span>'}
       <span class="small skill-detail">${detail[k.key]}${tag ? ` · ${tag}` : ''}</span></div>`;
-    $('pv-skills').innerHTML = `<div class="skill-list">${ranked.map((k, i) => row(k, i < 2 ? 'Stärke' : i >= ranked.length - 2 ? 'ausbaufähig' : '')).join('')}</div>
-      <p class="small">Skalen grob von „Einsteiger“ (0) bis „sehr schnell“ (100). ${prev ? '▲▼ = Veränderung gegenüber den Solves davor.' : ''}</p>`;
+    $('pv-skills').innerHTML = `<div class="skill-list">${ranked.map((k, i) => row(k, i < 2 ? L('Stärke', 'strength') : i >= ranked.length - 2 ? L('ausbaufähig', 'to improve') : '')).join('')}</div>
+      <p class="small">${L('Skalen grob von „Einsteiger“ (0) bis „sehr schnell“ (100).', 'Scales roughly from “beginner” (0) to “very fast” (100).')} ${prev ? L('▲▼ = Veränderung gegenüber den Solves davor.', '▲▼ = change vs. the solves before.') : ''}</p>`;
   }
   $('profile-dialog').showModal();
   persistSolves(); // nachträglich berechnete Kennzahlen sichern
@@ -1146,7 +1156,7 @@ function renderProfile() {
   });
 }
 function storeProfile() {
-  if (!saveProfile()) setStatus('Hinweis: Profil konnte nicht gespeichert werden (Speicher voll?).');
+  if (!saveProfile()) setStatus(L('Hinweis: Profil konnte nicht gespeichert werden (Speicher voll?).', 'Note: profile could not be saved (storage full?).'));
   renderProfile();
 }
 $('emoji-grid').innerHTML = EMOJIS.map((e) => `<button type="button" data-e="${e}" aria-label="Avatar ${e}">${e}</button>`).join('');
@@ -1218,7 +1228,7 @@ $('btn-clear').addEventListener('click', () => {
   const backup = solves;
   const last = app.lastSolve;
   undoable(
-    `${backup.length} Solves gelöscht`,
+    L(`${backup.length} Solves gelöscht`, `${backup.length} solves deleted`),
     () => {
       solves = [];
       app.lastSolve = null;
@@ -1272,7 +1282,7 @@ function roomLink(code) {
 
 async function inviteToRoom() {
   const url = roomLink(app.room.code);
-  const text = `Komm in meinen Smartcube-Raum: ${app.room.code}`;
+  const text = L(`Komm in meinen Smartcube-Raum: ${app.room.code}`, `Join my Smartcube room: ${app.room.code}`);
   try {
     if (navigator.share) return await navigator.share({ title: 'Smartcube-Raum', text, url });
   } catch (e) {
@@ -1280,7 +1290,7 @@ async function inviteToRoom() {
   }
   try {
     await navigator.clipboard.writeText(url);
-    roomView.message('Einladungslink kopiert.');
+    roomView.message(L('Einladungslink kopiert.', 'Invite link copied.'));
   } catch {
     prompt('Einladungslink:', url);
   }
@@ -1296,7 +1306,7 @@ function onRoomEvent(ev) {
     case 'board':
       roomView.renderBoard(ev.board);
       if (room.isHost && app.roomAuto && room.roundComplete() && !app.nextRoundTimer) {
-        roomView.message('Alle fertig – nächste Runde in 5 s …');
+        roomView.message(L('Alle fertig – nächste Runde in 5 s …', 'Everyone done – next round in 5 s …'));
         app.nextRoundTimer = setTimeout(() => {
           app.nextRoundTimer = null;
           if (app.room && room.roundComplete()) hostNextRound();
@@ -1309,9 +1319,9 @@ function onRoomEvent(ev) {
         break;
       }
       app.roomRound = ev.n;
-      roomView.message(`Runde ${ev.n}: Scramble ausführen, der erste Zug danach startet die Zeit.`);
+      roomView.message(L(`Runde ${ev.n}: Scramble ausführen, der erste Zug danach startet die Zeit.`, `Round ${ev.n}: apply the scramble, the next move starts the timer.`));
       for (const c of roomView.cards.values()) c.el.querySelector('.person-time').textContent = '–';
-      if (!isSolved(app.state) && app.conn) setStatus('Löse zuerst deinen Würfel (oder „Als gelöst markieren“), dann stimmt das Scramble.');
+      if (!isSolved(app.state) && app.conn) setStatus(L('Löse zuerst deinen Würfel (oder „Als gelöst markieren“), dann stimmt das Scramble.', 'Solve your cube first (or “Mark as solved”) so the scramble matches.'));
       newScramble(ev.scramble);
       showTab('timer');
       room.live('state', { facelets: app.state });
@@ -1328,7 +1338,7 @@ function onRoomEvent(ev) {
       break;
     case 'error':
       console.error(ev.error);
-      roomView.message('Verbindungsproblem: ' + (ev.error?.message || ev.error));
+      roomView.message(L('Verbindungsproblem: ', 'Connection problem: ') + (ev.error?.message || ev.error));
       break;
   }
 }
@@ -1337,7 +1347,7 @@ async function hostNextRound() {
   if (!app.room?.isHost) return;
   clearTimeout(app.nextRoundTimer);
   app.nextRoundTimer = null;
-  roomView.message('Scramble wird erzeugt …');
+  roomView.message(L('Scramble wird erzeugt …', 'Generating scramble …'));
   app.room.startRound(await randomScramble());
 }
 
@@ -1345,13 +1355,13 @@ async function enterRoom(mode, code) {
   const msg = $('room-error');
   msg.textContent = '';
   if (!profile.name) {
-    msg.textContent = 'Gib dir zuerst einen Namen (Einstellungen → Profil), damit die anderen dich erkennen.';
+    msg.textContent = L('Gib dir zuerst einen Namen (Einstellungen → Profil), damit die anderen dich erkennen.', 'Set a name first (Settings → Profile) so others recognize you.');
     return;
   }
   const room = new Room({ name: profile.name, avatar: profile.avatar }, (ev) => onRoomEvent(ev));
   app.room = room; // schon setzen, damit frühe Ereignisse ankommen
   $('room-intro').querySelectorAll('button').forEach((b) => (b.disabled = true));
-  msg.textContent = mode === 'create' ? 'Raum wird erstellt …' : 'Verbinde …';
+  msg.textContent = mode === 'create' ? L('Raum wird erstellt …', 'Creating room …') : L('Verbinde …', 'Connecting …');
   try {
     roomView.show(room); // Karten brauchen room.myId – Liste wird nach dem Öffnen gezeichnet
     if (mode === 'create') await room.create();
@@ -1366,14 +1376,14 @@ async function enterRoom(mode, code) {
       app.phase = 'idle';
       renderTimer();
     }
-    setStatus(mode === 'create' ? `Raum ${room.code} erstellt.` : `Raum ${room.code} beigetreten.`);
+    setStatus(mode === 'create' ? L(`Raum ${room.code} erstellt.`, `Room ${room.code} created.`) : L(`Raum ${room.code} beigetreten.`, `Joined room ${room.code}.`));
     history.replaceState(null, '', location.pathname + location.search);
   } catch (err) {
     console.error(err);
     app.room = null;
     room.leave();
     roomView.hide();
-    msg.textContent = 'Das hat nicht geklappt: ' + (err?.message || err);
+    msg.textContent = L('Das hat nicht geklappt: ', 'That didn’t work: ') + (err?.message || err);
   } finally {
     $('room-intro').querySelectorAll('button').forEach((b) => (b.disabled = false));
   }
@@ -1381,7 +1391,7 @@ async function enterRoom(mode, code) {
 
 function leaveRoom(silent) {
   if (!app.room) return;
-  if (!silent && !confirm(app.room.isHost ? 'Raum schließen? Alle anderen fliegen dann raus.' : 'Raum verlassen?')) return;
+  if (!silent && !confirm(app.room.isHost ? L('Raum schließen? Alle anderen fliegen dann raus.', 'Close the room? Everyone else will be removed.') : L('Raum verlassen?', 'Leave the room?'))) return;
   clearTimeout(app.nextRoundTimer);
   app.nextRoundTimer = null;
   app.room.leave();
@@ -1391,7 +1401,7 @@ function leaveRoom(silent) {
   $('room-intro').hidden = false;
   $('room-strip').hidden = true;
   document.querySelectorAll('.tab-dot').forEach((d) => (d.hidden = true));
-  if (!silent) setStatus('Raum verlassen.');
+  if (!silent) setStatus(L('Raum verlassen.', 'Left the room.'));
 }
 
 $('room-strip').addEventListener('click', () => showTab('room'));
@@ -1404,7 +1414,7 @@ function openRoomFromHash() {
   const m = /[#&]raum=([A-Za-z0-9]{5})/.exec(location.hash);
   if (!m || app.room) return;
   $('room-code').value = normalizeCode(m[1]);
-  $('room-error').textContent = profile.name ? 'Tippe auf „Beitreten“.' : 'Gib dir zuerst in den Einstellungen einen Namen, dann „Beitreten“.';
+  $('room-error').textContent = profile.name ? L('Tippe auf „Beitreten“.', 'Tap “Join”.') : L('Gib dir zuerst in den Einstellungen einen Namen, dann „Beitreten“.', 'Set a name in the settings first, then tap “Join”.');
   showTab('room');
 }
 window.addEventListener('hashchange', openRoomFromHash);
@@ -1431,9 +1441,9 @@ function openSharedFromHash() {
       replay.onClose = null;
       history.replaceState(null, '', location.pathname + location.search);
     };
-    replay.open(shared, { title: shared.name ? `Solve von ${shared.name}` : 'Geteilter Solve' });
+    replay.open(shared, { title: shared.name ? L(`Solve von ${shared.name}`, `${shared.name}’s solve`) : L('Geteilter Solve', 'Shared solve') });
   } catch (err) {
-    setStatus('Der geteilte Link ist ungültig: ' + (err?.message || err));
+    setStatus(L('Der geteilte Link ist ungültig: ', 'The shared link is invalid: ') + (err?.message || err));
   }
 }
 openSharedFromHash();

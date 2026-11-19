@@ -269,6 +269,12 @@
 
       <section class="set-sec">
         <h3>Darstellung</h3>
+        <label class="select-row">Sprache
+          <select id="opt-lang">
+            <option value="de">Deutsch</option>
+            <option value="en">English</option>
+          </select>
+        </label>
         <div class="seg-control" id="opt-theme" role="radiogroup" aria-label="Farbschema">
           <button type="button" data-v="auto" role="radio">Automatisch</button>
           <button type="button" data-v="light" role="radio">Hell</button>
@@ -276,7 +282,7 @@
         </div>
         <label class="select-row">Würfelansicht ohne Gyroskop
           <select id="opt-view-down">
-            <option value="auto">Kreuzfarbe unten (automatisch)</option>
+            <option value="auto">Cross-Farbe unten (automatisch)</option>
             <option value="U">Weiß unten</option>
             <option value="D">Gelb unten</option>
             <option value="F">Grün unten</option>
@@ -290,7 +296,7 @@
 
       <section class="set-sec">
         <h3>Training</h3>
-        <label class="select-row">Deine Kreuzfarbe (für Algorithmen, Training und leichte Scrambles)
+        <label class="select-row">Deine Cross-Farbe (für Algorithmen, Training und leichte Scrambles)
           <select id="opt-cross">
             <option value="auto">Automatisch (häufigste aus deinen Solves)</option>
             <option value="U">Weiß</option>
@@ -304,8 +310,8 @@
         <label class="select-row">Scramble-Art
           <select id="opt-scramble-type">
             <option value="wca">Normal (WCA-Zufallszustand)</option>
-            <option value="cross2">Leicht: 2 Kreuzkanten schon gelöst</option>
-            <option value="xcross">X-Cross üben: 2 Kreuzkanten + 1 Paar gelöst</option>
+            <option value="cross2">Leicht: 2 Cross-Kanten schon gelöst</option>
+            <option value="xcross">X-Cross üben: 2 Cross-Kanten + 1 Paar gelöst</option>
           </select>
         </label>
       </section>
@@ -319,7 +325,7 @@
 
       <section class="set-sec">
         <h3>Würfel</h3>
-        <label class="toggle"><input type="checkbox" id="opt-gyro" checked /> Gyroskop verwenden (Würfeldrehungen, Griffwechsel, 3D-Lage)</label>
+        <label class="toggle"><input type="checkbox" id="opt-gyro" checked /> Gyroskop verwenden (Rotations, Regrips, 3D-Lage)</label>
         <p class="small">Aus spart Akku am Handy: Die App verarbeitet dann keine Lagedaten und zeichnet den Würfel nur bei Zügen neu. Der Würfel selbst sendet weiter – sein Akku wird dadurch nicht geschont.</p>
         <button id="btn-forget-mac">Gespeicherte MAC-Adressen vergessen</button>
       </section>

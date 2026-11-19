@@ -10,6 +10,7 @@
  *   g  Würfeldrehungen (Gyro): Zeit~Lage (Basis 36, Lage = Index in ROT24), durch Punkte getrennt
  *   h  Griffwechsel (Gyro): Zeiten, Basis 36, durch Punkte getrennt
  */
+import { L } from './i18n.js';
 import { FACES, SOLVED, applyAlg, parseMove, formatMove } from './cube/facelets.js';
 import { ROT24 } from './cube/gyro.js';
 
@@ -20,7 +21,7 @@ const encMove = (m) => {
 };
 const decMove = (c) => {
   const k = c.charCodeAt(0) - 97;
-  if (k < 0 || k >= 18) throw new Error('Ungültiger Zug im Link');
+  if (k < 0 || k >= 18) throw new Error(L('Ungültiger Zug im Link', 'Invalid move in link'));
   return formatMove(FACES[Math.floor(k / 3)], [1, 2, 3][k % 3]);
 };
 
@@ -44,15 +45,15 @@ export function encodeShare(solve) {
 
 export function decodeShare(str) {
   const q = new URLSearchParams(str.replace(/^#/, ''));
-  if (q.get('r') !== '1') throw new Error('Kein Solve-Link');
+  if (q.get('r') !== '1') throw new Error(L('Kein Solve-Link', 'Not a solve link'));
   const moves = [...(q.get('m') || '')].map(decMove);
   const deltas = (q.get('t') || '').split('.').filter(Boolean).map((x) => parseInt(x, 36));
   const times = [0];
   for (const d of deltas) times.push(times[times.length - 1] + d);
-  if (moves.length && times.length !== moves.length) throw new Error('Link unvollständig');
+  if (moves.length && times.length !== moves.length) throw new Error(L('Link unvollständig', 'Link incomplete'));
   const scramble = q.get('s') || '';
   const start = scramble ? applyAlg(SOLVED, scramble) : q.get('f') || '';
-  if (!/^[URFDLB]{54}$/.test(start)) throw new Error('Startzustand im Link ungültig');
+  if (!/^[URFDLB]{54}$/.test(start)) throw new Error(L('Startzustand im Link ungültig', 'Invalid start state in link'));
   const p = q.get('p');
   const d = q.get('d');
   return {

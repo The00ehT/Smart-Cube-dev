@@ -8,6 +8,7 @@
  * Die Fälle werden aus Standard-Algorithmen erzeugt (Fall = Umkehrung des Algorithmus auf den gelösten
  * Würfel). Die Tests prüfen, dass alle 57 bzw. 21 Fälle verschieden sind und jeden möglichen Fall abdecken.
  */
+import { L } from '../i18n.js';
 import { SOLVED, applyAnyAlg, applyAnyMove, invertAnyAlg, invalidTokens, tokenizeAlg, rotationFaceMap, CROSS_DOWN } from './facelets.js';
 
 export const PLL_ALGS = {
@@ -96,27 +97,27 @@ export const OLL_ALGS = {
 
 /** Gruppen für die Anzeige */
 export const OLL_GROUPS = [
-  ['Punkt', [1, 2, 3, 4, 17, 18, 19, 20]],
-  ['Kreuz (OCLL)', [21, 22, 23, 24, 25, 26, 27]],
-  ['Linie', [51, 52, 55, 56]],
+  [L('Punkt', 'Dot'), [1, 2, 3, 4, 17, 18, 19, 20]],
+  [L('Kreuz (OCLL)', 'Cross (OCLL)'), [21, 22, 23, 24, 25, 26, 27]],
+  [L('Linie', 'Line'), [51, 52, 55, 56]],
   ['T', [33, 45]],
-  ['Quadrat', [5, 6]],
-  ['Kleines L', [7, 8, 11, 12]],
-  ['Großes L / Fisch', [9, 10, 35, 37]],
+  [L('Quadrat', 'Square'), [5, 6]],
+  [L('Kleines L', 'Small L'), [7, 8, 11, 12]],
+  [L('Großes L / Fisch', 'Big L / Fish'), [9, 10, 35, 37]],
   ['C', [34, 46]],
   ['W', [36, 38]],
   ['P', [31, 32, 43, 44]],
-  ['Blitz', [39, 40]],
-  ['Haken / Awkward', [29, 30, 41, 42]],
-  ['Großes L', [47, 48, 49, 50, 53, 54]],
-  ['Ecken richtig', [28, 57]],
-  ['Rest', [13, 14, 15, 16]],
+  [L('Blitz', 'Lightning'), [39, 40]],
+  [L('Haken / Awkward', 'Hook / Awkward'), [29, 30, 41, 42]],
+  [L('Großes L', 'Big L'), [47, 48, 49, 50, 53, 54]],
+  [L('Ecken richtig', 'Corners oriented'), [28, 57]],
+  [L('Rest', 'Other'), [13, 14, 15, 16]],
 ];
 export const PLL_GROUPS = [
-  ['Nur Kanten', ['Ua', 'Ub', 'H', 'Z']],
-  ['Nur Ecken', ['Aa', 'Ab', 'E']],
-  ['Nachbar-Tausch', ['T', 'F', 'Ja', 'Jb', 'Ra', 'Rb']],
-  ['Diagonal-Tausch', ['V', 'Y', 'Na', 'Nb']],
+  [L('Nur Kanten', 'Edges only'), ['Ua', 'Ub', 'H', 'Z']],
+  [L('Nur Ecken', 'Corners only'), ['Aa', 'Ab', 'E']],
+  [L('Nachbar-Tausch', 'Adjacent swap'), ['T', 'F', 'Ja', 'Jb', 'Ra', 'Rb']],
+  [L('Diagonal-Tausch', 'Diagonal swap'), ['V', 'Y', 'Na', 'Nb']],
   ['G-Perms', ['Ga', 'Gb', 'Gc', 'Gd']],
 ];
 
@@ -317,8 +318,8 @@ export const solvedUpToAuf = (s) => f2lSolved(s) && llOriented(s) && identifyPll
  */
 export function checkAlg(id, alg) {
   const bad = invalidTokens(alg);
-  if (bad.length) return { ok: false, error: `Unbekannte Züge: ${bad.join(' ')}` };
-  if (!tokenizeAlg(alg).length) return { ok: false, error: 'Leer' };
+  if (bad.length) return { ok: false, error: `${L('Unbekannte Züge', 'Unknown moves')}: ${bad.join(' ')}` };
+  if (!tokenizeAlg(alg).length) return { ok: false, error: L('Leer', 'Empty') };
   const start = CASE_STATE[id];
   if (!start) return { ok: true, solves: true };
   // Der Löser darf die obere Schicht vorher passend drehen (AUF)

@@ -2,6 +2,7 @@
  * Profil: Name und Avatar (Emoji oder eigenes Foto, verkleinert auf 128 px und lokal gespeichert).
  */
 import { load, save } from './storage.js';
+import { L } from './i18n.js';
 
 const KEY = 'smartcube.profile.v1';
 export const EMOJIS = ['🧊', '🐱', '🦊', '🐼', '🐸', '🐙', '🦄', '🐉', '🚀', '⚡', '🔥', '🎯', '🏆', '👾', '🤖', '😎'];
@@ -43,7 +44,7 @@ export function resizeImage(file, size = 128) {
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(new Error('Bild konnte nicht gelesen werden'));
+      reject(new Error(L('Bild konnte nicht gelesen werden', 'Could not read the image')));
     };
     img.src = url;
   });

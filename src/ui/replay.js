@@ -4,6 +4,8 @@
  * mit Gyroskop-Daten auf Wunsch inklusive Würfeldrehungen (x/y/z) und Griffwechseln,
  * Lösung nach Phasen gegliedert, als Link teilbar.
  */
+import { L, locale, dec } from '../i18n.js';
+import { moveCounts } from '../metrics.js';
 import { TwistyPlayer } from 'cubing/twisty';
 import { SOLVED, applyAlg, CROSS_DOWN, COLOR_NAMES } from '../cube/facelets.js';
 import { viewerEvents } from '../cube/gyro.js';
@@ -28,7 +30,7 @@ export class Replay {
           <h2 class="rp-title"></h2>
           <div class="small rp-sub"></div>
         </div>
-        <button class="rp-close" aria-label="Schließen">✕</button>
+        <button class="rp-close" aria-label="${L('Schließen', 'Close')}">✕</button>
       </div>
       <div class="rp-body">
         <div class="rp-stage">
@@ -37,27 +39,27 @@ export class Replay {
             <span class="rp-clock">0.00</span>
             <span class="rp-phase"></span>
           </div>
-          <input type="range" class="rp-seek" min="0" max="1000" value="0" step="1" aria-label="Zeitpunkt" />
+          <input type="range" class="rp-seek" min="0" max="1000" value="0" step="1" aria-label="${L('Zeitpunkt', 'Position')}" />
           <div class="rp-controls">
-            <button class="rp-start" title="Zum Anfang" aria-label="Zum Anfang">⏮</button>
-            <button class="rp-prev" title="Ein Zug zurück" aria-label="Ein Zug zurück">◀</button>
-            <button class="rp-play primary" aria-label="Abspielen">▶ Abspielen</button>
-            <button class="rp-next" title="Ein Zug vor" aria-label="Ein Zug vor">▶</button>
-            <select class="rp-speed" aria-label="Geschwindigkeit">
-              <option value="0.25">0,25×</option>
-              <option value="0.5">0,5×</option>
-              <option value="1" selected>1× Echtzeit</option>
+            <button class="rp-start" title="${L('Zum Anfang', 'To start')}" aria-label="${L('Zum Anfang', 'To start')}">⏮</button>
+            <button class="rp-prev" title="${L('Ein Zug zurück', 'Back one move')}" aria-label="${L('Ein Zug zurück', 'Back one move')}">◀</button>
+            <button class="rp-play primary" aria-label="${L('Abspielen', 'Play')}">▶ ${L('Abspielen', 'Play')}</button>
+            <button class="rp-next" title="${L('Ein Zug vor', 'Forward one move')}" aria-label="${L('Ein Zug vor', 'Forward one move')}">▶</button>
+            <select class="rp-speed" aria-label="${L('Geschwindigkeit', 'Speed')}">
+              <option value="0.25">${dec(0.25, 2)}×</option>
+              <option value="0.5">${dec(0.5, 1)}×</option>
+              <option value="1" selected>1× ${L('Echtzeit', 'real time')}</option>
               <option value="2">2×</option>
             </select>
           </div>
         </div>
         <div class="rp-side">
           <div class="rp-phases"></div>
-          <label class="toggle rp-gyro-toggle" hidden><input type="checkbox" class="rp-gyro" checked /> Würfeldrehungen &amp; Griffwechsel (Gyro) zeigen</label>
+          <label class="toggle rp-gyro-toggle" hidden><input type="checkbox" class="rp-gyro" checked /> ${L('Rotations &amp; Regrips zeigen (Gyro)', 'Show rotations &amp; regrips (gyro)')}</label>
           <div class="rp-actions">
-            <button class="rp-share primary">Teilen</button>
-            <button class="rp-race ghost" type="button">👻 Dagegen antreten</button>
-            <a class="rp-twizzle" target="_blank" rel="noopener">In Twizzle öffnen ↗</a>
+            <button class="rp-share primary">${L('Teilen', 'Share')}</button>
+            <button class="rp-race ghost" type="button">👻 ${L('Dagegen antreten', 'Race it')}</button>
+            <a class="rp-twizzle" target="_blank" rel="noopener">${L('In Twizzle öffnen', 'Open in Twizzle')} ↗</a>
             <span class="rp-msg small"></span>
           </div>
         </div>
@@ -122,11 +124,11 @@ export class Replay {
     $('.rp-title', d).textContent = `${opts.title ? opts.title + ': ' : ''}${formatSolve(shown)}`;
     const g = solve.gyro;
     const sub = [
-      solve.date ? new Date(solve.date).toLocaleString('de-DE') : null,
-      `${a.moveCount} Züge · ${a.tps.toFixed(2)} TPS`,
-      `Kreuz ${COLOR_NAMES[a.crossFace]}${a.xcross ? ' · X-Cross' : ''}`,
-      g ? `${g.rotations.length} Drehungen · ~${g.regrips.length} Griffwechsel` : null,
-      solve.estimated ? 'ohne gemessene Zugzeiten (gleichmäßig verteilt)' : null,
+      solve.date ? new Date(solve.date).toLocaleString(locale) : null,
+      `${moveCounts(solve.moves).htm} ${L('Züge', 'moves')} · ${a.tps.toFixed(2)} TPS`,
+      `Cross ${COLOR_NAMES[a.crossFace]}${a.xcross ? ' · X-Cross' : ''}`,
+      g ? `${g.rotations.length} Rotations · ~${g.regrips.length} Regrips` : null,
+      solve.estimated ? L('ohne gemessene Zugzeiten (gleichmäßig verteilt)', 'no measured move times (evenly spread)') : null,
     ].filter(Boolean);
     $('.rp-sub', d).innerHTML = sub.map(esc).join(' · ');
     $('.rp-seek', d).max = String(Math.max(1, this.total));
@@ -224,14 +226,14 @@ export class Replay {
       const r = this.phaseRange(pi);
       const mv = r
         ? this.groups(r[0], r[1])
-            .map((g) => `<span class="rp-mv ${g.kind}" data-k="${g.last}" data-first="${g.first}"${g.kind === 'grip' ? ' title="Griffwechsel (geschätzt)"' : ''}>${g.text}</span>`)
+            .map((g) => `<span class="rp-mv ${g.kind}" data-k="${g.last}" data-first="${g.first}"${g.kind === 'grip' ? ` title="${L('Regrip (geschätzt)', 'Regrip (estimated)')}"` : ''}>${g.text}</span>`)
             .join(' ')
         : '';
       const rots = r ? this.events.slice(r[0], r[1] + 1).filter((e) => e.kind === 'rot').length : 0;
       const slot = p.slot ? ` ${[...p.slot].map(colorChip).join('')}` : '';
       const skip = p.skip ? ' <span class="tag">Skip</span>' : '';
-      const recog = p.recog > 0 ? `<span class="small">Erk. ${formatTime(p.recog)}</span>` : '';
-      const rotTag = rots ? `<span class="small">${rots} Dreh.</span>` : '';
+      const recog = p.recog > 0 ? `<span class="small">Recog ${formatTime(p.recog)}</span>` : '';
+      const rotTag = rots ? `<span class="small">${rots} Rot.</span>` : '';
       return `<div class="rp-ph ph-${/^p\d$/.test(p.key) ? 'pair' : p.key}">
         <div class="rp-ph-head"><b>${PHASE_NAMES[p.key]}</b>${slot}${skip}
           <span class="rp-ph-num">${formatTime(p.time)} · ${p.moves} Z.</span>${recog}${rotTag}</div>
@@ -273,7 +275,7 @@ export class Replay {
     if (!this.player || !this.events.length) return;
     if (this.k >= this.events.length) this.seekMove(0);
     this.playing = true;
-    $('.rp-play', this.dlg).textContent = '⏸ Pause';
+    $('.rp-play', this.dlg).textContent = `⏸ ${L('Pause', 'Pause')}`;
     const wall0 = performance.now();
     const t0 = this.cursor;
     const step = () => {
@@ -296,7 +298,7 @@ export class Replay {
     this.playing = false;
     cancelAnimationFrame(this.raf);
     const b = this.dlg.querySelector('.rp-play');
-    if (b) b.textContent = '▶ Abspielen';
+    if (b) b.textContent = `▶ ${L('Abspielen', 'Play')}`;
   }
 
   updateUi() {
@@ -320,7 +322,7 @@ export class Replay {
   async share() {
     const url = shareUrl(this.solve);
     const msg = $('.rp-msg', this.dlg);
-    const text = `Mein Solve: ${formatSolve({ time: this.analysis.time, penalty: this.solve.penalty || 0 })}`;
+    const text = `${L('Mein Solve', 'My solve')}: ${formatSolve({ time: this.analysis.time, penalty: this.solve.penalty || 0 })}`;
     try {
       if (navigator.share) {
         await navigator.share({ title: 'Smartcube-Rekonstruktion', text, url });
@@ -331,9 +333,9 @@ export class Replay {
     }
     try {
       await navigator.clipboard.writeText(url);
-      msg.textContent = 'Link kopiert.';
+      msg.textContent = L('Link kopiert.', 'Link copied.');
     } catch {
-      prompt('Link zum Teilen:', url);
+      prompt(L('Link zum Teilen:', 'Link to share:'), url);
     }
   }
 }

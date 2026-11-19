@@ -4,6 +4,7 @@
  * Ein Fall = Lage und Orientierung der FR-Ecke (D-F-R) und der FR-Kante, unabhängig vom AUF.
  * Voraussetzung: Kreuz und die anderen drei Slots sind gelöst. Es gibt genau 41 Fälle (plus „gelöst“).
  */
+import { L } from '../i18n.js';
 import { applyAnyAlg, applyAnyMove, faceletsToPatternData, phaseStatus, solvedSlots, F2L_SLOTS, SOLVED, invertAnyAlg } from './facelets.js';
 import { stateForAlg } from './ll-cases.js';
 
@@ -45,12 +46,19 @@ export function f2lGroup(key) {
   const cTop = Number(c.split('.')[0]) < 4;
   const eTop = Number(e.split('.')[0]) < 4;
   const cUp = c.split('.')[1] === '0';
-  if (cTop && eTop) return cUp ? 'Ecke oben, Weiß nach oben' : 'Ecke und Kante oben';
-  if (cTop) return 'Kante im Slot';
-  if (eTop) return 'Ecke im Slot';
-  return 'Beide im Slot';
+  if (cTop && eTop) return cUp ? G.upTop : G.top;
+  if (cTop) return G.edgeIn;
+  if (eTop) return G.cornerIn;
+  return G.both;
 }
-export const F2L_GROUP_ORDER = ['Ecke und Kante oben', 'Ecke oben, Weiß nach oben', 'Kante im Slot', 'Ecke im Slot', 'Beide im Slot'];
+const G = {
+  top: L('Beide oben', 'Both on top'),
+  upTop: L('Beide oben, Cross-Farbe nach oben', 'Both on top, cross color up'),
+  edgeIn: L('Kante im Slot', 'Edge in slot'),
+  cornerIn: L('Ecke im Slot', 'Corner in slot'),
+  both: L('Beide im Slot', 'Both in slot'),
+};
+export const F2L_GROUP_ORDER = [G.top, G.upTop, G.edgeIn, G.cornerIn, G.both];
 
 /** Für die Anzeige: AUF wählen, bei dem Ecke und Kante möglichst vorne/rechts liegen (sichtbar) */
 export function displayState(s) {

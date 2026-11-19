@@ -2,6 +2,7 @@
  * Kennzahlen eines Solves (wie in Cube Station): Zugzahl, TPS, Flüssigkeit, Erkennung, Pausen –
  * und daraus ein Stärkenprofil über viele Solves (0–100 je Bereich).
  */
+import { L } from './i18n.js';
 import { hasDetail } from './solve-data.js';
 import { effectiveTime, DNF } from './stats.js';
 
@@ -84,13 +85,13 @@ export function metricsOf(s) {
  * Die Skalen orientieren sich grob an Lösern zwischen ~60 s (0) und ~10 s (100).
  */
 export const SKILLS = [
-  { key: 'cross', name: 'Kreuz', hint: 'Züge und Zeit fürs Kreuz' },
-  { key: 'lookahead', name: 'Lookahead', hint: 'Pause vor jedem F2L-Paar' },
-  { key: 'recog', name: 'Erkennung', hint: 'Pause vor OLL und PLL' },
-  { key: 'tps', name: 'Drehtempo', hint: 'Züge pro Sekunde ohne Pausen' },
-  { key: 'fluency', name: 'Flüssigkeit', hint: 'Anteil der Zeit ohne Stocken' },
-  { key: 'efficiency', name: 'Effizienz', hint: 'Zugzahl (HTM)' },
-  { key: 'consistency', name: 'Konstanz', hint: 'Streuung deiner Zeiten' },
+  { key: 'cross', name: 'Cross', hint: L('Züge und Zeit fürs Cross', 'Moves and time for the cross') },
+  { key: 'lookahead', name: 'Lookahead', hint: L('Pause vor jedem F2L-Paar', 'Pause before each F2L pair') },
+  { key: 'recog', name: 'Recog', hint: L('Pause vor OLL und PLL', 'Pause before OLL and PLL') },
+  { key: 'tps', name: 'Exec TPS', hint: L('Züge pro Sekunde ohne Pausen', 'Turns per second without pauses') },
+  { key: 'fluency', name: 'Fluency', hint: L('Anteil der Zeit ohne Stocken', 'Share of time without stalling') },
+  { key: 'efficiency', name: L('Effizienz', 'Efficiency'), hint: L('Zugzahl (HTM)', 'Move count (HTM)') },
+  { key: 'consistency', name: L('Konstanz', 'Consistency'), hint: L('Streuung deiner Zeiten', 'Spread of your times') },
 ];
 
 export function skillProfile(solves) {

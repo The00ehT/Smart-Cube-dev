@@ -14,6 +14,7 @@
  *   live    { from, kind: 'status'|'move'|'state', … } Live-Daten zum Zuschauen
  *   result  { from, n, time, penalty, moveCount, tps } Ergebnis einer Runde
  */
+import { L } from './i18n.js';
 const PREFIX = 'smartcube-raum-';
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const HOST = 'host';
@@ -77,7 +78,7 @@ export class Room {
         if (err?.type !== 'unavailable-id') throw err;
       }
     }
-    if (!this.peer) throw new Error('Kein freier Raum-Code gefunden');
+    if (!this.peer) throw new Error(L('Kein freier Raum-Code gefunden', 'No free room code found'));
     this.isHost = true;
     this.myId = HOST;
     this.roster = [{ id: HOST, name: this.me.name, avatar: this.me.avatar, host: true }];
@@ -104,7 +105,7 @@ export class Room {
     if (!msg || typeof msg !== 'object') return;
     if (msg.type === 'hello') {
       this.conns.set(id, conn);
-      const p = { id, name: String(msg.name || 'Gast').slice(0, 24), avatar: sanitizeAvatar(msg.avatar) };
+      const p = { id, name: String(msg.name || L('Gast', 'Guest')).slice(0, 24), avatar: sanitizeAvatar(msg.avatar) };
       this.roster = [...this.roster.filter((x) => x.id !== id), p];
       conn.send({ type: 'welcome', you: id, roster: this.roster, board: this.board });
       this.#publishRoster();
@@ -164,15 +165,15 @@ export class Room {
 
   async join(code) {
     this.code = normalizeCode(code);
-    if (this.code.length !== 5) throw new Error('Der Raum-Code hat 5 Zeichen.');
+    if (this.code.length !== 5) throw new Error(L('Der Raum-Code hat 5 Zeichen.', 'The room code has 5 characters.'));
     this.peer = await this.#newPeer();
     this.peer.on('error', (err) => this.emit({ type: 'error', error: err }));
     await new Promise((resolve, reject) => {
       const conn = this.peer.connect(PREFIX + this.code, { reliable: true });
-      const timer = setTimeout(() => reject(new Error('Raum nicht gefunden oder nicht erreichbar.')), 12000);
+      const timer = setTimeout(() => reject(new Error(L('Raum nicht gefunden oder nicht erreichbar.', 'Room not found or not reachable.'))), 12000);
       this.peer.once('error', (err) => {
         clearTimeout(timer);
-        reject(err?.type === 'peer-unavailable' ? new Error('Raum nicht gefunden.') : err);
+        reject(err?.type === 'peer-unavailable' ? new Error(L('Raum nicht gefunden.', 'Room not found.')) : err);
       });
       conn.on('open', () => {
         clearTimeout(timer);
@@ -216,7 +217,7 @@ export class Room {
   #closedByHost() {
     if (this.closed) return;
     this.closed = true;
-    this.emit({ type: 'closed', reason: 'Der Gastgeber hat den Raum verlassen.' });
+    this.emit({ type: 'closed', reason: L('Der Gastgeber hat den Raum verlassen.', 'The host has left the room.') });
     this.peer?.destroy();
   }
 

@@ -6,6 +6,7 @@
  *   custom: [{ id, name, alg }]
  *   train:  { 'PLL T': [{ exec, recog, date }] }    (die letzten 50 je Fall)
  */
+import { L } from './i18n.js';
 import { load, save } from './storage.js';
 import { OLL_ALGS, PLL_ALGS } from './cube/ll-cases.js';
 import { F2L_CASES, f2lDefault } from './cube/alg-db.js';
@@ -72,7 +73,7 @@ export function setMain(id, i) {
 
 export function addCustom(name, alg) {
   const id = Date.now();
-  algData.custom.push({ id, name: name || 'Eigener Algorithmus', alg });
+  algData.custom.push({ id, name: name || L('Eigener Algorithmus', 'Custom algorithm'), alg });
   saveAlgs();
   return `Eigene ${id}`;
 }
@@ -89,8 +90,8 @@ export function removeCustom(id) {
   saveAlgs();
 }
 export const caseName = (id) => {
-  if (id.startsWith('Eigene')) return algData.custom.find((x) => `Eigene ${x.id}` === id)?.name ?? 'Eigener Algorithmus';
-  if (id.startsWith('F2L')) return `F2L-Fall ${id.slice(4)}`;
+  if (id.startsWith('Eigene')) return algData.custom.find((x) => `Eigene ${x.id}` === id)?.name ?? L('Eigener Algorithmus', 'Custom algorithm');
+  if (id.startsWith('F2L')) return `${L('F2L-Fall', 'F2L case')} ${id.slice(4)}`;
   return id.replace('PLL ', '') + (id.startsWith('PLL') ? '-Perm' : '');
 };
 

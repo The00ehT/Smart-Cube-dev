@@ -1,6 +1,7 @@
 /**
  * Rekord-Momente: Konfetti, kurzer Klang und eine Teilen-Karte als Bild.
  */
+import { L, locale } from '../i18n.js';
 import { formatTime, formatSolve } from '../stats.js';
 import { phasesOf, hasDetail } from '../solve-data.js';
 
@@ -83,7 +84,7 @@ export function chime() {
 // ---------------- Teilen-Karte ----------------
 
 const PH_COLORS = { cross: '#3987e5', f2l: '#1baf7a', oll: '#eb6834', pll: '#9085e9' };
-const PH_NAMES = { cross: 'Kreuz', f2l: 'F2L', oll: 'OLL', pll: 'PLL' };
+const PH_NAMES = { cross: 'Cross', f2l: 'F2L', oll: 'OLL', pll: 'PLL' };
 
 async function loadImage(src) {
   return new Promise((res) => {
@@ -162,7 +163,7 @@ export async function shareCard(solve, profile, badge = '') {
   x.fillText(profile?.name || 'Smartcube', ax + 130, ay + 46);
   x.fillStyle = '#ffffffaa';
   x.font = font(400, 30);
-  x.fillText(new Date(solve.date).toLocaleDateString('de-DE', { day: 'numeric', month: 'long', year: 'numeric' }), ax + 130, ay + 92);
+  x.fillText(new Date(solve.date).toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' }), ax + 130, ay + 92);
   // Abzeichen
   let y = 330;
   if (badge) {
@@ -182,7 +183,7 @@ export async function shareCard(solve, profile, badge = '') {
   x.fillText(formatSolve(solve), 80, y + 210);
   x.fillStyle = '#ffffffb3';
   x.font = font(500, 36);
-  x.fillText(`${solve.moveCount ?? '–'} Züge  ·  ${(solve.tps ?? 0).toFixed(2)} TPS`, 92, y + 280);
+  x.fillText(`${solve.metrics?.htm ?? solve.moveCount ?? '–'} ${L('Züge', 'moves')}  ·  ${(solve.tps ?? 0).toFixed(2)} TPS`, 92, y + 280);
   // Phasen als Ring
   if (hasDetail(solve)) {
     const [cr, f2, ol, pl] = phasesOf(solve, { mergeF2l: true });
@@ -239,7 +240,7 @@ export async function shareSolveImage(solve, profile, badge) {
   const file = new File([blob], `solve-${formatTime(solve.time).replace(/[:.]/g, '-')}.png`, { type: 'image/png' });
   try {
     if (navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ files: [file], title: 'Mein Solve' });
+      await navigator.share({ files: [file], title: L('Mein Solve', 'My solve') });
       return 'shared';
     }
   } catch (e) {

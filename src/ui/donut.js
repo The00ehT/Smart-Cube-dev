@@ -2,6 +2,7 @@
  * Kuchendiagramm (Ring) als SVG-Text: Anteile der Phasen an der Gesamtzeit.
  * Segmente mit 2 px Abstand, Werte stehen zusätzlich in der Legende (nie nur über die Farbe).
  */
+import { L } from '../i18n.js';
 import { formatTime } from '../stats.js';
 
 const TAU = Math.PI * 2;
@@ -42,7 +43,7 @@ export function donut(segs, center = {}, opts = {}) {
     ? `<text class="d-val" x="${c}" y="${c + 2}" text-anchor="middle">${center.value}</text>
        <text class="d-lab" x="${c}" y="${c + 20}" text-anchor="middle">${center.label ?? ''}</text>`
     : '';
-  const svg = `<svg class="donut" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img" aria-label="${opts.aria ?? 'Anteile der Phasen'}">${paths}${mid}</svg>`;
+  const svg = `<svg class="donut" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img" aria-label="${opts.aria ?? L('Anteile der Phasen', 'Phase split')}">${paths}${mid}</svg>`;
   if (opts.legend === false) return svg;
   const legend = segs
     .map((s) => {
@@ -56,7 +57,7 @@ export function donut(segs, center = {}, opts = {}) {
 /** Segmente Kreuz/F2L/OLL/PLL aus gemittelten oder einzelnen Phasen {cross, f2l, oll, pll} */
 export function phaseSegments(p) {
   return [
-    { label: 'Kreuz', value: p.cross, cls: 'ph-cross' },
+    { label: 'Cross', value: p.cross, cls: 'ph-cross' },
     { label: 'F2L', value: p.f2l, cls: 'ph-pair' },
     { label: 'OLL', value: p.oll, cls: 'ph-oll' },
     { label: 'PLL', value: p.pll, cls: 'ph-pll' },

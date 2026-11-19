@@ -1,6 +1,7 @@
 /**
  * Raum-Ansicht: Teilnehmer mit Live-Würfel und Live-Zeit, Runden-Tabelle, Steuerung für den Gastgeber.
  */
+import { L } from '../i18n.js';
 import { CubeView } from './cube-view.js';
 import { formatTime, formatSolve } from '../stats.js';
 import { avatarHtml } from '../profile.js';
@@ -8,12 +9,12 @@ import { SOLVED } from '../cube/facelets.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const STATUS = {
-  idle: 'wartet',
-  scrambling: 'scrambelt …',
-  ready: 'bereit',
-  inspecting: 'Inspektion',
-  running: 'löst …',
-  done: 'fertig',
+  idle: L('wartet', 'waiting'),
+  scrambling: L('scrambelt …', 'scrambling …'),
+  ready: L('bereit', 'ready'),
+  inspecting: L('Inspektion', 'inspecting'),
+  running: L('löst …', 'solving …'),
+  done: L('fertig', 'done'),
 };
 
 export class RoomView {
@@ -25,15 +26,15 @@ export class RoomView {
     panel.innerHTML = `
       <div class="room-head">
         <div>
-          <span class="label">Raum</span>
+          <span class="label">${L('Raum', 'Room')}</span>
           <b class="room-code"></b>
-          <button type="button" class="room-copy">Einladen</button>
+          <button type="button" class="room-copy">${L('Einladen', 'Invite')}</button>
         </div>
         <div class="room-ctrl">
           <span class="room-round"></span>
-          <button type="button" class="room-next primary" hidden>Neue Runde</button>
-          <label class="toggle room-auto" hidden><input type="checkbox" checked /> automatisch weiter</label>
-          <button type="button" class="room-leave danger">Verlassen</button>
+          <button type="button" class="room-next primary" hidden>${L('Neue Runde', 'New round')}</button>
+          <label class="toggle room-auto" hidden><input type="checkbox" checked /> ${L('automatisch weiter', 'auto next')}</label>
+          <button type="button" class="room-leave danger">${L('Verlassen', 'Leave')}</button>
         </div>
       </div>
       <div class="room-msg small"></div>
@@ -52,7 +53,7 @@ export class RoomView {
     this.panel.querySelector('.room-code').textContent = room.code;
     this.panel.querySelector('.room-next').hidden = !room.isHost;
     this.panel.querySelector('.room-auto').hidden = !room.isHost;
-    this.message(room.isHost ? 'Teile den Code oder Link. Starte die erste Runde, sobald alle da sind.' : 'Verbunden. Warte auf die nächste Runde des Gastgebers.');
+    this.message(room.isHost ? L('Teile den Code oder Link. Starte die erste Runde, sobald alle da sind.', 'Share the code or link. Start the first round once everyone is here.') : L('Verbunden. Warte auf die nächste Runde des Gastgebers.', 'Connected. Waiting for the host’s next round.'));
   }
 
   hide() {
@@ -94,7 +95,7 @@ export class RoomView {
         c = { el, cube: null, phase: 'idle', startedAt: 0, last: null };
         // Für die anderen ein kleiner Live-Würfel (eigener Würfel ist ja groß zu sehen)
         if (!me) c.cube = new CubeView(el.querySelector('.person-cube'));
-        else el.querySelector('.person-cube').innerHTML = '<div class="person-me small">Du</div>';
+        else el.querySelector('.person-cube').innerHTML = `<div class="person-me small">${L('Du', 'You')}</div>`;
         this.cards.set(p.id, c);
       }
       c.el.querySelector('.avatar').innerHTML = avatarHtml({ name: p.name, avatar: p.avatar });
@@ -138,7 +139,7 @@ export class RoomView {
     const roster = this.room?.roster || [];
     const table = this.panel.querySelector('.room-board');
     const round = board.at(-1);
-    this.panel.querySelector('.room-round').textContent = round ? `Runde ${round.n}` : 'Noch keine Runde';
+    this.panel.querySelector('.room-round').textContent = round ? `${L('Runde', 'Round')} ${round.n}` : L('Noch keine Runde', 'No round yet');
     if (!board.length || !roster.length) {
       table.innerHTML = '';
       return;
@@ -151,7 +152,7 @@ export class RoomView {
       const best = Math.min(...ts.map(([, t]) => t));
       for (const [id, t] of ts) if (t === best) wins[id]++;
     }
-    const head = `<tr><th>Runde</th>${roster.map((p) => `<th>${esc(p.name)}</th>`).join('')}</tr>`;
+    const head = `<tr><th>${L('Runde', 'Round')}</th>${roster.map((p) => `<th>${esc(p.name)}</th>`).join('')}</tr>`;
     const rows = [...board]
       .reverse()
       .slice(0, 12)
@@ -172,7 +173,7 @@ export class RoomView {
       const t = board.map((b) => eff(b.results[id])).filter((x) => x != null && Number.isFinite(x));
       return t.length ? formatTime(t.reduce((a, b) => a + b, 0) / t.length) : '–';
     };
-    const foot = `<tr class="sum"><td>Siege</td>${roster.map((p) => `<td>${wins[p.id]}</td>`).join('')}</tr>
+    const foot = `<tr class="sum"><td>${L('Siege', 'Wins')}</td>${roster.map((p) => `<td>${wins[p.id]}</td>`).join('')}</tr>
       <tr class="sum"><td>Ø</td>${roster.map((p) => `<td>${mean(p.id)}</td>`).join('')}</tr>`;
     table.innerHTML = head + rows + foot;
   }
@@ -197,7 +198,7 @@ export class RoomView {
       const st = c?.phase === 'running' ? t : c?.phase === 'done' ? t : STATUS[c?.phase] ?? '';
       return `<span class="rs-p${c?.phase === 'running' ? ' live' : ''}"><span class="avatar">${avatarHtml({ name: p.name, avatar: p.avatar })}</span>${esc(p.name)} <b>${esc(st)}</b></span>`;
     });
-    const html = `<span class="rs-code">Raum ${esc(this.room.code)}${round ? ` · Runde ${round.n}` : ''}</span>${parts.join('') || '<span class="small">Warte auf Mitspieler …</span>'}<span class="rs-go">›</span>`;
+    const html = `<span class="rs-code">${L('Raum', 'Room')} ${esc(this.room.code)}${round ? ` · ${L('Runde', 'Round')} ${round.n}` : ''}</span>${parts.join('') || `<span class="small">${L('Warte auf Mitspieler …', 'Waiting for players …')}</span>`}<span class="rs-go">›</span>`;
     if (html !== this.stripHtml) {
       this.strip.innerHTML = html;
       this.stripHtml = html;

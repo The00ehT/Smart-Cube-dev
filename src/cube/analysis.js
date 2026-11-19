@@ -5,6 +5,7 @@
  * Arbeitet nur mit Startzustand, Zügen und Zeiten – damit lässt sich jeder gespeicherte
  * oder geteilte Solve jederzeit neu auswerten.
  */
+import { L } from '../i18n.js';
 import { FACES, applyMove, applyAnyAlg, phaseStatus, solvedSlots, F2L_SLOTS, isSolved, CROSS_DOWN } from './facelets.js';
 import { identifyOll, identifyPll, f2lSolved, llOriented } from './ll-cases.js';
 
@@ -13,7 +14,7 @@ const OPPOSITE = { U: 'D', D: 'U', R: 'L', L: 'R', F: 'B', B: 'F' };
 
 export const PHASE_KEYS = ['cross', 'p1', 'p2', 'p3', 'p4', 'oll', 'pll'];
 export const PHASE_NAMES = {
-  cross: 'Kreuz', p1: 'Paar 1', p2: 'Paar 2', p3: 'Paar 3', p4: 'Paar 4', f2l: 'F2L', oll: 'OLL', pll: 'PLL',
+  cross: 'Cross', p1: L('Paar 1', 'Pair 1'), p2: L('Paar 2', 'Pair 2'), p3: L('Paar 3', 'Pair 3'), p4: L('Paar 4', 'Pair 4'), f2l: 'F2L', oll: 'OLL', pll: 'PLL',
 };
 
 /**

@@ -2,6 +2,7 @@
  * Schwächen finden: Fälle, die im Vergleich zu deinem eigenen Durchschnitt langsam sind –
  * aus echten Solves (OLL/PLL: Zeit und Erkennung) und aus dem Training (alle Fälle).
  */
+import { L } from './i18n.js';
 import { llStats } from './case-stats.js';
 import { algData, caseName } from './algs.js';
 import { formatTime } from './stats.js';
@@ -25,19 +26,19 @@ export function weakCases(solves, limit = 6) {
       const slow = e.mean / tot.mean;
       const recog = tot.recog ? e.recog / tot.recog : 1;
       const score = slow + 0.5 * (recog - 1);
-      if (score > 1.05) add(id, score, `in Solves Ø ${formatTime(e.mean)} statt ${formatTime(tot.mean)}${recog > 1.3 ? `, Erkennung ${formatTime(e.recog)}` : ''}`);
+      if (score > 1.05) add(id, score, L(`in Solves Ø ${formatTime(e.mean)} statt ${formatTime(tot.mean)}`, `in solves avg ${formatTime(e.mean)} vs ${formatTime(tot.mean)}`) + (recog > 1.3 ? `, Recog ${formatTime(e.recog)}` : ''));
     }
   }
   // Aus dem Training: langsamer als dein Trainings-Ø
   const tr = Object.entries(algData.train).map(([id, l]) => [id, avg(l.slice(-8).map((x) => x.exec))]).filter(([, a]) => a);
   const ref = avg(tr.map(([, a]) => a));
   for (const [id, a] of tr) {
-    if (a / ref > 1.1) add(id, a / ref, `im Training Ø ${formatTime(a)} statt ${formatTime(ref)}`);
+    if (a / ref > 1.1) add(id, a / ref, L(`im Training Ø ${formatTime(a)} statt ${formatTime(ref)}`, `in training avg ${formatTime(a)} vs ${formatTime(ref)}`));
   }
   // Schon gesehen, aber nie trainiert
   for (const set of ['OLL', 'PLL']) {
     for (const [id, e] of Object.entries(st[set])) {
-      if (id !== 'Skip' && e.n >= 2 && !algData.train[id]) add(id, 1.0 + e.n / 100, `${e.n}× in Solves, noch nie trainiert`);
+      if (id !== 'Skip' && e.n >= 2 && !algData.train[id]) add(id, 1.0 + e.n / 100, L(`${e.n}× in Solves, noch nie trainiert`, `${e.n}× in solves, never trained`));
     }
   }
   return [...out.values()].sort((a, b) => b.score - a.score).slice(0, limit).map((w) => ({ ...w, name: caseName(w.id) }));

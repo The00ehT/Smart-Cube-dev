@@ -1,6 +1,7 @@
 /**
  * Netzdiagramm (Radar) als SVG: Stärken 0–100 je Achse, optional ein zweites Profil zum Vergleich.
  */
+import { L } from '../i18n.js';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 /**
@@ -33,6 +34,6 @@ export function radarSvg(axes, now, prev = null, size = 320) {
         <text class="rd-val" x="${x.toFixed(1)}" y="${(y + 16).toFixed(1)}" text-anchor="${anchor}">${v == null ? '–' : Math.round(v)}</text>`;
     })
     .join('');
-  return `<svg class="radar" viewBox="-56 0 ${size + 112} ${size}" role="img" aria-label="Stärkenprofil">
+  return `<svg class="radar" viewBox="-56 0 ${size + 112} ${size}" role="img" aria-label="${L('Stärkenprofil', 'Skill profile')}">
     ${grid}${spokes}${prev ? poly(prev, 'rd-prev') : ''}${poly(now, 'rd-now')}${dots}${labels}</svg>`;
 }
