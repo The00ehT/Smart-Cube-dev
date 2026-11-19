@@ -754,8 +754,10 @@ function setBattery(level) {
     return;
   }
   b.hidden = false;
-  b.textContent = `🔋 ${level} %`;
-  b.classList.toggle('low', level <= 15);
+  const lv = Math.max(0, Math.min(100, Math.round(level)));
+  b.innerHTML = `<i class="batt-ic" style="--lv:${lv}" aria-hidden="true"></i>${lv}%`;
+  b.title = L(`Akku ${lv} %`, `Battery ${lv}%`);
+  b.classList.toggle('low', lv <= 15);
 }
 
 function renderDevice() {
@@ -1390,7 +1392,23 @@ async function offlineStatus() {
   }
 }
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
-  navigator.serviceWorker.register('./sw.js').catch((err) => console.warn('Service Worker:', err));
+  navigator.serviceWorker
+    .register('./sw.js')
+    .then((reg) => {
+      // Bluefy lässt die Seite lange offen: beim Zurückkehren nach Updates schauen
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') reg.update().catch(() => {});
+      });
+    })
+    .catch((err) => console.warn('Service Worker:', err));
+  let hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController) return void (hadController = true); // erste Installation, kein Update
+    const offer = () => toast(L('Neue Version verfügbar', 'New version available'), { action: L('Neu laden', 'Reload'), onAction: () => location.reload(), duration: 20000 });
+    if (app.phase === 'running') {
+      const t = setInterval(() => app.phase !== 'running' && (clearInterval(t), offer()), 2000);
+    } else offer();
+  });
   navigator.storage?.persist?.().catch(() => {});
 }
 $('offline-check').addEventListener('click', offlineStatus);
@@ -1412,6 +1430,12 @@ $('opt-cross').addEventListener('change', (e) => {
 // ---------------- Tabs ----------------
 
 const TABS = ['timer', 'stats', 'solves', 'algs', 'room'];
+// Tatsächliche Höhe der unteren Leiste (inkl. Home-Balken) für Abstände im Inhalt
+{
+  const bar = document.querySelector('.tabbar');
+  const setH = () => document.documentElement.style.setProperty('--tabbar-total', `${bar.offsetHeight || 0}px`);
+  if (bar && 'ResizeObserver' in window) new ResizeObserver(setH).observe(bar);
+}
 app.tab = 'timer';
 function showTab(name) {
   if (!TABS.includes(name)) name = 'timer';

@@ -34,7 +34,7 @@
   --num-font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   --radius: 18px;
-  --tabbar-h: 64px;
+  --tabbar-h: 56px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   color-scheme: light;
@@ -90,13 +90,13 @@ button, .file-button {
   padding: 8px 14px;
   transition: background 0.15s, border-color 0.15s, transform 0.08s;
 }
-button:hover, .file-button:hover { border-color: var(--line); }
+@media (hover: hover) { button:hover, .file-button:hover { border-color: var(--line); } }
 button:active { transform: scale(0.97); }
 button.primary { background: var(--accent); color: var(--accent-text); }
-button.primary:hover { filter: brightness(1.06); }
+@media (hover: hover) { button.primary:hover { filter: brightness(1.06); } }
 button.big { padding: 12px 18px; font-size: 16px; border-radius: 12px; }
 button.ghost, .file-button.ghost { background: transparent; border-color: var(--line); }
-button.ghost:hover, .file-button.ghost:hover { background: var(--chip); }
+@media (hover: hover) { button.ghost:hover, .file-button.ghost:hover { background: var(--chip); } }
 button.danger { color: var(--bad); }
 button:disabled { opacity: 0.45; cursor: default; transform: none; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -128,8 +128,17 @@ code { font-size: 12px; background: var(--chip); padding: 1px 4px; border-radius
 .device .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
 .device.on { color: var(--text); background: var(--good-soft); }
 .device.on .dot { background: var(--good); box-shadow: 0 0 0 3px rgb(22 163 74 / 0.2); }
-.battery { font-weight: 600; }
+.battery { display: inline-flex; align-items: center; gap: 4px; font: 600 12px/1 var(--num-font); white-space: nowrap; flex: none; color: var(--text); }
 .battery.low { color: var(--bad); }
+.batt-ic {
+  position: relative; width: 20px; height: 10px; border: 1.5px solid currentColor; border-radius: 3px; opacity: 0.85; box-sizing: border-box;
+}
+.batt-ic::before {
+  content: ''; position: absolute; left: 1px; top: 1px; bottom: 1px; width: calc((100% - 2px) * var(--lv) / 100);
+  border-radius: 1px; background: var(--good);
+}
+.battery.low .batt-ic::before { background: var(--bad); }
+.batt-ic::after { content: ''; position: absolute; right: -4px; top: 2px; width: 2px; height: 3px; border-radius: 0 1px 1px 0; background: currentColor; }
 .icon-btn { padding: 7px; line-height: 0; background: transparent; }
 .icon-btn svg, [role=tab] svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .profile-chip {
@@ -151,7 +160,8 @@ code { font-size: 12px; background: var(--chip); padding: 1px 4px; border-radius
 .tabbar {
   display: none;
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
-  padding: 6px 8px calc(6px + var(--safe-bottom));
+  /* Wie native iOS-Leisten: Beschriftung nah am Home-Balken, nicht schwebend darüber */
+  padding: 4px 8px max(4px, calc(var(--safe-bottom) - 12px));
   background: var(--header-bg);
   -webkit-backdrop-filter: saturate(1.6) blur(16px);
   backdrop-filter: saturate(1.6) blur(16px);
@@ -159,8 +169,8 @@ code { font-size: 12px; background: var(--chip); padding: 1px 4px; border-radius
   grid-template-columns: repeat(5, 1fr);
 }
 .tabbar [role=tab] {
-  display: flex; flex-direction: column; align-items: center; gap: 3px; background: transparent; color: var(--muted);
-  font-size: 11px; font-weight: 600; padding: 6px 0; position: relative; border-radius: 12px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; background: transparent; color: var(--muted);
+  font-size: 11px; font-weight: 600; padding: 5px 0 3px; position: relative; border-radius: 12px;
 }
 .tabbar [role=tab][aria-selected='true'] { color: var(--accent); }
 .tabbar .tab-dot { top: 4px; right: calc(50% - 18px); }
@@ -500,7 +510,7 @@ dialog.big-dialog { width: min(1100px, calc(100vw - 24px)); max-width: none; max
 @media (max-width: 700px) {
   .tabs-top, .profile-name { display: none; }
   .tabbar { display: grid; }
-  .app { padding-top: 12px; padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 20px); }
+  .app { padding-top: 12px; padding-bottom: calc(var(--tabbar-total, calc(var(--tabbar-h) + var(--safe-bottom))) + 20px); }
   .tab { gap: 12px; }
   .tab-head h2 { font-size: 24px; }
   .card { padding: 14px; border-radius: 16px; }
@@ -639,7 +649,7 @@ dialog.big-dialog { width: min(1100px, calc(100vw - 24px)); max-width: none; max
 .toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
 .toast button { background: transparent; color: #8cb4ff; font-weight: 700; padding: 6px 8px; margin-left: auto; flex: none; }
 .toast span { flex: 1; }
-@media (max-width: 700px) { .toast { bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 14px); } }
+@media (max-width: 700px) { .toast { bottom: calc(var(--tabbar-total, calc(var(--tabbar-h) + var(--safe-bottom))) + 14px); } }
 
 /* ---------- Rekord ---------- */
 .confetti { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 70; }
@@ -868,7 +878,7 @@ body.tab-timer.solving .timer-card { overflow: visible; }
 }
 
 @media (max-width: 700px) {
-  body.tab-timer .app { padding-top: 8px; padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 6px); overflow-y: auto; overscroll-behavior: contain; }
+  body.tab-timer .app { padding-top: 8px; padding-bottom: calc(var(--tabbar-total, calc(var(--tabbar-h) + var(--safe-bottom))) + 6px); overflow-y: auto; overscroll-behavior: contain; }
   body.tab-timer #tab-timer { gap: 8px; }
   /* Karten auflösen und neu ordnen: Scramble · Würfel · Zeit · Kurzstatistik */
   body.tab-timer .timer-layout { display: flex; flex-direction: column; gap: 6px; }
@@ -986,3 +996,11 @@ body.solving .mode-chip { display: none; }
 #sd-cfop:not(:empty) { margin: 6px 0 10px; }
 
 .scr-note { flex-basis: 100%; font-size: 12.5px; color: var(--accent); margin-top: 2px; }
+
+/* Gerät oben: am Handy reicht Punkt + Akku, der abgeschnittene Name hilft nicht */
+@media (max-width: 700px) {
+  .device:has(.battery:not([hidden])) .device-label { display: none; }
+  .device:has(.battery:not([hidden])) { padding: 6px 10px; gap: 7px; }
+}
+.tabbar [role=tab]:focus:not(:focus-visible), .tabs-top [role=tab]:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+.tabbar [role=tab], .tabbar [role=tab]:hover { border-color: transparent; }
