@@ -21,6 +21,7 @@ import { Room, normalizeCode } from './room.js';
 import { RoomView, compareHtml } from './ui/room-view.js';
 import { AlgsView } from './ui/algs-view.js';
 import { Trainer } from './ui/trainer.js';
+import { PLL_ALGS } from './cube/ll-cases.js';
 import { ArchiveView } from './ui/archive-view.js';
 import { isArchived, addToArchive, removeFromArchive } from './archive.js';
 import { easyState } from './cube/easy-scramble.js';
@@ -35,7 +36,6 @@ import { modeGroups, findMode } from './modes.js';
 import { liveStage, barHtml } from './ui/live-bar.js';
 import { keepAwake } from './wake.js';
 import { InsightsView } from './ui/insights-view.js';
-import { PllDrill } from './ui/pll-drill.js';
 import { algsOf } from './algs.js';
 import { radarSvg } from './ui/radar.js';
 import { cfopTable, splitTone } from './ui/cfop-table.js';
@@ -73,13 +73,8 @@ const view = new CubeView($('cube'));
 view.setGyroEnabled(settings.gyro);
 const replay = new Replay($('replay-dialog'));
 const statsView = new StatsView($('stats-view'), { coach: (el) => renderCoach(el) });
+// Trainer für OLL/PLL/F2L/eigene Algorithmen und „Endlos-PLL“ – ohne Setup-Scramble
 const trainer = new Trainer($('trainer-dialog'), {
-  state: () => app.state,
-  crossFace: () => crossFace(),
-  connected: () => !!app.conn,
-  now: () => now(),
-});
-const pllDrill = new PllDrill($('pll-drill'), {
   now: () => now(),
   crossFace: () => crossFace(),
   connected: () => !!app.conn,
@@ -92,7 +87,7 @@ const algsView = new AlgsView($('tab-algs'), $('case-dialog'), {
   solves: () => solves,
   crossFace: () => crossFace(),
   connected: () => !!app.conn,
-  train: (ids, title) => trainer.start(ids, title),
+  train: (ids, title) => trainer.start(ids, `Training · ${title}`),
 });
 const archiveView = new ArchiveView($('archive-view'), {
   open: (a) => {
@@ -223,8 +218,7 @@ function onMove(e) {
 
   // Algorithmus am Würfel aufnehmen oder trainieren: dann kein Solve-Ablauf
   if (algsView.recording && $('case-dialog').open) return void algsView.recordMove(e.move);
-  if (pllDrill.active && pllDrill.onMove(e)) return;
-  if (trainer.active && trainer.onMove(e, app.state)) return;
+  if (trainer.active && trainer.onMove(e)) return;
 
   switch (app.phase) {
     case 'scrambling':
@@ -672,7 +666,7 @@ function setMode(id) {
     if (id === 'pll-endless') {
       if (app.phase === 'running') return;
       showTab('timer');
-      pllDrill.start();
+      trainer.start(Object.keys(PLL_ALGS).map((n) => `PLL ${n}`), `∞ ${L('Endlos-PLL', 'Endless PLL')}`);
     }
     return;
   }
@@ -2016,5 +2010,5 @@ openSharedFromHash();
 openRoomFromHash();
 
 // Testzugang: mit ?debug in der URL lassen sich Würfel-Ereignisse simulieren (z. B. Gyro-Daten)
-if (new URLSearchParams(location.search).has('debug')) window.__smartcube = { emit: onCubeEvent, app, settings, pllDrill, roomView };
+if (new URLSearchParams(location.search).has('debug')) window.__smartcube = { emit: onCubeEvent, app, settings, trainer, roomView };
 window.addEventListener('hashchange', openSharedFromHash);

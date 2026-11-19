@@ -1,73 +1,128 @@
 /**
- * Algorithmus-Trainer: Die App berechnet vom aktuellen Würfelzustand aus ein Setup, das den gewünschten
- * Fall herstellt (zufälliger Blickwinkel/AUF, verschleiert durch den Löser). Danach misst sie
- * Erkennung (Pause bis zum ersten Zug) und Ausführung (erster Zug bis gelöst).
+ * Algorithmus-Trainer (OLL, PLL, F2L, eigene Algorithmen) – auch „Endlos-PLL“.
+ *
+ * Kein Setup-Scramble: Der Fall wird angezeigt (3D und Draufsicht), man führt einfach den
+ * Algorithmus aus. Wie der echte Würfel gehalten wird oder aussieht, ist egal – erkannt wird
+ * über die Züge in allen 24 Haltungen und mit jedem AUF (siehe cube/alg-detect.js).
+ * Gemessen: Recog (bis zum ersten Zug) und Exec (erster Zug bis fertig).
  * Langsame und neue Fälle kommen öfter dran.
  */
-import { groupAlg } from '../cube/alg-format.js';
 import { L } from '../i18n.js';
-import { ScrambleTracker } from '../cube/scramble-tracker.js';
-import { applyAnyAlg, CROSS_DOWN, isSolved, relativeState } from '../cube/facelets.js';
-import { stateForAlg, bodyCaseState, solvedUpToAuf, f2lSolved, llOriented, CASE_STATE } from '../cube/ll-cases.js';
+import { applyAnyAlg, rotationFaceMap, CROSS_DOWN } from '../cube/facelets.js';
+import { CASE_STATE, stateForAlg, solvedUpToAuf, f2lSolved, llOriented } from '../cube/ll-cases.js';
+import { displayState } from '../cube/f2l-cases.js';
+import { AlgDetector } from '../cube/alg-detect.js';
 import { algData, mainAlg, recordTraining, caseName, trainingBest } from '../algs.js';
-import { setupAlgFor } from './cube-view.js';
-import { caseDiagram } from './ll-diagram.js';
+import { groupAlg } from '../cube/alg-format.js';
+import { llDiagram, f2lDiagram } from './ll-diagram.js';
+import { CubeView } from './cube-view.js';
 import { formatTime } from '../stats.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const avg = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+const pickOne = (a) => a[Math.floor(Math.random() * a.length)];
+const AUF = ['', 'U', 'U2', "U'"];
+const VIEW = ['', 'y', 'y2', "y'"];
+const PREF = 'smartcube.trainer';
+
+/** Wann ist ein Fall fertig? (Zustand mit Kreuz unten) */
+const DONE = {
+  OLL: (s) => f2lSolved(s) && llOriented(s),
+  PLL: solvedUpToAuf,
+  F2L: f2lSolved,
+};
 
 export class Trainer {
-  /** @param h { state(), crossFace(), connected(), now() } */
+  /** @param h { now(), connected(), crossFace(), onClose() } */
   constructor(dlg, h) {
     this.dlg = dlg;
     this.h = h;
     this.active = false;
+    let pref = {};
+    try {
+      pref = JSON.parse(localStorage.getItem(PREF) || '{}');
+    } catch {
+      /* egal */
+    }
+    this.showName = pref.showName ?? false;
     dlg.innerHTML = `
       <div class="rp-head">
-        <div><h2 class="tr-title">Training</h2><div class="small tr-sub"></div></div>
+        <div><h2 class="tr-title">Training</h2>
+          <div class="small">${L('Führe den gezeigten Fall aus – wie du den Würfel hältst und wie er gerade aussieht, ist egal.', 'Perform the case shown – how you hold the cube and its current state don’t matter.')}</div></div>
         <button type="button" class="rp-close" aria-label="${L('Beenden', 'Stop')}">✕</button>
       </div>
-      <div class="tr-main">
-        <div class="tr-phase label"></div>
-        <div class="scramble tr-setup"></div>
-        <div class="tr-timer">0.00</div>
-        <div class="tr-msg small"></div>
-        <div class="tr-result"></div>
-        <div class="tr-buttons">
-          <button type="button" class="ghost" data-act="skip">${L('Anderer Fall', 'Other case')}</button>
-          <button type="button" class="primary" data-act="next" hidden>${L('Weiter', 'Next')}</button>
+      <div class="pd-main">
+        <div class="pd-cube"></div>
+        <div class="pd-side">
+          <div class="pd-top"><div class="pd-dia"></div><button type="button" class="pd-name"></button></div>
+          <div class="pd-time">0.00</div>
+          <div class="pd-msg small"></div>
+          <div class="pd-buttons">
+            <button type="button" class="ghost" data-act="hint">💡 ${L('Alg zeigen', 'Show alg')}</button>
+            <button type="button" class="ghost" data-act="skip">⏭ ${L('Überspringen', 'Skip')}</button>
+          </div>
+          <label class="toggle small"><input type="checkbox" class="pd-names" /> ${L('Namen gleich anzeigen', 'Show names right away')}</label>
         </div>
-        <label class="toggle small"><input type="checkbox" class="tr-auto" checked /> ${L('automatisch weiter', 'auto next')}</label>
       </div>
-      <h3 class="sub-h">${L('Diese Runde', 'This session')}</h3>
-      <div class="table-wrap"><table class="phase-table tr-log"></table></div>`;
-    dlg.querySelector('.rp-close').onclick = () => dlg.close();
+      <div class="pd-stats"></div>
+      <div class="table-wrap"><table class="phase-table tr-log"></table></div>
+      <button type="button" class="primary pd-back">← ${L('Zurück', 'Back')}</button>`;
+    const q = (s) => dlg.querySelector(s);
+    q('.rp-close').onclick = () => dlg.close();
+    q('.pd-back').onclick = () => dlg.close();
     dlg.addEventListener('close', () => this.stop());
-    dlg.querySelector('[data-act=skip]').onclick = () => this.nextCase();
-    dlg.querySelector('[data-act=next]').onclick = () => this.nextCase();
+    q('[data-act=skip]').onclick = () => this.next();
+    q('[data-act=hint]').onclick = () => {
+      q('.pd-msg').innerHTML = `<span class="pd-alg">${esc(groupAlg(mainAlg(this.id)))}</span>`;
+      this.revealed = true;
+      this.renderName();
+    };
+    q('.pd-name').onclick = () => {
+      this.revealed = true;
+      this.renderName();
+    };
+    const names = q('.pd-names');
+    names.checked = this.showName;
+    names.onchange = () => {
+      this.showName = names.checked;
+      try {
+        localStorage.setItem(PREF, JSON.stringify({ showName: this.showName }));
+      } catch {
+        /* egal */
+      }
+      this.renderName();
+    };
     this.tick = this.tick.bind(this);
   }
 
+  /** Training starten: Fälle (IDs wie 'PLL T', 'OLL 27', 'F2L 5', 'Eigene 3') und Titel */
   start(ids, title) {
-    this.ids = ids;
+    this.ids = ids.filter((id) => this.caseState(id));
+    if (!this.ids.length) return;
     this.session = [];
+    this.last = null;
     this.active = true;
-    this.dlg.querySelector('.tr-title').textContent = `Training · ${title}`;
-    this.dlg.querySelector('.tr-sub').textContent = L(`${ids.length} ${ids.length === 1 ? 'Fall' : 'Fälle'} · langsame und neue Fälle kommen öfter`, `${ids.length} ${ids.length === 1 ? 'case' : 'cases'} · slow and new cases come up more often`);
-    this.renderLog();
+    this.dlg.querySelector('.tr-title').textContent = title;
     if (!this.dlg.open) this.dlg.showModal();
-    if (!this.h.connected()) {
-      this.show(L('Kein Würfel', 'No cube'), '', L('Verbinde zuerst deinen Würfel (oder den virtuellen Würfel) im Timer-Tab.', 'Connect your cube (or the virtual cube) in the Timer tab first.'));
-      return;
-    }
-    this.nextCase();
+    if (!this.cube) this.cube = new CubeView(this.dlg.querySelector('.pd-cube'));
+    this.renderStats();
+    this.next();
     requestAnimationFrame(this.tick);
+    if (!this.h.connected()) this.dlg.querySelector('.pd-msg').textContent = L('Verbinde zuerst deinen Würfel (oder den virtuellen) im Timer-Tab.', 'Connect your cube (or the virtual one) in the Timer tab first.');
   }
 
   stop() {
+    if (!this.active) return;
     this.active = false;
-    this.phase = null;
+    clearTimeout(this.nextTimer);
+    this.h.onClose?.();
+  }
+
+  /** Fall-Zustand (Kreuz unten, aus Sicht des Lösers) */
+  caseState(id) {
+    if (CASE_STATE[id]) return CASE_STATE[id];
+    const alg = mainAlg(id);
+    return alg ? stateForAlg(alg) : null;
   }
 
   /** Gewichtete Auswahl: ungeübte und langsame Fälle öfter, nicht zweimal derselbe hintereinander */
@@ -85,140 +140,102 @@ export class Trainer {
     return this.ids[0];
   }
 
-  async nextCase() {
-    if (!this.active) return;
-    clearTimeout(this.autoTimer);
-    const id = this.pick();
-    this.last = id;
-    this.caseId = id;
-    this.moves = 0;
-    this.phase = 'prepare';
-    this.show(L('Setup wird berechnet …', 'Computing setup …'), '', '');
-    // Der Fall, den dein Haupt-Algorithmus löst
-    const viewerCase = stateForAlg(mainAlg(id));
-    const target = bodyCaseState(viewerCase, this.h.crossFace());
-    try {
-      const setup = await setupAlgFor(relativeState(this.h.state(), target));
-      if (!this.active || this.caseId !== id) return;
-      this.target = target;
-      this.tracker = new ScrambleTracker(setup);
-      this.phase = this.tracker.done ? 'ready' : 'setup';
-      if (this.phase === 'ready') this.readyAt = this.h.now();
-      this.renderSetup();
-    } catch (err) {
-      console.error(err);
-      this.show(L('Fehler', 'Error'), '', L('Setup konnte nicht berechnet werden: ', 'Could not compute setup: ') + (err?.message || err));
-    }
+  next() {
+    clearTimeout(this.nextTimer);
+    this.id = this.pick();
+    this.last = this.id;
+    const set = this.id.slice(0, 3);
+    const base = this.caseState(this.id);
+    // Zufälliger AUF; bei OLL/PLL auch zufälliger Blickwinkel (F2L bleibt im Slot vorne rechts)
+    let shown = applyAnyAlg(base, pickOne(AUF));
+    if (set === 'OLL' || set === 'PLL') shown = applyAnyAlg(shown, pickOne(VIEW));
+    if (set === 'F2L') shown = displayState(shown);
+    this.detector = new AlgDetector(base, DONE[set] || solvedUpToAuf);
+    this.shownAt = this.h.now();
+    this.firstAt = null;
+    this.done = false;
+    this.revealed = this.showName;
+    this.cube.setState(this.physical(shown));
+    const q = (s) => this.dlg.querySelector(s);
+    q('.pd-dia').innerHTML = set === 'PLL' ? llDiagram(shown, 'pll', 96) : set === 'OLL' ? llDiagram(shown, 'oll', 96) : set === 'F2L' ? f2lDiagram(shown, 96) : '';
+    q('.pd-time').textContent = '0.00';
+    q('.pd-time').className = 'pd-time';
+    q('.pd-msg').textContent = '';
+    this.renderName();
   }
 
-  show(phase, setupHtml, msg) {
-    const d = this.dlg;
-    d.querySelector('.tr-phase').textContent = phase;
-    d.querySelector('.tr-setup').innerHTML = setupHtml;
-    d.querySelector('.tr-msg').textContent = msg;
-    d.querySelector('.tr-result').innerHTML = '';
-    d.querySelector('[data-act=next]').hidden = true;
-    d.querySelector('[data-act=skip]').hidden = false;
-    const tm = d.querySelector('.tr-timer');
-    tm.className = 'tr-timer';
-    tm.textContent = '0.00';
+  /** Fall-Zustände sind aus Sicht des Lösers beschriftet – für den 3D-Würfel echte Farben (Kreuzfarbe unten) */
+  physical(state) {
+    const map = rotationFaceMap(CROSS_DOWN[this.h.crossFace?.() || 'U']);
+    const inv = {};
+    for (const [body, pos] of Object.entries(map)) inv[pos] = body;
+    return [...state].map((c) => inv[c]).join('');
   }
 
-  renderSetup() {
-    if (this.phase === 'setup') {
-      const html = this.tracker
-        .remainingMoves()
-        .map((m, i) => `<span class="mv${m.correction ? ' correction' : ''}${i === 0 ? ' next' : ''}">${m.text}</span>`)
-        .join('');
-      this.show(L('Setup ausführen', 'Apply setup'), html, L('Halte den Würfel wie beim Lösen (Cross unten). Der Fall bleibt bis zum Ende versteckt.', 'Hold the cube like when solving (cross down). The case stays hidden until the end.'));
-    } else if (this.phase === 'ready') {
-      this.show(L('Erkennen und lösen!', 'Recognize and solve!'), '', L('Die Zeit startet mit deinem ersten Zug.', 'The timer starts with your first move.'));
-      this.dlg.querySelector('.tr-timer').classList.add('ready');
-    }
+  renderName() {
+    const b = this.dlg.querySelector('.pd-name');
+    const show = this.revealed || this.showName || this.done;
+    b.textContent = show ? caseName(this.id) : L('Welcher Fall? (antippen)', 'Which case? (tap)');
+    b.classList.toggle('hidden-name', !show);
   }
 
-  /** Zug vom Würfel; liefert true, wenn der Trainer ihn verarbeitet hat */
-  onMove(e, stateAfter) {
+  /** Zug vom Würfel; true = verarbeitet */
+  onMove(e) {
     if (!this.active || !this.dlg.open) return false;
+    if (this.done) return true; // Nachdreh-AUF nach dem Erkennen ignorieren
     const t = e.localTimestamp ?? this.h.now();
-    if (this.phase === 'setup') {
-      this.tracker.push(e.move);
-      if (this.tracker.done) {
-        this.phase = 'ready';
-        this.readyAt = t;
-      }
-      this.renderSetup();
-    } else if (this.phase === 'ready') {
-      this.phase = 'running';
-      this.firstAt = t;
-      this.moves = 1;
-      this.dlg.querySelector('.tr-phase').textContent = L('Läuft …', 'Running …');
-      this.dlg.querySelector('.tr-msg').textContent = '';
-      this.dlg.querySelector('.tr-timer').className = 'tr-timer';
-      this.checkDone(stateAfter, t);
-    } else if (this.phase === 'running') {
-      this.moves++;
-      this.checkDone(stateAfter, t);
-    }
+    if (this.firstAt == null) this.firstAt = t;
+    if (this.detector.push(e.move)) this.finish(t);
+    else if (this.detector.moves === 40) this.dlg.querySelector('.pd-msg').textContent = L('Verdreht? „Überspringen“ holt den nächsten Fall.', 'Messed up? “Skip” gets the next case.');
     return true;
   }
 
-  checkDone(state, t) {
-    const viewer = applyAnyAlg(state, CROSS_DOWN[this.h.crossFace()]);
-    const id = this.caseId;
-    const ok = id.startsWith('OLL') ? f2lSolved(viewer) && llOriented(viewer) : id.startsWith('F2L') ? f2lSolved(viewer) : solvedUpToAuf(viewer) || isSolved(state);
-    if (ok) {
-      const exec = t - this.firstAt;
-      const recog = this.firstAt - this.readyAt;
-      this.phase = 'done';
-      this.newPb = recordTraining(this.caseId, exec, recog);
-      this.session.push({ id: this.caseId, exec, recog, moves: this.moves });
-      this.showResult(exec, recog);
-      this.renderLog();
-    } else if (this.moves > 40) {
-      this.dlg.querySelector('.tr-msg').textContent = L('Das sieht nicht nach dem Fall aus – „Anderer Fall“ startet neu.', 'That doesn’t look like the case – “Other case” starts over.');
+  finish(t) {
+    this.done = true;
+    const exec = Math.max(0, t - this.firstAt);
+    const recog = Math.max(0, this.firstAt - this.shownAt);
+    const pb = recordTraining(this.id, exec, recog);
+    this.session.push({ id: this.id, exec, recog, pb, moves: this.detector.moves });
+    const q = (s) => this.dlg.querySelector(s);
+    q('.pd-time').textContent = formatTime(exec);
+    q('.pd-time').className = 'pd-time done';
+    q('.pd-msg').innerHTML = `✓ <b>${esc(caseName(this.id))}</b> · Recog ${formatTime(recog)} · ${this.detector.moves} ${L('Züge', 'moves')}${pb ? ` · <span class="tag pb-tag">🏆 PB</span>` : ''}`;
+    this.renderName();
+    this.renderStats();
+    this.nextTimer = setTimeout(() => this.active && this.next(), 1000);
+  }
+
+  renderStats() {
+    const s = this.session;
+    const box = this.dlg.querySelector('.pd-stats');
+    const log = this.dlg.querySelector('.tr-log');
+    if (!s.length) {
+      box.innerHTML = `<p class="small">${L('Noch nichts gelöst – leg los!', 'Nothing solved yet – go!')}</p>`;
+      log.innerHTML = '';
+      return;
     }
-  }
-
-  showResult(exec, recog) {
-    const d = this.dlg;
-    const id = this.caseId;
-    const tm = d.querySelector('.tr-timer');
-    tm.textContent = formatTime(exec);
-    tm.className = 'tr-timer done';
-    d.querySelector('.tr-phase').textContent = L('✓ Gelöst', '✓ Solved');
-    const set = id.slice(0, 3);
-    const hist = (algData.train[id] || []).slice(-12).map((x) => x.exec);
-    d.querySelector('.tr-result').innerHTML = `
-      <div class="tr-case">
-        ${caseDiagram(id, 64)}
-        <div>
-          <b>${esc(caseName(id))}</b>
-          <div class="small">Recog ${formatTime(recog)} · Exec ${formatTime(exec)} · ${this.moves} ${L('Züge', 'moves')}</div>
-          <div class="small">${L('Ø der letzten', 'Ø of last')} ${hist.length}: ${formatTime(avg(hist))} · PB ${formatTime(trainingBest(id))}${this.newPb ? ` <span class="tag pb-tag">🏆 ${L('Neue Bestzeit', 'New PB')}</span>` : ''}</div>
-          <div class="alg-text small">${esc(groupAlg(mainAlg(id)))}</div>
-        </div>
+    const ex = s.map((x) => x.exec);
+    const tile = (v, k) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`;
+    box.innerHTML = `<div class="stats">
+        ${tile(s.length, L('Gelöst', 'Solved'))}
+        ${tile(formatTime(avg(ex)), 'Ø Exec')}
+        ${tile(formatTime(avg(s.map((x) => x.recog))), 'Ø Recog')}
+        ${tile(formatTime(Math.min(...ex)), L('Beste', 'Best'))}
       </div>`;
-    d.querySelector('[data-act=next]').hidden = false;
-    d.querySelector('[data-act=skip]').hidden = true;
-    if (d.querySelector('.tr-auto').checked) this.autoTimer = setTimeout(() => this.phase === 'done' && this.nextCase(), 1800);
-  }
-
-  renderLog() {
-    const rows = [...this.session]
-      .reverse()
-      .slice(0, 15)
-      .map((r) => `<tr><td>${esc(caseName(r.id))}</td><td>${formatTime(r.recog)}</td><td>${formatTime(r.exec)}</td></tr>`)
-      .join('');
-    const mean = avg(this.session.map((r) => r.exec));
-    this.dlg.querySelector('.tr-log').innerHTML = this.session.length
-      ? `<tr><th>${L('Fall', 'Case')}</th><th>Recog</th><th>Exec</th></tr>${rows}<tr class="sum"><td>Ø (${this.session.length})</td><td>${formatTime(avg(this.session.map((r) => r.recog)))}</td><td>${formatTime(mean)}</td></tr>`
-      : `<tr><td class="small">${L('Noch keine Fälle in dieser Runde.', 'No cases yet in this session.')}</td></tr>`;
+    // Je Fall dieser Runde: Anzahl, Ø, Bestzeit (alle Zeiten)
+    const by = new Map();
+    for (const x of s) by.set(x.id, [...(by.get(x.id) || []), x]);
+    log.innerHTML =
+      `<tr><th>${L('Fall', 'Case')}</th><th>×</th><th>Ø Recog</th><th>Ø Exec</th><th>PB</th></tr>` +
+      [...by.entries()]
+        .sort((a, b) => avg(b[1].map((x) => x.exec)) - avg(a[1].map((x) => x.exec)))
+        .map(([id, xs]) => `<tr${xs.some((x) => x.pb) ? ' class="pb-row"' : ''}><td>${esc(caseName(id))}</td><td>${xs.length}</td><td>${formatTime(avg(xs.map((x) => x.recog)))}</td><td>${formatTime(avg(xs.map((x) => x.exec)))}</td><td>${formatTime(trainingBest(id))}</td></tr>`)
+        .join('');
   }
 
   tick() {
     if (!this.active) return;
-    if (this.phase === 'running') this.dlg.querySelector('.tr-timer').textContent = formatTime(this.h.now() - this.firstAt);
+    if (this.firstAt != null && !this.done) this.dlg.querySelector('.pd-time').textContent = formatTime(this.h.now() - this.firstAt);
     requestAnimationFrame(this.tick);
   }
 }

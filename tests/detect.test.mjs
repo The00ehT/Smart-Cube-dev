@@ -37,6 +37,28 @@ for (const [n, alg] of Object.entries(PLL_ALGS)) {
     }
   }
 }
+// OLL und F2L mit eigener Fertig-Bedingung (Datenbank-Algorithmen, verschiedene Haltungen)
+import { OLL_ALGS, f2lSolved, llOriented } from '../src/cube/ll-cases.js';
+import { F2L_CASES } from '../src/cube/alg-db.js';
+const sets = [
+  ['OLL', Object.entries(OLL_ALGS).map(([n, a]) => [`OLL ${n}`, a]), (s) => f2lSolved(s) && llOriented(s)],
+  ['F2L', F2L_CASES.map((c) => [c.id, c.alg]), f2lSolved],
+];
+for (const [name, list, done] of sets) {
+  let n = 0;
+  for (const [id, alg] of list) {
+    for (const hold of ['', 'z2', 'x y']) {
+      const moves = cubeReports(alg, hold);
+      if (!moves) continue;
+      const d = new AlgDetector(CASE_STATE[id], done);
+      const hits = moves.map((m) => d.push(m));
+      assert.ok(hits.at(-1), `${id} (Haltung "${hold}") erkannt`);
+      n++;
+    }
+  }
+  console.log(`detect ${name}: ${n} Ausführungen erkannt`);
+}
+
 // Falscher Alg wird nicht erkannt
 const d = new AlgDetector(CASE_STATE['PLL T']);
 assert.ok(!"R U R' U' R U R' U'".split(' ').map((m) => d.push(m)).some(Boolean));

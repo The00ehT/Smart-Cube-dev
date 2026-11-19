@@ -591,15 +591,6 @@ dialog.big-dialog { width: min(1100px, calc(100vw - 24px)); max-width: none; max
 .rec-moves { font: 600 20px/1.5 var(--mono); min-height: 2.2em; padding: 10px; border-radius: 10px; background: var(--panel); word-break: break-word; }
 
 /* Trainer */
-.tr-main { display: grid; gap: 12px; justify-items: center; text-align: center; padding: 8px 0 4px; }
-.tr-setup { justify-content: center; margin: 0; min-height: 0; }
-.tr-timer { font: 750 clamp(64px, 16vw, 120px)/1 var(--num-font); }
-.tr-timer.ready { color: var(--good); }
-.tr-timer.done { color: var(--accent); }
-.tr-buttons { display: flex; gap: 8px; }
-.tr-case { display: flex; gap: 14px; align-items: center; text-align: left; background: var(--panel-2); border-radius: 14px; padding: 12px 16px; }
-.tr-case .alg-text { font-size: 13px; margin-top: 4px; }
-.trainer-dialog { width: min(720px, calc(100vw - 24px)); }
 
 /* Archiv */
 .archive-btn { margin-top: 12px; }
@@ -1120,8 +1111,8 @@ dialog.watch-dialog[open] { display: flex; flex-direction: column; }
 .gyro-help p { margin: 0 0 6px; }
 
 /* ---------- Endlos-PLL ---------- */
-dialog.pll-drill[open] { display: flex; flex-direction: column; gap: 12px; }
-@media (min-width: 701px) { dialog.pll-drill { width: min(900px, calc(100vw - 24px)); } }
+dialog.trainer-dialog[open] { display: flex; flex-direction: column; gap: 12px; }
+@media (min-width: 701px) { dialog.trainer-dialog { width: min(900px, calc(100vw - 24px)); } }
 .pd-main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: center; }
 .pd-cube { height: min(46vh, 380px); }
 .pd-side { display: grid; gap: 10px; justify-items: center; text-align: center; }
@@ -1161,3 +1152,4 @@ dialog.pll-drill[open] { display: flex; flex-direction: column; gap: 12px; }
 .room-cmp:not(:empty) { margin: 10px 0; }
 .wv-back { align-self: center; margin-top: 10px; }
 .wv-hint { text-align: center; margin-top: 4px; }
+.tr-log tr.pb-row td:last-child { color: var(--good); font-weight: 700; }
