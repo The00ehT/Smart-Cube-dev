@@ -18,7 +18,7 @@ import { StatsView } from './ui/stats-view.js';
 import { donut, phaseSegments } from './ui/donut.js';
 import { profile, saveProfile, avatarHtml, resizeImage, EMOJIS } from './profile.js';
 import { Room, normalizeCode } from './room.js';
-import { RoomView } from './ui/room-view.js';
+import { RoomView, compareHtml } from './ui/room-view.js';
 import { AlgsView } from './ui/algs-view.js';
 import { Trainer } from './ui/trainer.js';
 import { ArchiveView } from './ui/archive-view.js';
@@ -35,6 +35,7 @@ import { modeGroups, findMode } from './modes.js';
 import { liveStage, barHtml } from './ui/live-bar.js';
 import { keepAwake } from './wake.js';
 import { InsightsView } from './ui/insights-view.js';
+import { PllDrill } from './ui/pll-drill.js';
 import { algsOf } from './algs.js';
 import { radarSvg } from './ui/radar.js';
 import { cfopTable, splitTone } from './ui/cfop-table.js';
@@ -77,6 +78,15 @@ const trainer = new Trainer($('trainer-dialog'), {
   crossFace: () => crossFace(),
   connected: () => !!app.conn,
   now: () => now(),
+});
+const pllDrill = new PllDrill($('pll-drill'), {
+  now: () => now(),
+  crossFace: () => crossFace(),
+  connected: () => !!app.conn,
+  // Der echte Würfel wurde verdreht: laufendes Scramble passt nicht mehr
+  onClose: () => {
+    if (!app.room && (app.phase === 'scrambling' || app.phase === 'ready' || app.phase === 'inspecting')) newScramble();
+  },
 });
 const algsView = new AlgsView($('tab-algs'), $('case-dialog'), {
   solves: () => solves,
@@ -198,6 +208,8 @@ function onMove(e) {
   const before = app.state;
   app.moveCounter = (app.moveCounter || 0) + 1;
   queueMicrotask(kickTick); // Statuswechsel (z. B. Start) sofort anzeigen
+  // Im Raum zugeschaut und selbst gedreht: zurück zum eigenen Würfel
+  if (roomView.watch.open) roomView.watch.close();
   app.state = applyMove(app.state, e.move);
   view.addMove(e.move);
   if (app.room) {
@@ -211,6 +223,7 @@ function onMove(e) {
 
   // Algorithmus am Würfel aufnehmen oder trainieren: dann kein Solve-Ablauf
   if (algsView.recording && $('case-dialog').open) return void algsView.recordMove(e.move);
+  if (pllDrill.active && pllDrill.onMove(e)) return;
   if (trainer.active && trainer.onMove(e, app.state)) return;
 
   switch (app.phase) {
@@ -395,12 +408,15 @@ function finishSolve() {
   $('live-bar').hidden = true;
   if (pb || newAo) celebrate(solve, pb ? L('Neue Bestzeit!', 'New PB!') : L(`Neuer bester Ø${newAo}!`, `New best ao${newAo}!`));
   const ghostDone = app.ghost ? finishGhostRun(solve) : false;
-  if (settings.showResult) showResult(solve, pb ? L('Neue Bestzeit!', 'New PB!') : newAo ? L(`Neuer bester Ø${newAo}!`, `New best ao${newAo}!`) : '');
+  // Im Raum immer: Ergebnis mit Vergleich zu den anderen
+  if (settings.showResult || app.room) showResult(solve, pb ? L('Neue Bestzeit!', 'New PB!') : newAo ? L(`Neuer bester Ø${newAo}!`, `New best ao${newAo}!`) : '');
   const summary = () => `${formatSolve(solve)} · ${metricsOf(solve)?.htm ?? solve.moveCount} ${L('Züge', 'moves')} · ${solve.tps.toFixed(2)} TPS${pb ? ` · ${L('Neue Bestzeit!', 'New PB!')} 🎉` : ''}`;
   setStatus(summary());
   if (app.room) {
     app.room.result(app.roomRound, solve);
+    app.lastRoomRound = app.roomRound;
     app.roomRound = null;
+    renderResultCompare();
     setStatus(summary() + L(' · warte auf die anderen …', ' · waiting for the others …'));
     app.room.live('state', { facelets: app.state });
     if (app.pendingRound) {
@@ -443,8 +459,17 @@ function cmpLegend(s) {
   return `<div class="cmp-legend small"><span class="cmp-scale"></span>${s.xcross ? L('verglichen mit deinen X-Cross-Solves', 'compared with your X-cross solves') : L('verglichen mit deinem Schnitt', 'compared with your average')}</div>`;
 }
 
+/** Vergleich mit den anderen im Ergebnis-Fenster (aktualisiert sich, wenn sie fertig werden) */
+function renderResultCompare() {
+  const box = $('res-room');
+  const round = app.room?.board?.find((b) => b.n === app.lastRoomRound);
+  box.hidden = !round;
+  box.innerHTML = round ? compareHtml(round, app.room.roster || [], app.room.myId) : '';
+}
+
 function showResult(solve, badge) {
   if (!hasDetail(solve)) return;
+  $('res-room').hidden = true;
   const m = metricsOf(solve);
   const [c, f, o, p] = phasesOf(solve, { mergeF2l: true });
   $('res-device').textContent = solve.device || '';
@@ -644,6 +669,11 @@ function setMode(id) {
   if (!m) return;
   if (m.kind === 'link') {
     if (id === 'room') showTab('room');
+    if (id === 'pll-endless') {
+      if (app.phase === 'running') return;
+      showTab('timer');
+      pllDrill.start();
+    }
     return;
   }
   if (app.room) return toast(L('Im Raum gibt der Gastgeber die Scrambles vor – verlasse zuerst den Raum.', 'In a room the host sets the scrambles – leave the room first.'));
@@ -894,9 +924,9 @@ function tick() {
       app.room.live('view', { q: [q.x, q.y, q.z, q.w].map((v) => Math.round(v * 1000) / 1000) });
     }
   }
-  const busy = solving || app.ghost?.running || app.room;
-  if (busy) tickRaf = requestAnimationFrame(tick);
-  else tickTimer = setTimeout(tick, 250);
+  // Flüssig nur, wenn eine Zeit läuft; im Raum reichen ~12 Durchläufe pro Sekunde (Lage senden)
+  if (solving || app.ghost?.running) tickRaf = requestAnimationFrame(tick);
+  else tickTimer = setTimeout(tick, app.room ? 80 : 250);
 }
 kickTick();
 
@@ -1832,6 +1862,7 @@ function onRoomEvent(ev) {
       break;
     case 'board':
       roomView.renderBoard(ev.board);
+      if (!$('result-overlay').hidden) renderResultCompare();
       if (room.isHost && app.roomAuto && room.roundComplete() && !app.nextRoundTimer) {
         roomView.message(L('Alle fertig – nächste Runde in 5 s …', 'Everyone done – next round in 5 s …'));
         app.nextRoundTimer = setTimeout(() => {
@@ -1846,6 +1877,7 @@ function onRoomEvent(ev) {
         break;
       }
       app.roomRound = ev.n;
+      if (roomView.watch.open) roomView.watch.close(); // neue Runde: zurück zum eigenen Scramble
       roomView.message(L(`Runde ${ev.n}: Scramble ausführen, der erste Zug danach startet die Zeit.`, `Round ${ev.n}: apply the scramble, the next move starts the timer.`));
       for (const c of roomView.cards.values()) c.el.querySelector('.person-time').textContent = '–';
       if (!isSolved(app.state) && app.conn) setStatus(L('Löse zuerst deinen Würfel (oder „Als gelöst markieren“), dann stimmt das Scramble.', 'Solve your cube first (or “Mark as solved”) so the scramble matches.'));
@@ -1984,5 +2016,5 @@ openSharedFromHash();
 openRoomFromHash();
 
 // Testzugang: mit ?debug in der URL lassen sich Würfel-Ereignisse simulieren (z. B. Gyro-Daten)
-if (new URLSearchParams(location.search).has('debug')) window.__smartcube = { emit: onCubeEvent, app, settings };
+if (new URLSearchParams(location.search).has('debug')) window.__smartcube = { emit: onCubeEvent, app, settings, pllDrill, roomView };
 window.addEventListener('hashchange', openSharedFromHash);

@@ -44,6 +44,7 @@ export class RoomView {
       </div>
       <div class="room-msg small"></div>
       <div class="room-people"></div>
+      <div class="room-cmp"></div>
       <div class="table-wrap"><table class="phase-table room-board"></table></div>`;
     panel.querySelector('.room-copy').addEventListener('click', () => this.h.onInvite());
     panel.querySelector('.room-next').addEventListener('click', () => this.h.onNextRound());
@@ -70,9 +71,12 @@ export class RoomView {
           <div class="wv-moves"></div>
           <div class="wv-result"></div>
         </div>
-      </div>`;
+      </div>
+      <button type="button" class="primary wv-back">← ${L('Zurück zu meinem Würfel', 'Back to my cube')}</button>
+      <div class="small wv-hint">${L('Sobald du selbst drehst, geht es automatisch zurück.', 'As soon as you turn your own cube, it goes back automatically.')}</div>`;
     document.body.append(this.watch);
     this.watch.querySelector('.rp-close').addEventListener('click', () => this.watch.close());
+    this.watch.querySelector('.wv-back').addEventListener('click', () => this.watch.close());
     this.watch.addEventListener('close', () => {
       this.watchId = null;
       this.watchCube?.cube.dispose();
@@ -296,6 +300,10 @@ export class RoomView {
     const table = this.panel.querySelector('.room-board');
     const round = board.at(-1);
     this.panel.querySelector('.room-round').textContent = round ? `${L('Runde', 'Round')} ${round.n}` : L('Noch keine Runde', 'No round yet');
+    // Immer der Vergleich der aktuellen (bzw. letzten) Runde
+    // Letzte Runde mit Ergebnissen (eine gerade gestartete, leere Runde verdrängt den Vergleich nicht)
+    const shown = [...board].reverse().find((b) => Object.keys(b.results || {}).length) || round;
+    this.panel.querySelector('.room-cmp').innerHTML = shown && roster.length ? compareHtml(shown, roster, this.room?.myId) : '';
     if (!board.length || !roster.length) {
       table.innerHTML = '';
       return;
@@ -378,4 +386,70 @@ export class RoomView {
     }
     this.strip.hidden = false;
   }
+}
+
+/**
+ * Vergleich einer Runde: alle Teilnehmer nebeneinander – Zeit, Cross, F2L, OLL, PLL, Züge, TPS.
+ * Bester Wert je Zeile grün, bei den anderen der Abstand dazu.
+ */
+export function compareHtml(round, roster, myId) {
+  if (!round) return '';
+  const people = [...roster].sort((a, b) => (a.id === myId ? -1 : b.id === myId ? 1 : 0));
+  const res = (p) => round.results?.[p.id];
+  const eff = (r) => (!r ? null : r.penalty === 'DNF' ? Infinity : r.time + (r.penalty || 0));
+  const done = people.filter((p) => res(p));
+  const t = (x) => (x == null ? '–' : formatTime(x));
+  const rows = [
+    { k: L('Zeit', 'Time'), v: (r) => eff(r), f: (r) => formatSolve(r), main: true },
+    { k: 'Cross', v: (r) => r.splits?.cross?.[0], f: (r) => t(r.splits?.cross?.[0]) + (r.splits?.x ? ' <span class="tag">X</span>' : ''), cls: 'ph-cross' },
+    { k: 'F2L', v: (r) => r.splits?.f2l?.[0], f: (r) => t(r.splits?.f2l?.[0]), cls: 'ph-pair' },
+    { k: 'OLL', v: (r) => r.splits?.oll?.[0], f: (r) => t(r.splits?.oll?.[0]), cls: 'ph-oll' },
+    { k: 'PLL', v: (r) => r.splits?.pll?.[0], f: (r) => t(r.splits?.pll?.[0]), cls: 'ph-pll' },
+    { k: L('Züge', 'Moves'), v: (r) => r.moveCount, f: (r) => String(r.moveCount ?? '–'), num: true },
+    { k: 'TPS', v: (r) => (r.tps == null ? null : -r.tps), f: (r) => (r.tps == null ? '–' : r.tps.toFixed(2)), num: true },
+  ];
+  const head = `<tr><th></th>${people
+    .map((p) => `<th><span class="avatar">${avatarHtml({ name: p.name, avatar: p.avatar })}</span><span class="rc-name">${p.id === myId ? L('Du', 'You') : esc(p.name)}</span></th>`)
+    .join('')}</tr>`;
+  const body = rows
+    .map((row) => {
+      const vals = people.map((p) => (res(p) ? row.v(res(p)) : null));
+      const finite = vals.filter((v) => v != null && Number.isFinite(v));
+      const best = finite.length > 1 ? Math.min(...finite) : null;
+      const cells = people
+        .map((p, i) => {
+          const r = res(p);
+          if (!r) return `<td class="small rc-wait">${L('löst …', 'solving …')}</td>`;
+          const v = vals[i];
+          const win = best != null && v === best;
+          const diff = best != null && v != null && Number.isFinite(v) && !win ? (row.num ? `<small>${row.k === 'TPS' ? '' : '+' + (v - best)}</small>` : `<small>+${formatTime(v - best)}</small>`) : '';
+          return `<td class="${win ? 'win' : ''}">${row.f(r)}${diff}</td>`;
+        })
+        .join('');
+      return `<tr class="${row.main ? 'rc-main' : ''}"><td class="rc-k">${row.cls ? `<i class="key ${row.cls}"></i>` : ''}${row.k}</td>${cells}</tr>`;
+    })
+    .join('');
+  // Fazit
+  let verdict = '';
+  const times = done.map((p) => [p, eff(res(p))]).filter(([, v]) => Number.isFinite(v));
+  if (done.length < people.length) verdict = L(`Warte auf ${people.length - done.length} …`, `Waiting for ${people.length - done.length} …`);
+  else if (times.length) {
+    const [winner, wt] = times.reduce((a, b) => (b[1] < a[1] ? b : a));
+    const second = times.filter(([p]) => p !== winner).map(([, v]) => v);
+    const gap = second.length ? Math.min(...second) - wt : null;
+    const me = winner.id === myId;
+    verdict = `🏆 ${me ? L('Du gewinnst', 'You win') : `${esc(winner.name)} ${L('gewinnt', 'wins')}`}${gap != null && gap > 0 ? ` ${L('mit', 'by')} ${formatTime(gap)}` : ''}`;
+    // Wo war ich besser?
+    const mine = res(people.find((p) => p.id === myId) || {});
+    if (mine?.splits && people.length > 1) {
+      const others = people.filter((p) => p.id !== myId && res(p)?.splits);
+      const better = ['cross', 'f2l', 'oll', 'pll'].filter((k) => others.length && others.every((p) => res(p).splits[k][0] > mine.splits[k][0]));
+      const names = { cross: 'Cross', f2l: 'F2L', oll: 'OLL', pll: 'PLL' };
+      if (better.length) verdict += ` · ${L('Du warst schneller bei', 'You were faster at')} ${better.map((k) => names[k]).join(', ')}`;
+    }
+  }
+  return `<div class="room-compare">
+    <div class="rc-head"><b>${L('Vergleich', 'Comparison')} · ${L('Runde', 'Round')} ${round.n}</b><span class="small rc-verdict">${verdict}</span></div>
+    <div class="table-wrap"><table class="rc-table">${head}${body}</table></div>
+  </div>`;
 }

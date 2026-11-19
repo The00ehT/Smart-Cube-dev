@@ -329,7 +329,8 @@ export class Cube3D {
 
   /** Ziel-Lage der ganzen Gruppe (wird weich angesteuert) */
   setOrientation(q) {
-    this.target.set(q.x, q.y, q.z, q.w);
+    // normieren: gerundete Werte (z. B. aus dem Raum) wären sonst nie ganz erreichbar → Dauer-Zeichnen
+    this.target.set(q.x, q.y, q.z, q.w).normalize();
     this.dirty = true;
   }
 

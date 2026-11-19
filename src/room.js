@@ -138,7 +138,7 @@ export class Room {
   #recordResult(r) {
     const round = this.board.find((b) => b.n === r.n);
     if (!round) return;
-    round.results[r.from] = { time: r.time, penalty: r.penalty, moveCount: r.moveCount, tps: r.tps };
+    round.results[r.from] = { time: r.time, penalty: r.penalty, moveCount: r.moveCount, tps: r.tps, splits: cleanSplits(r.splits) };
     this.#publishBoard();
     this.emit({ type: 'result', ...r });
   }
@@ -231,7 +231,7 @@ export class Room {
   }
 
   result(n, solve) {
-    const r = { type: 'result', n, time: solve.time, penalty: solve.penalty, moveCount: solve.moveCount, tps: solve.tps };
+    const r = { type: 'result', n, time: solve.time, penalty: solve.penalty, moveCount: solve.moveCount, tps: solve.tps, splits: splitsOf(solve) };
     if (this.isHost) this.#recordResult({ ...r, from: HOST });
     else if (this.hostConn?.open) this.hostConn.send(r);
   }
@@ -254,4 +254,25 @@ function sanitizeAvatar(a) {
   if (a.type === 'emoji' && typeof a.value === 'string' && a.value.length <= 16) return a;
   if (a.type === 'image' && typeof a.value === 'string' && a.value.startsWith('data:image/') && a.value.length < 60000) return a;
   return null;
+}
+
+/** Phasen eines Solves für den Vergleich im Raum: Cross · F2L · OLL · PLL (Zeit und Züge) */
+function splitsOf(solve) {
+  const ph = solve.phases;
+  if (!ph || ph.length < 7) return null;
+  const sum = (k) => ph.slice(1, 5).reduce((a, p) => a + (p[k] || 0), 0);
+  return {
+    cross: [ph[0].time, ph[0].moves],
+    f2l: [sum('time'), sum('moves')],
+    oll: [ph[5].time, ph[5].moves],
+    pll: [ph[6].time, ph[6].moves],
+    x: !!solve.xcross,
+  };
+}
+/** Fremde Daten nur als Zahlen übernehmen */
+function cleanSplits(s) {
+  if (!s || typeof s !== 'object') return null;
+  const pair = (v) => (Array.isArray(v) && v.length === 2 && v.every((n) => Number.isFinite(n) && n >= 0 && n < 3.6e6) ? [Math.round(v[0]), Math.round(v[1])] : null);
+  const out = { cross: pair(s.cross), f2l: pair(s.f2l), oll: pair(s.oll), pll: pair(s.pll), x: s.x === true };
+  return out.cross && out.f2l && out.oll && out.pll ? out : null;
 }
