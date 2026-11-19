@@ -32,6 +32,7 @@ import { L, locale, dec, translateStatic, lang } from './i18n.js';
 const MV = L('Züge', 'moves');
 import { metricsOf, skillProfile, SKILLS } from './metrics.js';
 import { modeGroups, findMode } from './modes.js';
+import { liveStage, barHtml } from './ui/live-bar.js';
 import { InsightsView } from './ui/insights-view.js';
 import { algsOf } from './algs.js';
 import { radarSvg } from './ui/radar.js';
@@ -197,7 +198,11 @@ function onMove(e) {
   app.moveCounter = (app.moveCounter || 0) + 1;
   app.state = applyMove(app.state, e.move);
   view.addMove(e.move);
-  app.room?.live('move', { m: e.move });
+  if (app.room) {
+    // t = Zeit im Solve (0 = dieser Zug startet ihn) – damit Zuschauer Splits berechnen können
+    const t = app.phase === 'running' ? Math.round(now() - app.startLocal) : app.phase === 'ready' || app.phase === 'inspecting' ? 0 : null;
+    app.room.live('move', { m: e.move, t });
+  }
   app.lastMoves.push(e.move);
   if (app.lastMoves.length > 40) app.lastMoves.shift();
   $('last-moves').textContent = app.lastMoves.join(' ');
@@ -498,26 +503,6 @@ $('res-share').addEventListener('click', () => {
 
 // ---------------- Live-Phasen ----------------
 
-const STAGES = ['Cross', 'F2L 1', 'F2L 2', 'F2L 3', 'F2L 4', 'OLL', 'PLL'];
-const STAGE_CLASS = ['ph-cross', 'ph-pair', 'ph-pair', 'ph-pair', 'ph-pair', 'ph-oll', 'ph-pll'];
-const bits = (m) => (m & 1) + ((m >> 1) & 1) + ((m >> 2) & 1) + ((m >> 3) & 1);
-
-/** Wie weit ist der Solve? 0 = nichts, 1 = Kreuz, 2–5 = Paare, 6 = OLL, 7 = gelöst */
-function liveStage(state) {
-  if (isSolved(state)) return 7;
-  const st = phaseStatus(state);
-  let best = 0;
-  for (const f of FACES) {
-    if (!st[f].cross) continue;
-    best = Math.max(best, st[f].oll ? 6 : 1 + bits(solvedSlots(state, f)));
-  }
-  return best;
-}
-
-function barHtml(stage) {
-  return `<div class="lb-segs">${STAGES.map((n, i) => `<span class="lb-seg ${STAGE_CLASS[i]}${i < stage ? ' done' : i === stage ? ' cur' : ''}" title="${n}"></span>`).join('')}</div>
-    <div class="lb-label">${stage >= 7 ? L('Gelöst', 'Solved') : STAGES[stage]}</div>`;
-}
 function renderLiveBar() {
   const el = $('live-bar');
   el.hidden = app.phase !== 'running';
@@ -881,7 +866,18 @@ function tick() {
   // Im Raum: Statuswechsel an die anderen melden
   if (app.room && app.phase !== app.sentPhase) {
     app.sentPhase = app.phase;
-    app.room.live('status', { phase: app.phase, elapsed: app.phase === 'running' ? now() - app.startLocal : 0 });
+    sendRoomStatus();
+  }
+  // Lage des Würfels (Gyro bzw. Ansicht) für Zuschauer, höchstens ~12× pro Sekunde
+  const nowMs = performance.now();
+  if (app.room && nowMs - (app.sentViewAt || 0) > 80) {
+    const q = view.target;
+    const last = app.sentView;
+    if (q && (!last || Math.abs(q.x - last.x) + Math.abs(q.y - last.y) + Math.abs(q.z - last.z) + Math.abs(q.w - last.w) > 0.01)) {
+      app.sentView = { ...q };
+      app.sentViewAt = nowMs;
+      app.room.live('view', { q: [q.x, q.y, q.z, q.w].map((v) => Math.round(v * 1000) / 1000) });
+    }
   }
   requestAnimationFrame(tick);
 }
@@ -1768,12 +1764,19 @@ async function inviteToRoom() {
   }
 }
 
+/** Eigenen Stand an die anderen: Phase, laufende Zeit und Würfelzustand */
+function sendRoomStatus() {
+  app.room?.live('status', { phase: app.phase, elapsed: app.phase === 'running' ? now() - app.startLocal : 0, facelets: app.state });
+}
+
 function onRoomEvent(ev) {
   const room = app.room;
   if (!room) return;
   switch (ev.type) {
     case 'roster':
       roomView.renderRoster(ev.roster);
+      sendRoomStatus(); // Neue im Raum sehen sofort den aktuellen Würfel
+      app.sentView = null;
       break;
     case 'board':
       roomView.renderBoard(ev.board);
@@ -1879,7 +1882,11 @@ function leaveRoom(silent) {
   if (!silent) setStatus(L('Raum verlassen.', 'Left the room.'));
 }
 
-$('room-strip').addEventListener('click', () => showTab('room'));
+$('room-strip').addEventListener('click', (e) => {
+  const who = e.target.closest('[data-watch]');
+  if (who) roomView.openWatch(who.dataset.watch); // Mitspieler antippen = zuschauen
+  else showTab('room');
+});
 $('room-create').addEventListener('click', () => enterRoom('create'));
 $('room-join').addEventListener('click', () => enterRoom('join', $('room-code').value));
 $('room-code').addEventListener('input', (e) => (e.target.value = normalizeCode(e.target.value)));

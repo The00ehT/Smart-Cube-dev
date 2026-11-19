@@ -1085,3 +1085,32 @@ body.solving .mode-chip { display: none; }
   .skin-preview { width: 220px; height: 220px; }
   .skin-presets { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+
+/* ---------- Raum: Zuschauen ---------- */
+.room-people .person:not(.me) { cursor: pointer; }
+.room-people .person:not(.me):hover { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent); }
+.person-watch { text-align: center; color: var(--accent); font-weight: 600; }
+dialog.watch-dialog[open] { display: flex; flex-direction: column; }
+@media (min-width: 701px) { dialog.watch-dialog { width: min(1000px, calc(100vw - 24px)); height: min(720px, calc(100dvh - 24px)); } }
+.wv-who { display: flex; align-items: center; gap: 12px; }
+.wv-who h2 { margin: 0; }
+.watch-dialog.running .wv-status { color: var(--good); font-weight: 600; }
+.wv-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; }
+.wv-cube { min-height: 260px; border-radius: 16px; background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 70%); }
+.wv-side { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: auto; }
+.wv-time { font: 800 clamp(48px, 9vw, 76px)/1 var(--num-font); letter-spacing: -0.02em; }
+.watch-dialog.running .wv-time { color: var(--accent); }
+.wv-bar:empty { display: none; }
+.wv-bar { margin: 0; max-width: none; }
+.wv-mv { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.wv-mv span { font: 600 14px var(--mono); padding: 3px 7px; border-radius: 7px; background: var(--panel-2); }
+.wv-mv span.new { background: var(--accent); color: var(--accent-text); }
+.wv-final { font: 750 22px var(--num-font); margin-bottom: 6px; }
+.wv-sol { margin-top: 8px; }
+.wv-sol summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+@media (max-width: 700px) {
+  .wv-body { display: flex; flex-direction: column; gap: 8px; }
+  .wv-cube { flex: 1 1 0; min-height: 220px; }
+  .wv-side { flex: none; max-height: 48%; }
+  .wv-time { font-size: 56px; text-align: center; }
+}
