@@ -842,3 +842,5 @@ body.solving .solve-metrics { display: none !important; }
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .kpi-v { font-size: 22px; }
 }
+/* Knöpfe im Ergebnis immer sichtbar (am Handy beim Scrollen unten fixiert) */
+.res-actions { position: sticky; bottom: -14px; background: var(--panel); padding: 10px 0 4px; margin-bottom: -4px; }
