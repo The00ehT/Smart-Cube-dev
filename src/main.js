@@ -197,6 +197,7 @@ function onMove(e) {
   if (!$('result-overlay').hidden) hideResult();
   const before = app.state;
   app.moveCounter = (app.moveCounter || 0) + 1;
+  queueMicrotask(kickTick); // Statuswechsel (z. B. Start) sofort anzeigen
   app.state = applyMove(app.state, e.move);
   view.addMove(e.move);
   if (app.room) {
@@ -329,6 +330,7 @@ function ownScramble() {
 
 function enterReady() {
   app.inspectionPenalty = 0;
+  queueMicrotask(kickTick);
   if (settings.inspection) {
     app.phase = 'inspecting';
     app.inspectionStart = now();
@@ -854,7 +856,19 @@ function renderTimer() {
   }
 }
 
+/**
+ * Haupt-Schleife. Strom sparen: Nur beim Lösen, bei Inspektion, Geister-Rennen oder im Raum
+ * läuft sie mit jedem Bildschirm-Frame, sonst nur 4× pro Sekunde (ein Zug weckt sie sofort).
+ */
+let tickRaf = null;
+let tickTimer = null;
+function kickTick() {
+  clearTimeout(tickTimer);
+  tickTimer = null;
+  if (tickRaf == null) tickRaf = requestAnimationFrame(tick);
+}
 function tick() {
+  tickRaf = null;
   if (app.phase === 'running' || app.phase === 'inspecting') renderTimer();
   if (app.ghost?.running) ghostTick();
   // Fokus-Modus: beim Lösen nur Timer (und Würfel) zeigen
@@ -880,9 +894,11 @@ function tick() {
       app.room.live('view', { q: [q.x, q.y, q.z, q.w].map((v) => Math.round(v * 1000) / 1000) });
     }
   }
-  requestAnimationFrame(tick);
+  const busy = solving || app.ghost?.running || app.room;
+  if (busy) tickRaf = requestAnimationFrame(tick);
+  else tickTimer = setTimeout(tick, 250);
 }
-requestAnimationFrame(tick);
+kickTick();
 
 /** Kleiner Ring 0–100 (Flüssigkeit) */
 function gauge(v) {
@@ -1217,6 +1233,12 @@ bindToggle('opt-hide-time', 'hideTime');
 bindToggle('opt-result', 'showResult');
 bindToggle('opt-awake', 'keepAwake', (on) => keepAwake(on));
 keepAwake(settings.keepAwake);
+$('gyro-help').innerHTML = L(
+  `<p>Aus spart Akku am <b>Handy</b>: Die App verarbeitet dann keine Lagedaten und zeichnet den Würfel nur bei Zügen neu. Den <b>Würfel-Akku</b> schont das nicht – das Gyroskop im Würfel lässt sich nur mit GANs eigenem, nicht veröffentlichtem Befehl abschalten.</p>
+   <p>💡 <b>GAN i4:</b> In Cube Station den Modus <b>Endurance</b> wählen (Gyroskop aus, laut GAN bis ~200 h statt ~30 h Akku). Danach hier ganz normal verbinden – Züge, Zeiten und Analyse funktionieren weiter, nur Rotations/Regrips fehlen. Ob der Würfel den Modus dauerhaft behält, bitte einmal ausprobieren.</p>`,
+  `<p>Off saves battery on your <b>phone</b>: the app then ignores orientation data and only redraws the cube on moves. It does not save the <b>cube’s</b> battery – the gyroscope inside the cube can only be turned off with GAN’s own, unpublished command.</p>
+   <p>💡 <b>GAN i4:</b> choose <b>Endurance</b> mode in Cube Station (gyroscope off, per GAN up to ~200 h instead of ~30 h). Then connect here as usual – moves, times and analysis keep working, only rotations/regrips are missing. Please check whether the cube keeps the mode permanently.</p>`,
+);
 bindToggle('opt-gyro', 'gyro', (on) => {
   view.setGyroEnabled(on);
   if (!on) app.lastGyro = null;

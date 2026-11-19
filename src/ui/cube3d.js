@@ -107,7 +107,6 @@ export class Cube3D {
     this.resize();
     this.frame = this.frame.bind(this);
     this.dirty = true;
-    requestAnimationFrame(this.frame);
   }
 
   /** Steine und Farbflächen (neu) aufbauen */
@@ -272,6 +271,7 @@ export class Cube3D {
     if (!p) return;
     if (p.amount === 2) this.queue.push({ face: p.face, amount: 1 }, { face: p.face, amount: 1 });
     else this.queue.push(p);
+    this.wake();
     // Bei schnellen Zügen nicht hinterherhinken: laufende Animation abschließen
     if (this.anim && this.queue.length > 1) this.finishAnim(true);
     this.dirty = true;
@@ -315,6 +315,7 @@ export class Cube3D {
   setSpin(radPerSec) {
     this.spin = radPerSec;
     this.lastFrame = null;
+    this.wake();
   }
 
   /** Von Hand drehen (Ziehen mit dem Finger): Winkel um die senkrechte und waagerechte Achse */
@@ -344,7 +345,23 @@ export class Cube3D {
     this.dirty = true;
   }
 
+  /**
+   * Strom sparen: Die Zeichenschleife läuft nur, solange sich etwas bewegt (Zug, Drehung, Gyro).
+   * Jede Änderung setzt dirty = true und weckt sie wieder.
+   */
+  get dirty() {
+    return this._dirty;
+  }
+  set dirty(v) {
+    this._dirty = v;
+    if (v) this.wake();
+  }
+  wake() {
+    if (this._raf == null && !this.disposed) this._raf = requestAnimationFrame((t) => this.frame(t));
+  }
+
   frame(now) {
+    this._raf = null;
     if (this.disposed) return;
     if (this.spin) {
       const dt = this.lastFrame == null ? 0 : Math.min(0.1, (now - this.lastFrame) / 1000);
@@ -364,11 +381,13 @@ export class Cube3D {
       this.root.quaternion.slerp(this.target, 0.25);
       this.dirty = true;
     }
-    if (this.dirty) {
+    if (this._dirty) {
       this.renderer.render(this.scene, this.camera);
-      this.dirty = false;
+      this._dirty = false;
     }
-    requestAnimationFrame(this.frame);
+    // Weiterlaufen nur, wenn noch etwas in Bewegung ist
+    if (this.anim || this.queue.length || this.spin || this.root.quaternion.angleTo(this.target) > 0.002) this.wake();
+    else this.lastFrame = null;
   }
 
   dispose() {

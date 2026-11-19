@@ -354,7 +354,10 @@ export class RoomView {
       if (!wc.view && this.watchCube) this.watchCube.setDownFace(wc.phase === 'running' ? liveCrossFace(wc.state) : null);
     }
     this.#renderStrip();
-    requestAnimationFrame(() => this.#tick());
+    // Strom sparen: flüssig nur, wenn jemand löst oder zugeschaut wird; ohne Raum fast gar nicht
+    const busy = this.room && (this.watch.open || [...this.cards.values()].some((c) => c.phase === 'running'));
+    if (busy) requestAnimationFrame(() => this.#tick());
+    else setTimeout(() => this.#tick(), this.room ? 250 : 1000);
   }
 
   /** Kurzleiste im Timer-Tab: die anderen mit Status bzw. Zeit */
