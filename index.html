@@ -66,12 +66,12 @@
           <section class="card timer-card">
             <div class="scramble-box">
               <div class="scramble-head">
-                <span class="label" id="scramble-label">Scramble</span>
-                <div class="scramble-buttons">
-                  <button id="btn-new-scramble" class="ghost">Neues Scramble</button>
-                  <button id="btn-own-scramble" class="ghost" title="Du verdrehst selbst – der nächste Zug startet die Zeit">Eigenes</button>
-                  <button id="btn-ghost" class="ghost" title="Gegen deine Bestzeit antreten – ihr Geisterwürfel löst live mit">👻 Gegen Bestzeit</button>
-                </div>
+                <button type="button" class="mode-chip" id="mode-btn" aria-haspopup="dialog" title="Modus wählen">
+                  <span class="mode-ic" id="mode-ic">🎲</span>
+                  <span class="mode-txt"><span class="mode-kicker">Modus</span><b id="mode-name">Standard</b></span>
+                  <span class="mode-chev" aria-hidden="true">▾</span>
+                </button>
+                <button type="button" id="btn-new-scramble" class="ghost new-scr" title="Neues Scramble"><span aria-hidden="true">↻</span><span class="new-scr-tx">Neu</span></button>
               </div>
               <div class="scramble" id="scramble" aria-live="polite"></div>
               <div class="progress"><div id="scramble-progress"></div></div>
@@ -226,6 +226,7 @@
         <div class="small" id="sd-date"></div>
         <div class="solve-metrics in-dialog" id="sd-metrics"></div>
         <div id="sd-pie"></div>
+        <div id="sd-cfop"></div>
         <table class="phase-table" id="sd-phases"></table>
         <div class="kv" id="sd-info"></div>
         <div class="label">Scramble</div>
@@ -386,13 +387,6 @@
             <option value="L">Orange</option>
           </select>
         </label>
-        <label class="select-row">Scramble-Art
-          <select id="opt-scramble-type">
-            <option value="wca">Normal (WCA-Zufallszustand)</option>
-            <option value="cross2">Leicht: 2 Cross-Kanten schon gelöst</option>
-            <option value="xcross">X-Cross üben: 2 Cross-Kanten + 1 Paar gelöst</option>
-          </select>
-        </label>
       </section>
 
       <section class="set-sec">
@@ -427,6 +421,13 @@
       </section>
     </dialog>
 
+    <dialog id="mode-dialog" class="mode-dialog">
+      <div class="rp-head">
+        <div><h2>Modus wählen</h2><div class="small">Bleibt eingestellt, bis du ihn wechselst.</div></div>
+        <button class="rp-close" id="mode-close" aria-label="Schließen">✕</button>
+      </div>
+      <div id="mode-list"></div>
+    </dialog>
     <dialog id="replay-dialog" class="big-dialog"></dialog>
     <dialog id="case-dialog" class="big-dialog case-dialog"></dialog>
     <dialog id="trainer-dialog" class="big-dialog trainer-dialog"></dialog>

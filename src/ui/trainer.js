@@ -4,11 +4,12 @@
  * Erkennung (Pause bis zum ersten Zug) und Ausführung (erster Zug bis gelöst).
  * Langsame und neue Fälle kommen öfter dran.
  */
+import { groupAlg } from '../cube/alg-format.js';
 import { L } from '../i18n.js';
 import { ScrambleTracker } from '../cube/scramble-tracker.js';
 import { applyAnyAlg, CROSS_DOWN, isSolved, relativeState } from '../cube/facelets.js';
 import { stateForAlg, bodyCaseState, solvedUpToAuf, f2lSolved, llOriented, CASE_STATE } from '../cube/ll-cases.js';
-import { algData, mainAlg, recordTraining, caseName } from '../algs.js';
+import { algData, mainAlg, recordTraining, caseName, trainingBest } from '../algs.js';
 import { setupAlgFor } from './cube-view.js';
 import { caseDiagram } from './ll-diagram.js';
 import { formatTime } from '../stats.js';
@@ -170,7 +171,7 @@ export class Trainer {
       const exec = t - this.firstAt;
       const recog = this.firstAt - this.readyAt;
       this.phase = 'done';
-      recordTraining(this.caseId, exec, recog);
+      this.newPb = recordTraining(this.caseId, exec, recog);
       this.session.push({ id: this.caseId, exec, recog, moves: this.moves });
       this.showResult(exec, recog);
       this.renderLog();
@@ -194,8 +195,8 @@ export class Trainer {
         <div>
           <b>${esc(caseName(id))}</b>
           <div class="small">Recog ${formatTime(recog)} · Exec ${formatTime(exec)} · ${this.moves} ${L('Züge', 'moves')}</div>
-          <div class="small">${L('Ø der letzten', 'Ø of last')} ${hist.length}: ${formatTime(avg(hist))}</div>
-          <div class="alg-text small">${esc(mainAlg(id))}</div>
+          <div class="small">${L('Ø der letzten', 'Ø of last')} ${hist.length}: ${formatTime(avg(hist))} · PB ${formatTime(trainingBest(id))}${this.newPb ? ` <span class="tag pb-tag">🏆 ${L('Neue Bestzeit', 'New PB')}</span>` : ''}</div>
+          <div class="alg-text small">${esc(groupAlg(mainAlg(id)))}</div>
         </div>
       </div>`;
     d.querySelector('[data-act=next]').hidden = false;

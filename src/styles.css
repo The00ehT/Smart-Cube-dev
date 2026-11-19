@@ -875,9 +875,6 @@ body.tab-timer.solving .timer-card { overflow: visible; }
   body.tab-timer .timer-card, body.tab-timer .cube-card { display: contents; }
   body.tab-timer .scramble-box { order: 1; background: var(--panel); border-radius: 16px; box-shadow: var(--shadow); padding: 10px 12px; }
   body.tab-timer .scramble { margin-top: 8px; min-height: 0; gap: 5px; }
-  body.tab-timer .scramble-head .label { display: none; }
-  body.tab-timer .scramble-buttons { display: flex; gap: 6px; flex-wrap: nowrap; width: 100%; }
-  body.tab-timer .scramble-buttons button { flex: 1 1 auto; white-space: nowrap; font-size: 12.5px; padding: 6px 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   body.tab-timer .scramble .mv { font-size: 15px; min-width: 30px; padding: 4px 5px; }
   body.tab-timer .progress { margin-top: 8px; }
   body.tab-timer .cube { order: 2; flex: 1 1 0; min-height: 110px; }
@@ -908,3 +905,84 @@ body.tab-timer.solving .timer-card { overflow: visible; }
   /* Beim Lösen: Würfel und Zeit groß */
   body.tab-timer.solving .timer { font-size: clamp(72px, 22vw, 104px); }
 }
+
+/* ---------- Modus-Wahl ---------- */
+.scramble-head { flex-wrap: nowrap; }
+.tone-blue { --tone: #2563eb; } .tone-green { --tone: #16a34a; } .tone-teal { --tone: #0d9488; }
+.tone-gray { --tone: #64748b; } .tone-purple { --tone: #7c3aed; } .tone-orange { --tone: #ea580c; } .tone-pink { --tone: #db2777; }
+.mode-chip {
+  display: inline-flex; align-items: center; gap: 10px; min-width: 0; max-width: 100%;
+  padding: 5px 12px 5px 5px; border-radius: 14px; text-align: left;
+  background: color-mix(in srgb, var(--tone, var(--accent)) 9%, var(--panel)); border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 22%, transparent);
+}
+.mode-chip:hover { background: color-mix(in srgb, var(--tone, var(--accent)) 15%, var(--panel)); }
+.mode-ic {
+  width: 32px; height: 32px; flex: none; display: grid; place-items: center; border-radius: 10px; font-size: 17px;
+  background: var(--tone, var(--accent)); color: #fff;
+}
+.mode-txt { display: grid; line-height: 1.15; min-width: 0; }
+.mode-kicker { font-size: 10.5px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+.mode-txt b { font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mode-chev { color: var(--muted); font-size: 12px; margin-left: auto; padding-left: 4px; }
+.new-scr { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 12px; flex: none; }
+.new-scr > span:first-child { font-size: 17px; line-height: 1; }
+.own-box { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.own-box .msg { font-size: 15px; }
+
+dialog.mode-dialog { width: min(640px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; }
+.mode-dialog .rp-head h2 { margin: 0 0 2px; }
+.mode-group { margin-top: 6px; }
+.mode-group + .mode-group { margin-top: 16px; }
+.mode-group h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+.mode-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.mode-card {
+  position: relative; display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 16px; text-align: left;
+  background: var(--panel-2); border: 1.5px solid transparent; color: var(--text); min-width: 0;
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
+}
+.mode-card:hover:not(:disabled) { border-color: color-mix(in srgb, var(--tone) 35%, transparent); }
+.mode-card:active:not(:disabled) { transform: scale(0.98); }
+.mode-card.on { border-color: var(--tone); background: color-mix(in srgb, var(--tone) 8%, var(--panel)); }
+.mode-card:disabled { opacity: 0.55; cursor: not-allowed; }
+.mode-card-ic {
+  width: 44px; height: 44px; flex: none; display: grid; place-items: center; border-radius: 13px; font-size: 22px;
+  background: color-mix(in srgb, var(--tone) 14%, var(--panel)); color: var(--tone);
+}
+.mode-card-tx { display: grid; gap: 2px; min-width: 0; padding-right: 18px; white-space: normal; }
+.mode-card-tx b { font-size: 15px; }
+.mode-card-tx span { font-size: 12.5px; color: var(--muted); line-height: 1.3; }
+.mode-check {
+  position: absolute; top: 10px; right: 10px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--tone); color: #fff; font-size: 12px; font-weight: 700;
+}
+body.solving .mode-chip { display: none; }
+
+@media (max-width: 700px) {
+  /* Auswahl als Blatt von unten */
+  dialog.mode-dialog[open] {
+    margin: auto 0 0; width: 100%; max-width: none; border-radius: 22px 22px 0 0;
+    padding: 16px 16px calc(16px + var(--safe-bottom));
+    animation: sheet-up 0.22s ease-out;
+  }
+  .mode-grid { grid-template-columns: minmax(0, 1fr); }
+  body.tab-timer .mode-chip { flex: 1; }
+  body.tab-timer .new-scr { padding: 8px 12px; }
+}
+@keyframes sheet-up { from { transform: translateY(40px); opacity: 0.6; } to { transform: none; opacity: 1; } }
+
+/* Bestzeiten bei Algorithmen */
+.stat.pb .v { color: var(--good); }
+.pb-tag { background: var(--good-soft); color: var(--good); }
+
+/* Splits im Vergleich zum Schnitt: rot (langsamer) → gelb (≈ Ø) → grün (schneller) */
+.ct-tv[data-cmp] {
+  color: hsl(var(--h) 70% 33%); background: hsl(var(--h) 85% 50% / 0.16);
+  padding: 1px 6px; border-radius: 7px; margin: -1px -6px;
+}
+:root[data-theme='dark'] .ct-tv[data-cmp] { color: hsl(var(--h) 75% 64%); background: hsl(var(--h) 80% 50% / 0.18); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .ct-tv[data-cmp] { color: hsl(var(--h) 75% 64%); background: hsl(var(--h) 80% 50% / 0.18); } }
+.cmp-legend { display: flex; align-items: center; gap: 8px; margin-top: 8px; color: var(--muted); }
+.cmp-scale { width: 54px; height: 8px; border-radius: 4px; flex: none; background: linear-gradient(90deg, hsl(130 70% 45%), hsl(55 90% 50%), hsl(0 75% 52%)); }
+#sd-cfop:not(:empty) { margin: 6px 0 10px; }
+
+.scr-note { flex-basis: 100%; font-size: 12.5px; color: var(--accent); margin-top: 2px; }

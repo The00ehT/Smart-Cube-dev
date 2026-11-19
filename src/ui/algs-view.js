@@ -2,10 +2,11 @@
  * Algorithmen-Tab: OLL/PLL-Fälle mit Häufigkeit, Zeiten und Erkennung aus den eigenen Solves,
  * eigene Algorithmen (eintippen oder am Würfel ausführen) und Start des Trainers.
  */
+import { groupAlg } from '../cube/alg-format.js';
 import { L, pctText } from '../i18n.js';
 import { CASE_STATE, OLL_GROUPS, PLL_GROUPS, caseProbabilities, checkAlg } from '../cube/ll-cases.js';
 import { rotationFaceMap, CROSS_DOWN, COLOR_NAMES, groupMoves, tokenizeAlg, mirrorAlg } from '../cube/facelets.js';
-import { algData, algsOf, mainAlg, addAlg, removeAlg, setMain, addCustom, updateCustom, removeCustom, caseName, saveAlgs } from '../algs.js';
+import { algData, algsOf, mainAlg, addAlg, removeAlg, setMain, addCustom, updateCustom, removeCustom, caseName, saveAlgs, trainingBest } from '../algs.js';
 import { undoable } from './toast.js';
 import { llStats } from '../case-stats.js';
 import { caseDiagram } from './ll-diagram.js';
@@ -146,8 +147,8 @@ export class AlgsView {
             const tr = algData.train[id] || [];
             return `<button type="button" class="case-card custom" data-case="${id}">
               <div class="cc-name">${esc(c.name)}</div>
-              <div class="cc-alg">${esc(c.alg)}</div>
-              <div class="cc-stats small">${tr.length ? `Training Ø ${t(avg(tr.slice(-12).map((x) => x.exec)))}` : L('noch nicht trainiert', 'not trained yet')}</div>
+              <div class="cc-alg">${esc(groupAlg(c.alg))}</div>
+              <div class="cc-stats small">${tr.length ? `Training Ø ${t(avg(tr.slice(-12).map((x) => x.exec)))} · PB ${t(trainingBest(id))}` : L('noch nicht trainiert', 'not trained yet')}</div>
             </button>`;
           })
           .join('') + `<button type="button" class="case-card add" data-act="new-custom">＋ ${L('Neuer Algorithmus', 'New algorithm')}</button>`;
@@ -168,8 +169,8 @@ export class AlgsView {
           ${caseDiagram(id, 64)}
           <div class="cc-body">
             <div class="cc-name">${esc(caseName(id))}${own ? ` <span class="tag">${L('eigener', 'own')}</span>` : ''}</div>
-            <div class="cc-alg">${esc(mainAlg(id))}</div>
-            <div class="cc-freq small">${tr.length ? `Training Ø ${t(avg(tr.slice(-8).map((x) => x.exec)))}` : `${dbAlgs(id).length} ${L('Algorithmen', 'algorithms')}`}</div>
+            <div class="cc-alg">${esc(groupAlg(mainAlg(id)))}</div>
+            <div class="cc-freq small">${tr.length ? `Training Ø ${t(avg(tr.slice(-8).map((x) => x.exec)))} · PB ${t(trainingBest(id))}` : `${dbAlgs(id).length} ${L('Algorithmen', 'algorithms')}`}</div>
           </div>
         </button>`;
       }
@@ -178,7 +179,7 @@ export class AlgsView {
         ${caseDiagram(id, 64)}
         <div class="cc-body">
           <div class="cc-name">${esc(caseName(id))}${own ? ` <span class="tag">${L('eigener', 'own')}</span>` : ''}</div>
-          <div class="cc-stats">${s ? `<b>${t(s.mean)}</b> · Recog ${t(s.recog)}` : `<span class="small">${L('noch nicht gehabt', 'not seen yet')}</span>`}</div>
+          <div class="cc-stats">${s ? `<b>Ø ${t(s.mean)}</b> · PB ${t(s.best)}` : `<span class="small">${L('noch nicht gehabt', 'not seen yet')}</span>`}</div>
           <div class="cc-freq small">${s ? `${s.n}× · ${pct(s.share)} ` : ''}<span title="${L('Wahrscheinlichkeit', 'Probability')}">(${L('erw.', 'exp.')} ${pct(p)})</span></div>
         </div>
       </button>`;
@@ -221,6 +222,8 @@ export class AlgsView {
         <div class="stat"><div class="v">${t(s?.recog)}</div><div class="k">Ø Recog</div></div>
         <div class="stat"><div class="v">${t(s?.exec)}</div><div class="k">Ø Exec</div></div>
         <div class="stat"><div class="v">${t(avg(tr.slice(-12).map((x) => x.exec)))}</div><div class="k">Ø Training (${tr.length}×)</div></div>
+        <div class="stat pb"><div class="v">${t(s?.best)}</div><div class="k">${L('PB in Solves', 'PB in solves')}</div></div>
+        <div class="stat pb"><div class="v">${t(trainingBest(id))}</div><div class="k">${L('PB Training', 'PB training')}</div></div>
       </div>
       <h3 class="sub-h">${L('Deine Algorithmen', 'Your algorithms')}</h3>
       <div class="alg-list">
@@ -228,7 +231,7 @@ export class AlgsView {
           .map(
             (a, i) => `<label class="alg-row${i === main ? ' main' : ''}">
               <input type="radio" name="main-alg" value="${i}" ${i === main ? 'checked' : ''} />
-              <span class="alg-text">${esc(a)}</span>
+              <span class="alg-text">${esc(groupAlg(a))}</span>
               ${algs.length > 1 ? `<button type="button" class="ghost small-btn" data-del="${i}" aria-label="${L('Löschen', 'Delete')}">✕</button>` : ''}
             </label>`,
           )
@@ -250,7 +253,7 @@ export class AlgsView {
     const have = new Set(mine.map(norm));
     const alts = dbAlgs(id).filter((a) => !have.has(norm(a)));
     const rows = alts
-      .map((a) => `<div class="alt-row"><span class="alg-text">${esc(a)}</span><span class="small">${tokenizeAlg(a).length} ${L('Z.', 'mv')}</span>
+      .map((a) => `<div class="alt-row"><span class="alg-text">${esc(groupAlg(a))}</span><span class="small">${tokenizeAlg(a).length} ${L('Z.', 'mv')}</span>
         <button type="button" class="ghost small-btn" data-take="${esc(a)}">＋ ${L('Übernehmen', 'Use')}</button></div>`)
       .join('');
     let slots = '';
@@ -262,7 +265,7 @@ export class AlgsView {
         [L('Hinten links', 'Back left'), `y' ${mirrorAlg(m)}`],
       ];
       slots = `<h3 class="sub-h">${L('Andere Slots', 'Other slots')}</h3>
-        <div class="alt-list">${variants.map(([n, a]) => `<div class="alt-row"><span class="small slot-name">${n}</span><span class="alg-text">${esc(a)}</span></div>`).join('')}</div>`;
+        <div class="alt-list">${variants.map(([n, a]) => `<div class="alt-row"><span class="small slot-name">${n}</span><span class="alg-text">${esc(groupAlg(a))}</span></div>`).join('')}</div>`;
     }
     return (alts.length ? `<h3 class="sub-h">${L('Alternativen aus der Datenbank', 'Alternatives from the database')}</h3><div class="alt-list">${rows}</div>` : '') + slots;
   }
@@ -320,7 +323,7 @@ export class AlgsView {
         <label class="select-row">Name
           <input type="text" class="alg-name" maxlength="40" placeholder="${L('z. B. Sune, Trick …', 'e.g. Sune, trick …')}" value="${esc(this.editing.name)}" />
         </label>
-        ${id ? `<p class="small">Training: ${tr.length}× · Ø ${t(avg(tr.slice(-12).map((x) => x.exec)))}</p>` : ''}
+        ${id ? `<p class="small">Training: ${tr.length}× · Ø ${t(avg(tr.slice(-12).map((x) => x.exec)))} · PB ${t(trainingBest(id))}</p>` : ''}
         <div class="alg-editor-slot">${this.editorHtml(true)}</div>
         <menu>
           ${id ? `<button type="button" class="danger" data-act="del">${L('Löschen', 'Delete')}</button><button type="button" data-act="train-one">▶ ${L('Trainieren', 'Train')}</button>` : ''}

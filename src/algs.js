@@ -12,7 +12,8 @@ import { OLL_ALGS, PLL_ALGS } from './cube/ll-cases.js';
 import { F2L_CASES, f2lDefault } from './cube/alg-db.js';
 
 const KEY = 'smartcube.algs.v1';
-export const algData = { cases: {}, custom: [], train: {}, ...load(KEY, {}) };
+export const algData = { cases: {}, custom: [], train: {}, best: {}, ...load(KEY, {}) };
+algData.best ??= {};
 export const saveAlgs = () => save(KEY, algData);
 
 export const caseIds = (set) =>
@@ -95,9 +96,22 @@ export const caseName = (id) => {
   return id.replace('PLL ', '') + (id.startsWith('PLL') ? '-Perm' : '');
 };
 
+/** Bestzeit (Exec) im Training, über alle Zeiten – auch wenn die Liste nur die letzten 50 hält */
+export function trainingBest(id) {
+  const list = algData.train[id] || [];
+  const fromList = list.length ? Math.min(...list.map((x) => x.exec)) : null;
+  const stored = algData.best[id] ?? null;
+  return stored == null ? fromList : fromList == null ? stored : Math.min(stored, fromList);
+}
+
+/** Speichert eine Trainingszeit; true = neue Bestzeit für diesen Fall */
 export function recordTraining(id, exec, recog) {
+  const prev = trainingBest(id);
+  const isPb = prev == null || exec < prev;
+  if (isPb) algData.best[id] = Math.round(exec);
   const list = (algData.train[id] ??= []);
   list.push({ exec: Math.round(exec), recog: Math.round(recog), date: Date.now() });
   if (list.length > 50) list.shift();
   saveAlgs();
+  return isPb && prev != null;
 }

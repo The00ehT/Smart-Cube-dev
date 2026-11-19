@@ -31,8 +31,10 @@ import { coachInsights } from './coach.js';
 import { L, locale, dec, translateStatic, lang } from './i18n.js';
 const MV = L('Züge', 'moves');
 import { metricsOf, skillProfile, SKILLS } from './metrics.js';
+import { modeGroups, findMode } from './modes.js';
 import { radarSvg } from './ui/radar.js';
-import { cfopTable } from './ui/cfop-table.js';
+import { cfopTable, splitTone } from './ui/cfop-table.js';
+import { splitBaseline } from './split-compare.js';
 import { caseDiagram } from './ui/ll-diagram.js';
 
 const $ = (id) => document.getElementById(id);
@@ -42,6 +44,10 @@ const SETTINGS_KEY = 'smartcube.settings.v1';
 
 const settings = { inspection: false, autoScramble: true, hideTime: false, gyro: true, viewDown: 'auto', theme: 'auto', replayGyro: true, showResult: true, crossColor: 'auto', scrambleType: 'wca', ...load(SETTINGS_KEY, {}) };
 let solves = load(SOLVES_KEY, []);
+
+// Modus: früher nur „Scramble-Art“ – übernehmen
+if (!settings.mode) settings.mode = settings.scrambleType || 'wca';
+const scrambleMode = () => (settings.mode === 'cross2' || settings.mode === 'xcross' ? settings.mode : 'wca');
 
 const app = {
   conn: null,
@@ -89,11 +95,17 @@ function onCubeEvent(e) {
       onMove(e);
       break;
     case 'facelets':
-      if (e.facelets !== app.state) {
+      // Abgleich mit dem Würfel. Nach einer Pause (Browser im Hintergrund) kommen
+      // nachgeholte Züge oft erst kurz danach: kurz warten, sonst würden sie doppelt gezählt
+      clearTimeout(app.syncTimer);
+      if (e.facelets === app.state) break;
+      app.syncMoves = app.moveCounter;
+      app.syncTimer = setTimeout(() => {
+        if (e.facelets === app.state || app.moveCounter !== app.syncMoves) return;
         app.state = e.facelets;
         view.setState(app.state);
         if (app.phase === 'running' && isSolved(app.state)) finishSolve();
-      }
+      }, 800);
       break;
     case 'gyro':
       if (!settings.gyro) break; // ausgeschaltet: nichts verarbeiten, nichts zeichnen
@@ -180,6 +192,7 @@ function onDisconnected() {
 function onMove(e) {
   if (!$('result-overlay').hidden) hideResult();
   const before = app.state;
+  app.moveCounter = (app.moveCounter || 0) + 1;
   app.state = applyMove(app.state, e.move);
   view.addMove(e.move);
   app.room?.live('move', { m: e.move });
@@ -197,6 +210,7 @@ function onMove(e) {
       if (!app.tracker) break;
       app.tracker.push(e.move);
       if (app.tracker.done) enterReady();
+      else if (app.tracker.corrections > 0) scheduleRescramble();
       renderScramble();
       break;
     case 'ready':
@@ -243,6 +257,9 @@ async function randomScramble() {
 
 /** Neues Scramble; im Raum kommt es vom Gastgeber (given) */
 async function newScramble(given, opts = {}) {
+  const fromMode = typeof given !== 'string' && !app.room;
+  if (fromMode && findMode(settings.mode)?.kind === 'ghost') return startModeGhost();
+  if (fromMode && settings.mode === 'own') return ownPrompt();
   if (!opts.ghost && app.ghost) endGhost();
   if (app.room && typeof given !== 'string') {
     setStatus(L('Im Raum gibt der Gastgeber die Scrambles vor.', 'In a room the host sets the scrambles.'));
@@ -255,26 +272,44 @@ async function newScramble(given, opts = {}) {
   $('scramble').innerHTML = `<span class="msg">${L('Scramble wird erzeugt …', 'Generating scramble …')}</span>`;
   renderTimer();
   let alg;
-  const easy = typeof given !== 'string' && settings.scrambleType !== 'wca';
+  const easy = typeof given !== 'string' && scrambleMode() !== 'wca';
   try {
-    alg = typeof given === 'string' ? given : easy ? await easyScramble(settings.scrambleType) : await randomScramble();
+    alg = typeof given === 'string' ? given : easy ? await easyScramble(scrambleMode()) : await randomScramble();
   } catch (err) {
     console.error(err);
     alg = await randomScramble();
   }
   if (app.phase !== 'scrambling') return; // inzwischen abgebrochen
-  app.scrambleType = easy ? settings.scrambleType : 'wca';
-  $('scramble-label').textContent = opts.ghost ? L('Scramble · gegen den Geist', 'Scramble · vs ghost') : easy ? (settings.scrambleType === 'xcross' ? L('Scramble · X-Cross üben', 'Scramble · X-cross practice') : L('Scramble · leicht', 'Scramble · easy')) : 'Scramble';
+  app.scrambleType = easy ? scrambleMode() : 'wca';
+  renderModeChip();
   app.scramble = alg;
   app.tracker = new ScrambleTracker(alg);
+  app.scrambleTarget = applyAlg(app.state, alg);
   app.scrambleFromSolved = isSolved(app.state);
   renderScramble();
   setStatus(app.conn ? L('Verdrehe den Würfel wie angezeigt.', 'Apply the scramble shown.') : L('Verbinde einen Würfel, damit das Scramble verfolgt wird.', 'Connect a cube so the scramble can be tracked.'));
 }
 
+/** Modus „Eigenes Scramble“: frei verdrehen, dann „Fertig“ tippen */
+function ownPrompt() {
+  if (app.ghost) endGhost();
+  app.phase = 'scrambling';
+  app.tracker = null;
+  app.scramble = '';
+  app.scrambleType = 'wca';
+  renderModeChip();
+  updateViewOrientation();
+  $('scramble').innerHTML = `<div class="own-box"><span class="msg">${L('Verdrehe den Würfel nach Belieben.', 'Scramble the cube however you like.')}</span>
+    <button type="button" class="primary" id="own-ready">${L('Fertig verdreht', 'Done scrambling')}</button></div>`;
+  $('scramble-progress').style.width = '0%';
+  $('own-ready').onclick = ownScramble;
+  setStatus(app.conn ? L('Danach startet der nächste Zug die Zeit.', 'Then the next move starts the timer.') : L('Verbinde zuerst deinen Würfel.', 'Connect your cube first.'));
+  renderTimer();
+}
+
 function ownScramble() {
   if (isSolved(app.state) && app.conn) {
-    setStatus(L('Verdrehe den Würfel – danach „Eigenes Scramble“ drücken, der nächste Zug startet die Zeit.', 'Scramble the cube – then tap “Own”, the next move starts the timer.'));
+    setStatus(L('Der Würfel ist noch gelöst – erst verdrehen, dann „Fertig verdreht“ tippen.', 'The cube is still solved – scramble it first, then tap “Done scrambling”.'));
     return;
   }
   app.scramble = '';
@@ -372,6 +407,7 @@ function finishSolve() {
 /** CFOP-Zeilen eines Solves für die Tabelle */
 function solveRows(s) {
   const ph = s.phases;
+  const ref = splitBaseline(solves, s);
   const pairs = ph.slice(1, 5);
   const sum = (k) => pairs.reduce((a, p) => a + (p[k] || 0), 0);
   const llNote = (p, label) => {
@@ -380,14 +416,21 @@ function solveRows(s) {
     return `<div class="ct-case">${id ? caseDiagram(id, 44) : ''}<div><b>${name}</b><div>Recog ${formatTime(p.recog || 0)} · Exec ${formatTime(p.time - (p.recog || 0))}</div></div></div>`;
   };
   return [
-    { cls: 'ph-cross', name: 'Cross', extra: ` ${colorChip(s.crossFace)}${s.xcross ? ' <span class="tag">X</span>' : ''}`, time: ph[0].time, moves: ph[0].moves },
+    { cls: 'ph-cross', name: 'Cross', extra: ` ${colorChip(s.crossFace)}${s.xcross ? ' <span class="tag">X</span>' : ''}`, time: ph[0].time, moves: ph[0].moves, ref: ref.cross },
     {
-      cls: 'ph-pair', name: 'F2L', time: sum('time'), moves: sum('moves'), recog: sum('recog'), open: false,
-      sub: pairs.map((p, i) => ({ name: `${L('Paar', 'Pair')} ${i + 1}`, extra: p.slot ? ` ${[...p.slot].map(colorChip).join('')}` : '', time: p.time, moves: p.moves, recog: p.recog })),
+      cls: 'ph-pair', name: 'F2L', time: sum('time'), moves: sum('moves'), recog: sum('recog'), ref: ref.f2l, open: false,
+      sub: pairs.map((p, i) => ({ name: `${L('Paar', 'Pair')} ${i + 1}`, extra: p.slot ? ` ${[...p.slot].map(colorChip).join('')}` : '', time: p.time, moves: p.moves, recog: p.recog, ref: ref.pair })),
     },
-    { cls: 'ph-oll', name: 'OLL', extra: ph[5].skip ? ' <span class="tag">Skip</span>' : '', time: ph[5].time, moves: ph[5].moves, recog: ph[5].recog, note: llNote(ph[5], 'OLL') },
-    { cls: 'ph-pll', name: 'PLL', extra: ph[6].skip ? ' <span class="tag">Skip</span>' : '', time: ph[6].time, moves: ph[6].moves, recog: ph[6].recog, note: llNote(ph[6], 'PLL') },
+    { cls: 'ph-oll', name: 'OLL', extra: ph[5].skip ? ' <span class="tag">Skip</span>' : '', time: ph[5].time, moves: ph[5].moves, recog: ph[5].recog, ref: ref.oll, note: llNote(ph[5], 'OLL') },
+    { cls: 'ph-pll', name: 'PLL', extra: ph[6].skip ? ' <span class="tag">Skip</span>' : '', time: ph[6].time, moves: ph[6].moves, recog: ph[6].recog, ref: ref.pll, note: llNote(ph[6], 'PLL') },
   ];
+}
+
+/** Kurze Legende zur Einfärbung (nur wenn es Vergleichswerte gibt) */
+function cmpLegend(s) {
+  const ref = splitBaseline(solves, s);
+  if (ref.cross == null && ref.oll == null) return '';
+  return `<div class="cmp-legend small"><span class="cmp-scale"></span>${s.xcross ? L('verglichen mit deinen X-Cross-Solves', 'compared with your X-cross solves') : L('verglichen mit deinem Schnitt', 'compared with your average')}</div>`;
 }
 
 function showResult(solve, badge) {
@@ -406,7 +449,7 @@ function showResult(solve, badge) {
     tile(dec(m?.etps), 'Exec TPS'),
     `<div>${m?.fluency == null ? '<b>–</b>' : gauge(m.fluency)}<span>Fluency</span></div>`,
   ].join('');
-  $('res-table').innerHTML = cfopTable(solveRows(solve));
+  $('res-table').innerHTML = cfopTable(solveRows(solve)) + cmpLegend(solve);
   const g = solve.gyro;
   $('res-extra').textContent = [
     g ? `${g.rotations.length} Rotations · ~${g.regrips.length} Regrips` : '',
@@ -548,14 +591,80 @@ function endGhost() {
 }
 $('ghost-stop').addEventListener('click', () => {
   endGhost();
+  if (findMode(settings.mode)?.kind === 'ghost') return setMode(settings.lastScrambleMode || 'wca');
   if (app.phase === 'scrambling' || app.phase === 'done') newScramble();
 });
-$('btn-ghost').addEventListener('click', () => {
+/** Gegner für die Geister-Modi: Bestzeit oder ein typischer Solve aus dem Ø12 */
+function ghostOpponent(id) {
   const det = solves.filter((s) => hasDetail(s) && s.penalty !== 'DNF');
-  if (!det.length) return toast(L('Noch keine Bestzeit mit Zugdaten – mach erst ein paar Solves.', 'No PB with move data yet – do a few solves first.'));
-  const pbSolve = det.reduce((a, b) => (effectiveTime(b) < effectiveTime(a) ? b : a));
-  raceAgainst({ ...pbSolve, moves: pbSolve.solution.split(' ').filter(Boolean) }, `${L('Deine Bestzeit', 'Your PB')} (${formatSolve(pbSolve)})`);
-});
+  if (!det.length) return null;
+  if (id === 'ghost-avg') {
+    const recent = det.slice(-12);
+    const avg = mean(recent.map(effectiveTime));
+    const pick = recent.reduce((a, b) => (Math.abs(effectiveTime(b) - avg) < Math.abs(effectiveTime(a) - avg) ? b : a));
+    return { solve: pick, label: `${L('Dein Schnitt', 'Your average')} (${formatSolve(pick)})` };
+  }
+  const pb = det.reduce((a, b) => (effectiveTime(b) < effectiveTime(a) ? b : a));
+  return { solve: pb, label: `${L('Deine Bestzeit', 'Your PB')} (${formatSolve(pb)})` };
+}
+function startModeGhost() {
+  const o = ghostOpponent(settings.mode);
+  if (!o) {
+    toast(L('Noch kein Solve mit Zugdaten – mach erst ein paar Solves.', 'No solve with move data yet – do a few solves first.'));
+    return setMode('wca');
+  }
+  raceAgainst({ ...o.solve, moves: o.solve.solution.split(' ').filter(Boolean) }, o.label);
+}
+
+// ---------------- Modi ----------------
+
+function modeHint(m) {
+  if (m.kind === 'ghost' && !ghostOpponent(m.id)) return L('Braucht erst Solves mit Zugdaten', 'Needs solves with move data first');
+  if (m.kind === 'ghost' && !app.conn) return L('Würfel verbinden', 'Connect your cube');
+  return '';
+}
+function openModes() {
+  if (app.phase === 'running') return;
+  const current = app.room ? 'room' : settings.mode;
+  $('mode-list').innerHTML = modeGroups()
+    .map((g) => `<section class="mode-group"><h3>${g.title}</h3><div class="mode-grid">${g.modes
+      .map((m) => {
+        const hint = modeHint(m);
+        return `<button type="button" class="mode-card tone-${m.tone}${m.id === current ? ' on' : ''}" data-mode="${m.id}" ${hint ? 'disabled' : ''}>
+          <span class="mode-card-ic">${m.icon}</span>
+          <span class="mode-card-tx"><b>${m.title}</b><span>${hint || m.desc}</span></span>
+          ${m.id === current ? '<span class="mode-check" aria-label="aktiv">✓</span>' : ''}
+        </button>`;
+      })
+      .join('')}</div></section>`)
+    .join('');
+  $('mode-dialog').showModal();
+}
+
+function setMode(id) {
+  const m = findMode(id);
+  if (!m) return;
+  if (m.kind === 'link') {
+    if (id === 'room') showTab('room');
+    return;
+  }
+  if (app.room) return toast(L('Im Raum gibt der Gastgeber die Scrambles vor – verlasse zuerst den Raum.', 'In a room the host sets the scrambles – leave the room first.'));
+  if (m.kind === 'scramble') settings.lastScrambleMode = id;
+  settings.mode = id;
+  settings.scrambleType = scrambleMode();
+  save(SETTINGS_KEY, settings);
+  renderModeChip();
+  if (app.phase !== 'running') newScramble();
+}
+
+function renderModeChip() {
+  const m = findMode(app.room ? 'room' : settings.mode) || findMode('wca');
+  $('mode-ic').textContent = m.icon;
+  $('mode-name').textContent = app.room ? L('Online-Raum', 'Online room') : m.title;
+  $('mode-btn').className = `mode-chip tone-${m.tone}`;
+  $('btn-new-scramble').title = m.kind === 'ghost' ? L('Neues Rennen', 'New race') : L('Neues Scramble', 'New scramble');
+}
+renderModeChip();
 
 // ---------------- Coach ----------------
 
@@ -575,12 +684,9 @@ function runCoachAction(a) {
     algsView.set = a.arg;
     algsView.render();
   } else if (a.kind === 'easy-scramble') {
-    settings.scrambleType = 'cross2';
-    save(SETTINGS_KEY, settings);
-    $('opt-scramble-type').value = 'cross2';
-    toast(L('Leichte Scrambles sind an (2 Kreuzkanten gelöst). Umstellen unter Einstellungen → Training.', 'Easy scrambles are on (2 cross edges solved). Change under Settings → Training.'));
     showTab('timer');
-    newScramble();
+    setMode('cross2');
+    toast(L('Modus „Leichtes Cross“ ist an – umstellen über den Modus-Knopf über dem Scramble.', '“Easy cross” mode is on – switch via the mode button above the scramble.'));
   }
 }
 function renderCoach(el) {
@@ -682,6 +788,34 @@ function renderHardware() {
   hw.innerHTML = rows.map(([k, v]) => `<span>${k}</span><span>${escapeHtml(String(v))}</span>`).join('');
 }
 
+/**
+ * Nach einem falschen Zug: kürzeste Folge vom aktuellen Zustand zum Scramble-Zustand berechnen.
+ * Ist sie kürzer als „Fehler zurückdrehen + Rest“, ersetzt sie die restlichen Züge.
+ * Kurz warten, falls noch gedreht wird.
+ */
+function scheduleRescramble() {
+  clearTimeout(app.rescrambleTimer);
+  const tracker = app.tracker;
+  const mc = app.moveCounter;
+  app.rescrambleTimer = setTimeout(async () => {
+    const still = () => app.phase === 'scrambling' && app.tracker === tracker && app.moveCounter === mc && !tracker.done;
+    if (!still() || !app.scrambleTarget) return;
+    try {
+      const alg = await setupAlgFor(relativeState(app.state, app.scrambleTarget));
+      if (!still()) return;
+      const n = alg.split(/\s+/).filter(Boolean).length;
+      const before = tracker.remaining.length;
+      if (n < before && tracker.replace(alg)) {
+        app.scrambleNote = L(`Scramble angepasst – ${before - n} ${before - n === 1 ? 'Zug' : 'Züge'} gespart`, `Scramble adjusted – ${before - n} move${before - n === 1 ? '' : 's'} saved`);
+        if (alg === '') enterReady();
+        renderScramble();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, 450);
+}
+
 function renderScramble() {
   const el = $('scramble');
   const t = app.tracker;
@@ -695,9 +829,10 @@ function renderScramble() {
   const warn = !app.scrambleFromSolved && app.conn
     ? `<div class="warn">${L('Der Würfel war beim Erzeugen nicht gelöst – erst lösen oder „Als gelöst markieren“, dann neues Scramble.', 'The cube wasn’t solved when the scramble was made – solve it or “Mark as solved”, then get a new scramble.')}</div>`
     : '';
+  const note = t.adjusted && app.scrambleNote ? `<div class="scr-note">↺ ${app.scrambleNote}</div>` : '';
   el.innerHTML = moves
     .map((m, i) => `<span class="mv${m.correction ? ' correction' : ''}${i === 0 ? ' next' : ''}">${m.text}</span>`)
-    .join('') + warn;
+    .join('') + note + warn;
   $('scramble-progress').style.width = `${Math.round(t.progress() * 100)}%`;
 }
 
@@ -793,14 +928,16 @@ function renderSplits(solve) {
   }
   const [cross, f2l, oll, pll] = phasesOf(solve, { mergeF2l: true });
   const pairs = solve.phases.slice(1, 5);
+  const ref = splitBaseline(solves, solve);
+  const b = (t, r) => `<b><span class="ct-tv"${splitTone(t, r)}>${formatTime(t)}</span></b>`;
   const recog = (p) => (p.recog > 0 ? `<small>Recog ${formatTime(p.recog)}</small>` : '');
   const skip = (p) => (p.skip ? '<small class="tag">Skip</small>' : '');
   el.innerHTML = `
-    <div class="sp ph-cross">Cross ${colorChip(solve.crossFace)}<b>${formatTime(cross.time)}</b>${cross.moves} ${MV}${solve.xcross ? '<small class="tag">X-Cross</small>' : ''}</div>
-    <div class="sp ph-pair">F2L<b>${formatTime(f2l.time)}</b>${f2l.moves} ${MV}
+    <div class="sp ph-cross">Cross ${colorChip(solve.crossFace)}${b(cross.time, ref.cross)}${cross.moves} ${MV}${solve.xcross ? '<small class="tag">X-Cross</small>' : ''}</div>
+    <div class="sp ph-pair">F2L${b(f2l.time, ref.f2l)}${f2l.moves} ${MV}
       <small class="pairs">${pairs.map((p) => formatTime(p.time)).join(' · ')}</small></div>
-    <div class="sp ph-oll">OLL<b>${formatTime(oll.time)}</b>${oll.moves} ${MV}${recog(oll)}${skip(oll)}</div>
-    <div class="sp ph-pll">PLL<b>${formatTime(pll.time)}</b>${pll.moves} ${MV}${recog(pll)}${skip(pll)}</div>`;
+    <div class="sp ph-oll">OLL${b(oll.time, ref.oll)}${oll.moves} ${MV}${recog(oll)}${skip(oll)}</div>
+    <div class="sp ph-pll">PLL${b(pll.time, ref.pll)}${pll.moves} ${MV}${recog(pll)}${skip(pll)}</div>`;
 }
 
 /**
@@ -929,7 +1066,8 @@ function openSolve(i) {
     const [c, f, o, pl] = phasesOf(s, { mergeF2l: true });
     $('sd-pie').innerHTML = donut(phaseSegments({ cross: c.time, f2l: f.time, oll: o.time, pll: pl.time }), { value: formatTime(s.time), label: 'gesamt' }, { size: 140 });
   } else $('sd-pie').innerHTML = '';
-  $('sd-phases').innerHTML = rows.length
+  $('sd-cfop').innerHTML = detail && s.phases?.length >= 7 ? cfopTable(solveRows(s)) + cmpLegend(s) : '';
+  $('sd-phases').innerHTML = rows.length && !(detail && s.phases?.length >= 7)
     ? `<tr><th>Phase</th><th>${L('Zeit', 'Time')}</th>${detail ? '<th>Recog</th>' : ''}<th>${L('Züge', 'Moves')}</th><th>TPS</th></tr>` + rows.join('')
     : '';
   const extra = [
@@ -1029,7 +1167,16 @@ $('btn-connect-virtual').addEventListener('click', () => connect('virtual'));
 $('btn-disconnect').addEventListener('click', disconnect);
 $('btn-disconnect-2').addEventListener('click', disconnect);
 $('btn-new-scramble').addEventListener('click', newScramble);
-$('btn-own-scramble').addEventListener('click', ownScramble);
+$('mode-btn').addEventListener('click', openModes);
+$('mode-close').addEventListener('click', () => $('mode-dialog').close());
+$('mode-dialog').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) return $('mode-dialog').close();
+  const b = e.target.closest('[data-mode]');
+  if (b && !b.disabled) {
+    $('mode-dialog').close();
+    setMode(b.dataset.mode);
+  }
+});
 $('btn-reset-gyro').addEventListener('click', () => view.resetGyro());
 
 $('btn-mark-solved').addEventListener('click', async () => {
@@ -1260,12 +1407,6 @@ $('opt-cross').value = settings.crossColor;
 $('opt-cross').addEventListener('change', (e) => {
   settings.crossColor = e.target.value;
   save(SETTINGS_KEY, settings);
-});
-$('opt-scramble-type').value = settings.scrambleType;
-$('opt-scramble-type').addEventListener('change', (e) => {
-  settings.scrambleType = e.target.value;
-  save(SETTINGS_KEY, settings);
-  if (!app.room && (app.phase === 'scrambling' || app.phase === 'idle' || app.phase === 'done')) newScramble();
 });
 
 // ---------------- Tabs ----------------
@@ -1581,6 +1722,7 @@ async function enterRoom(mode, code) {
   }
   const room = new Room({ name: profile.name, avatar: profile.avatar }, (ev) => onRoomEvent(ev));
   app.room = room; // schon setzen, damit frühe Ereignisse ankommen
+  renderModeChip();
   $('room-intro').querySelectorAll('button').forEach((b) => (b.disabled = true));
   msg.textContent = mode === 'create' ? L('Raum wird erstellt …', 'Creating room …') : L('Verbinde …', 'Connecting …');
   try {
@@ -1602,6 +1744,7 @@ async function enterRoom(mode, code) {
   } catch (err) {
     console.error(err);
     app.room = null;
+    renderModeChip();
     room.leave();
     roomView.hide();
     msg.textContent = L('Das hat nicht geklappt: ', 'That didn’t work: ') + (err?.message || err);
@@ -1618,6 +1761,7 @@ function leaveRoom(silent) {
   app.room.leave();
   app.room = null;
   app.roomRound = null;
+  renderModeChip();
   roomView.hide();
   $('room-intro').hidden = false;
   $('room-strip').hidden = true;

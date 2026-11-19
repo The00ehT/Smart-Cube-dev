@@ -10,10 +10,24 @@ const tps = (moves, time) => (time > 0 && moves != null ? dec((moves / time) * 1
 const num = (x) => (x == null ? '–' : Number.isInteger(x) ? String(x) : dec(x, 1));
 
 /**
- * @param rows [{ cls, name, extra?, time, moves, recog?, open?, sub?: [ { name, extra?, time, moves, recog? } ], note? }]
+ * Farbe von Rot (langsamer als Ø) über Gelb (≈ Ø) bis Grün (schneller als Ø).
+ * Liefert ein style-/title-Attribut oder '' ohne Vergleichswert.
+ */
+export function splitTone(time, ref) {
+  if (!ref || !(time > 0)) return '';
+  const ratio = time / ref;
+  const hue = Math.round(Math.max(0, Math.min(130, 55 + (1 - ratio) * 300)));
+  const diff = time - ref;
+  const sign = diff > 0 ? '+' : '−';
+  return ` style="--h:${hue}" data-cmp="1" title="Ø ${formatTime(ref)} · ${sign}${formatTime(Math.abs(diff))}"`;
+}
+
+/**
+ * @param rows [{ cls, name, extra?, time, moves, recog?, ref?, open?, sub?: [ { name, extra?, time, moves, recog?, ref? } ], note? }]
+ *   ref = Vergleichswert (Ø) → Zeit wird rot–grün eingefärbt
  */
 export function cfopTable(rows) {
-  const cells = (r) => `<span class="ct-t">${r.time == null ? '–' : formatTime(r.time)}</span><span class="ct-m">${num(r.moves)}</span><span class="ct-p">${tps(r.moves, r.time)}</span><span class="ct-r">${r.recog ? formatTime(r.recog) : '–'}</span>`;
+  const cells = (r) => `<span class="ct-t"><span class="ct-tv"${splitTone(r.time, r.ref)}>${r.time == null ? '–' : formatTime(r.time)}</span></span><span class="ct-m">${num(r.moves)}</span><span class="ct-p">${tps(r.moves, r.time)}</span><span class="ct-r">${r.recog ? formatTime(r.recog) : '–'}</span>`;
   const sub = (s) => `<div class="ct-row ct-sub"><span class="ct-n">${esc(s.name)}${s.extra || ''}</span>${cells(s)}</div>`;
   const body = rows
     .map((r) => {

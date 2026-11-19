@@ -27,6 +27,15 @@ t = new ScrambleTracker('R U');
 t.push("R'");
 assert.equal(t.remainingMoves()[0].text, 'R2');
 
+// Neu berechneter Rest ersetzt Korrekturen
+t = new ScrambleTracker("R U F");
+t.push('R'); t.push('D'); t.push('B');
+assert.equal(t.corrections, 2);
+assert.ok(t.replace("B' D' U F"));
+assert.equal(t.corrections, 0);
+assert.deepEqual(t.remainingMoves().map((m) => m.text), ["B'", "D'", 'U', 'F']);
+assert.ok(!t.replace('Q'), 'ungültige Züge werden abgelehnt');
+
 // Parallelzüge vertauscht
 t = new ScrambleTracker('R L U');
 t.push('L'); t.push('R'); t.push('U');

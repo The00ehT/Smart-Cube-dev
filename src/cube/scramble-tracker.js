@@ -46,6 +46,19 @@ export class ScrambleTracker {
     this.corrections = Math.min(this.corrections, r.length);
   }
 
+  /**
+   * Restliche Züge durch eine kürzere Folge ersetzen (nach Fehlern neu berechnet):
+   * statt alles zurückzudrehen, führt die neue Folge direkt zum Ziel-Zustand.
+   */
+  replace(alg) {
+    const moves = String(alg).split(/\s+/).filter(Boolean).map(parseMove);
+    if (moves.some((m) => !m)) return false;
+    this.remaining = moves;
+    this.corrections = 0;
+    this.adjusted = true;
+    return true;
+  }
+
   /** Noch fehlende Züge als Text, die ersten `corrections` sind Korrekturen */
   remainingMoves() {
     return this.remaining.map((m, i) => ({ text: formatMove(m.face, m.amount), correction: i < this.corrections }));

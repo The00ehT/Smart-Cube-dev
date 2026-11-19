@@ -33,4 +33,11 @@ assert.equal(r.phases.reduce((a, p) => a + p.moves, 0), 6, 'Zugzahlen summieren 
 assert.ok(Math.abs(r.phases.reduce((a, p) => a + p.time, 0) - r.time) < 1, 'Phasenzeiten summieren sich');
 assert.ok('URFDLB'.includes(r.crossFace));
 assert.deepEqual(moveTimes([{ localTimestamp: 5 }, { localTimestamp: null }, { localTimestamp: 25 }]), [0, 0, 20]);
+// Browser im Hintergrund: Züge kommen gesammelt an (gleiche Gerätezeit), Würfeluhr stimmt
+const burst = Array.from({ length: 30 }, (_, i) => ({ localTimestamp: i < 10 ? 1000 + i * 300 : 9000, cubeTimestamp: 50000 + i * 300 }));
+const bt = moveTimes(burst);
+assert.equal(Math.round(bt[29]), 8700, 'Zeit aus der Würfeluhr, ist ' + bt[29]);
+// Nachgeholte Züge ohne Würfeluhr liegen 50 ms neben dem Nachbarn
+const miss = moveTimes([{ localTimestamp: 0, cubeTimestamp: 100 }, { localTimestamp: null, cubeTimestamp: null }, { localTimestamp: 500, cubeTimestamp: 600 }]);
+assert.deepEqual(miss.map(Math.round), [0, 450, 500]);
 console.log('recorder: alle Tests bestanden', r.phases);

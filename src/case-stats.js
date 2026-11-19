@@ -39,6 +39,7 @@ export function llStats(solves) {
     const n = all.reduce((a, [, e]) => a + e.n, 0);
     for (const [, e] of all) {
       e.mean = avg(e.times);
+      e.best = e.times.length ? Math.min(...e.times) : null;
       e.recog = avg(e.recogs);
       e.exec = e.mean !== null ? e.mean - e.recog : null;
       e.share = n ? e.n / n : 0;
