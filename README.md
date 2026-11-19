@@ -48,6 +48,10 @@ Aufgebaut auf [gan-web-bluetooth](https://github.com/afedotov/gan-web-bluetooth)
 - **Archiv**: gute Lösungen nach dem Solve mit einem Tipp sichern; Tabelle mit Zeit, Scramble, Zügen, TPS, Fällen und
   Notiz, sortierbar nach Zeit oder Änderungsdatum
 - **Leichte Scrambles**: 2 Kreuzkanten vorgelöst oder X-Cross üben (2 Kreuzkanten + 1 Paar), für die eigene Kreuzfarbe
+- **Eigener 3D-Würfel** (three.js, ohne externe Modelle): Stile Stickerless, Klassisch, Fliesen; Körper schwarz/grau/weiß;
+  Farbschemata Kräftig/Standard/Pastell; glänzend oder matt – mit Live-Vorschau in den Einstellungen
+- **Offline**: Service Worker speichert die ganze App (inkl. Scramble-Generator); Offline-Prüfung in den Einstellungen
+  zeigt, ob der Browser das unterstützt; als App installierbar (Manifest, App-Symbol)
 - **Sprache**: Deutsch oder Englisch (Einstellungen → Darstellung; Standard nach Gerätesprache). Kurze Fachbegriffe wie
   Cross, Recog, Exec TPS, Fluency, Rotations und Regrips auch in der deutschen Oberfläche
 - **Profil** mit Name und Avatar (Emoji oder eigenes Foto); der Name erscheint auf geteilten Rekonstruktionen
@@ -119,6 +123,8 @@ Jeder Push wird getestet und gebaut; der Stand von `main` wird automatisch auf G
 | `src/algs.js`, `src/ui/algs-view.js`, `src/ui/trainer.js` | Algorithmen, Fall-Statistik, Trainer |
 | `src/archive.js`, `src/ui/archive-view.js` | Archiv |
 | `src/metrics.js`, `src/ui/radar.js` | Kennzahlen je Solve, Stärkenprofil, Netzdiagramm |
+| `src/ui/cube3d.js` | Eigener 3D-Würfel mit Skins und Zug-Animation |
+| `vite.config.js` (Plugin `offline`) | Erzeugt den Service Worker mit allen Dateien |
 | `src/room.js` | Online-Räume (PeerJS/WebRTC, Gastgeber verteilt Scrambles und Ergebnisse) |
 | `src/ui/room-view.js` | Raum-Ansicht mit Live-Würfeln und Rundentabelle |
 | `src/cube/connection.js` | GAN / andere Smartcubes / virtueller Würfel mit einheitlichen Ereignissen |

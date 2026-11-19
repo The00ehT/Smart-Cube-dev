@@ -7,6 +7,7 @@ import { ScrambleTracker } from './cube/scramble-tracker.js';
 import { SolveRecorder } from './cube/solve-recorder.js';
 import { bluetoothAvailable, connectGan, connectOther, connectVirtual } from './cube/connection.js';
 import { CubeView } from './ui/cube-view.js';
+import { setDefaultSkin, SKIN_PRESETS } from './ui/cube3d.js';
 import { forgetMacs } from './ui/mac-dialog.js';
 import { load, save } from './storage.js';
 import { averageOf, bestAverage, best, mean, formatTime, formatSolve, effectiveTime } from './stats.js';
@@ -54,6 +55,7 @@ const app = {
   lastMoves: [],
 };
 
+setDefaultSkin(settings.skin || {});
 const view = new CubeView($('cube'));
 view.setGyroEnabled(settings.gyro);
 const replay = new Replay($('replay-dialog'));
@@ -1026,6 +1028,96 @@ $('solves-mode').addEventListener('click', (e) => {
 });
 
 // ---------------- Training-Einstellungen ----------------
+
+// ---------------- Würfel-Aussehen ----------------
+
+const PRESET_NAMES = {
+  stickerless: 'Stickerless',
+  classic: L('Klassisch', 'Classic'),
+  tiles: L('Fliesen', 'Tiles'),
+  white: L('Weiß', 'White'),
+  pastel: L('Pastell', 'Pastel'),
+};
+let skinPreview = null;
+const currentSkin = () => ({ ...SKIN_PRESETS.stickerless, ...(settings.skin || {}) });
+function applySkin(skin) {
+  settings.skin = skin;
+  save(SETTINGS_KEY, settings);
+  setDefaultSkin(skin);
+  view.setSkin(skin);
+  ghostView?.setSkin(skin);
+  skinPreview?.setSkin(skin);
+  for (const c of roomView.cards.values()) c.cube?.setSkin(skin);
+  renderSkinUi();
+}
+function renderSkinUi() {
+  const sk = currentSkin();
+  $('skin-presets').innerHTML = Object.entries(SKIN_PRESETS)
+    .map(([k, p]) => {
+      const on = Object.keys(p).every((f) => p[f] === sk[f]);
+      return `<button type="button" data-preset="${k}" class="${on ? 'on' : ''}">${PRESET_NAMES[k]}</button>`;
+    })
+    .join('');
+  for (const f of ['style', 'body', 'scheme', 'finish']) $(`skin-${f}`).value = sk[f];
+}
+$('skin-presets').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-preset]');
+  if (b) applySkin({ ...SKIN_PRESETS[b.dataset.preset] });
+});
+for (const f of ['style', 'body', 'scheme', 'finish']) {
+  $(`skin-${f}`).addEventListener('change', (e) => applySkin({ ...currentSkin(), [f]: e.target.value }));
+}
+$('btn-settings').addEventListener('click', () => {
+  // Vorschau erst beim Öffnen erzeugen (sonst Größe 0)
+  requestAnimationFrame(() => {
+    if (!skinPreview) {
+      skinPreview = new CubeView($('skin-preview'));
+      skinPreview.setState(applyAlg(SOLVED, "R U R' U'"));
+    }
+  });
+});
+renderSkinUi();
+
+// ---------------- Offline ----------------
+
+/** Service Worker registrieren (nur im fertigen Build) und Status anzeigen */
+async function offlineStatus() {
+  const el = $('offline-status');
+  const set = (cls, html) => {
+    el.className = `offline-status ${cls}`;
+    el.innerHTML = html;
+  };
+  if (!('serviceWorker' in navigator) || !window.caches) {
+    return set('bad', L('✗ Dieser Browser unterstützt keine Offline-Speicherung (Service Worker). Die App braucht beim Öffnen Internet.', '✗ This browser doesn’t support offline storage (service workers). The app needs internet when opening.'));
+  }
+  if (!import.meta.env.PROD) return set('warn', L('Entwicklungsmodus – offline nur im fertigen Build.', 'Dev mode – offline only in the production build.'));
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const status = await new Promise((resolve) => {
+      const t = setTimeout(() => resolve(null), 3000);
+      navigator.serviceWorker.addEventListener('message', function on(e) {
+        if (e.data?.type !== 'status') return;
+        clearTimeout(t);
+        navigator.serviceWorker.removeEventListener('message', on);
+        resolve(e.data);
+      });
+      (reg.active || navigator.serviceWorker.controller)?.postMessage('status');
+    });
+    const est = navigator.storage?.estimate ? await navigator.storage.estimate() : null;
+    const mb = est?.usage ? ` · ${dec(est.usage / 1048576)} MB` : '';
+    if (status && status.cached >= status.total) set('good', L(`✓ Offline bereit – ${status.cached} Dateien gespeichert${mb}.`, `✓ Ready offline – ${status.cached} files stored${mb}.`));
+    else if (status) set('warn', L(`… wird gespeichert (${status.cached}/${status.total})`, `… storing (${status.cached}/${status.total})`));
+    else set('warn', L('… wird eingerichtet – gleich noch einmal prüfen.', '… setting up – check again in a moment.'));
+  } catch (err) {
+    set('bad', L('✗ Offline-Speicherung fehlgeschlagen: ', '✗ Offline storage failed: ') + (err?.message || err));
+  }
+}
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  navigator.serviceWorker.register('./sw.js').catch((err) => console.warn('Service Worker:', err));
+  navigator.storage?.persist?.().catch(() => {});
+}
+$('offline-check').addEventListener('click', offlineStatus);
+$('btn-settings').addEventListener('click', offlineStatus);
 
 $('opt-lang').value = lang;
 $('opt-lang').addEventListener('change', (e) => {

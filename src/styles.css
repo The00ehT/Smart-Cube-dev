@@ -729,3 +729,32 @@ body.solving .solve-metrics { display: none !important; }
   .pv-tiles { grid-template-columns: repeat(2, 1fr); }
   .skill-row { grid-template-columns: 6.5em 1fr 2em 2.6em; }
 }
+
+/* ---------- Eigener 3D-Würfel und Aussehen ---------- */
+.cube3d { width: 100%; height: 100%; display: block; touch-action: none; }
+.skin-box { display: grid; grid-template-columns: 150px 1fr; gap: 14px; align-items: center; background: var(--panel-2); border-radius: 14px; padding: 10px; }
+.skin-preview { width: 150px; height: 150px; }
+.skin-opts { display: grid; gap: 10px; min-width: 0; }
+.skin-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.skin-presets button { padding: 5px 10px; font-size: 13px; }
+.skin-presets button.on { background: var(--accent); color: var(--accent-text); }
+.skin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.skin-grid .select-row { font-size: 13px; }
+@media (max-width: 700px) {
+  .skin-box { grid-template-columns: 1fr; justify-items: center; }
+  .skin-opts { width: 100%; }
+}
+
+/* ---------- Offline ---------- */
+.offline-status { font-size: 14px; padding: 10px 12px; border-radius: 12px; background: var(--panel-2); }
+.offline-status.good { color: var(--good); }
+.offline-status.warn { color: var(--warn); }
+.offline-status.bad { color: var(--bad); }
+.offline-tips ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; }
+
+/* Dialoge am Handy wirklich bildschirmbreit (Browser-Vorgabe max-width aufheben), Felder nie breiter als der Platz */
+.set-sec { grid-template-columns: minmax(0, 1fr); }
+.select-row select, .select-row input { width: 100%; min-width: 0; }
+@media (max-width: 760px) {
+  dialog.big-dialog, dialog.settings-dialog { max-width: none; max-height: none; }
+}

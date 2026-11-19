@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#f3f4f7" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Smartcube" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>Smartcube Timer</title>
     <script>
@@ -280,6 +284,41 @@
           <button type="button" data-v="light" role="radio">Hell</button>
           <button type="button" data-v="dark" role="radio">Dunkel</button>
         </div>
+        <div class="skin-box">
+          <div class="skin-preview" id="skin-preview"></div>
+          <div class="skin-opts">
+            <div class="skin-presets" id="skin-presets" role="group" aria-label="Würfel-Aussehen"></div>
+            <div class="skin-grid">
+              <label class="select-row">Stil
+                <select id="skin-style">
+                  <option value="stickerless">Stickerless</option>
+                  <option value="classic">Klassisch (Sticker)</option>
+                  <option value="tiles">Fliesen</option>
+                </select>
+              </label>
+              <label class="select-row">Körper
+                <select id="skin-body">
+                  <option value="black">Schwarz</option>
+                  <option value="gray">Grau</option>
+                  <option value="white">Weiß</option>
+                </select>
+              </label>
+              <label class="select-row">Farben
+                <select id="skin-scheme">
+                  <option value="bright">Kräftig</option>
+                  <option value="standard">Standard</option>
+                  <option value="pastel">Pastell</option>
+                </select>
+              </label>
+              <label class="select-row">Oberfläche
+                <select id="skin-finish">
+                  <option value="gloss">Glänzend</option>
+                  <option value="matte">Matt</option>
+                </select>
+              </label>
+            </div>
+          </div>
+        </div>
         <label class="select-row">Würfelansicht ohne Gyroskop
           <select id="opt-view-down">
             <option value="auto">Cross-Farbe unten (automatisch)</option>
@@ -321,6 +360,22 @@
         <label class="toggle"><input type="checkbox" id="opt-inspection" /> 15 s Inspektion (WCA: +2 ab 15 s, DNF ab 17 s)</label>
         <label class="toggle"><input type="checkbox" id="opt-auto-scramble" checked /> Nach jedem Solve automatisch neues Scramble</label>
         <label class="toggle"><input type="checkbox" id="opt-hide-time" /> Zeit während des Solves ausblenden</label>
+      </section>
+
+      <section class="set-sec">
+        <h3>Offline</h3>
+        <div class="offline-status" id="offline-status">…</div>
+        <div class="avatar-actions">
+          <button type="button" class="ghost" id="offline-check">Offline-Prüfung</button>
+        </div>
+        <details class="offline-tips">
+          <summary class="small">Tipps für iPhone / Bluefy</summary>
+          <ul class="small">
+            <li><b>Bluefy:</b> Zeigt die Prüfung „bereit“, funktioniert die App auch ohne Internet – öffne sie einfach wie gewohnt in Bluefy (am besten als Favorit). Zeigt sie „nicht unterstützt“, braucht die App beim Öffnen eine Verbindung; danach läuft alles außer Online-Räumen ohne Netz weiter, solange du die Seite nicht neu lädst.</li>
+            <li><b>Als App-Symbol:</b> In der Kurzbefehle-App einen Kurzbefehl „URL öffnen“ mit der Adresse dieser Seite anlegen, „Mit Bluefy öffnen“ wählen und zum Home-Bildschirm hinzufügen.</li>
+            <li><b>Safari:</b> Unter iOS 26 gibt es die Safari-Erweiterung „WebBLE“, die Web Bluetooth in Safari nachrüstet. In Safari ist die App über „Teilen → Zum Home-Bildschirm“ installierbar und offline nutzbar. (Mit der Erweiterung noch nicht getestet.)</li>
+          </ul>
+        </details>
       </section>
 
       <section class="set-sec">

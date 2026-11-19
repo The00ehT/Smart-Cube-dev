@@ -134,7 +134,28 @@ const STATIC = {
   'Dein Name': 'Your name',
   'Avatar auswählen': 'Choose avatar',
   Farbschema: 'Color scheme',
-  Schließen_: 'Close',
+  'Würfel-Aussehen': 'Cube look',
+  'Offline-Prüfung': 'Offline check',
+  'Tipps für iPhone / Bluefy': 'Tips for iPhone / Bluefy',
+  'Zeigt die Prüfung „bereit“, funktioniert die App auch ohne Internet – öffne sie einfach wie gewohnt in Bluefy (am besten als Favorit). Zeigt sie „nicht unterstützt“, braucht die App beim Öffnen eine Verbindung; danach läuft alles außer Online-Räumen ohne Netz weiter, solange du die Seite nicht neu lädst.':
+    'If the check says “ready”, the app also works without internet – just open it in Bluefy as usual (ideally as a favorite). If it says “not supported”, the app needs a connection when opening; after that everything except online rooms keeps working offline as long as you don’t reload.',
+  'Als App-Symbol:': 'As an app icon:',
+  'In der Kurzbefehle-App einen Kurzbefehl „URL öffnen“ mit der Adresse dieser Seite anlegen, „Mit Bluefy öffnen“ wählen und zum Home-Bildschirm hinzufügen.':
+    'In the Shortcuts app create an “Open URL” shortcut with this page’s address, choose “Open in Bluefy” and add it to the home screen.',
+  'Unter iOS 26 gibt es die Safari-Erweiterung „WebBLE“, die Web Bluetooth in Safari nachrüstet. In Safari ist die App über „Teilen → Zum Home-Bildschirm“ installierbar und offline nutzbar. (Mit der Erweiterung noch nicht getestet.)':
+    'On iOS 26 there is the Safari extension “WebBLE” that adds Web Bluetooth to Safari. In Safari the app can be installed via “Share → Add to Home Screen” and used offline. (Not tested with the extension yet.)',
+  Stil: 'Style',
+  'Klassisch (Sticker)': 'Classic (stickers)',
+  Fliesen: 'Tiles',
+  Körper: 'Body',
+  Schwarz: 'Black',
+  Grau: 'Gray',
+  Farben: 'Colors',
+  Kräftig: 'Vivid',
+  Pastell: 'Pastel',
+  Oberfläche: 'Finish',
+  Glänzend: 'Glossy',
+  Matt: 'Matte',
 };
 
 /** Feste Texte und Attribute einer Seite übersetzen (nur bei Englisch nötig) */

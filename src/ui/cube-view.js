@@ -3,11 +3,11 @@
  * ein kompletter Zustand wird über einen gelösten Weg dorthin dargestellt.
  * Bei GAN-Würfeln mit Gyroskop dreht sich die Darstellung mit dem echten Würfel.
  */
-import { TwistyPlayer } from 'cubing/twisty';
 import { KPattern } from 'cubing/kpuzzle';
 import { cube3x3x3 } from 'cubing/puzzles';
 import { experimentalSolve3x3x3IgnoringCenters } from 'cubing/search';
 import { SOLVED, faceletsToPatternData } from '../cube/facelets.js';
+import { Cube3D } from './cube3d.js';
 
 // --- kleine Quaternionen-Helfer (x, y, z, w) ---
 const qmul = (a, b) => ({
@@ -33,7 +33,7 @@ function qFromEuler(xd, yd, zd) {
   };
 }
 
-const HOME = qFromEuler(15, -20, 0);
+const HOME = qFromEuler(24, -32, 0); // schräger Blick von oben rechts
 
 // Drehung der Ansicht, damit die Kreuzseite unten liegt (three.js: x → R, y → U, z → F)
 const H = Math.SQRT1_2;
@@ -56,58 +56,35 @@ export async function setupAlgFor(facelets) {
 }
 
 export class CubeView {
-  constructor(container) {
-    this.player = new TwistyPlayer({
-      puzzle: '3x3x3',
-      visualization: 'PG3D',
-      alg: '',
-      experimentalSetupAnchor: 'start',
-      background: 'none',
-      controlPanel: 'none',
-      hintFacelets: 'none',
-      experimentalDragInput: 'auto',
-      cameraLatitude: 0,
-      cameraLongitude: 0,
-      cameraLatitudeLimit: 0,
-      tempoScale: 5,
-    });
-    this.player.classList.add('twisty');
-    container.append(this.player);
-
+  constructor(container, skin) {
+    this.cube = new Cube3D(container, skin);
     this.basis = null;
-    this.target = HOME;
     this.base = HOME; // Lage ohne Gyroskop (siehe setDownFace)
     this.gyroSeen = false;
     this.gyroEnabled = true;
-    // Schräge Grundansicht immer anwenden, auch ohne Gyroskop
-    this.gyroActive = true;
-    this.moveCount = 0;
-    this.kpuzzle = cube3x3x3.kpuzzle();
-    this.syncToken = 0;
-    this.#animate();
+    this.target = HOME;
+  }
+
+  /** Lage setzen (wird im Würfel weich angesteuert) */
+  set target(q) {
+    this._target = q;
+    this.cube?.setOrientation(q);
+  }
+  get target() {
+    return this._target;
   }
 
   addMove(move) {
-    this.player.experimentalAddMove(move, { cancel: false });
-    this.moveCount++;
+    this.cube.addMove(move);
   }
 
   /** Zeigt einen vollständigen Zustand (Kociemba-Facelets) ohne Animation */
-  async setState(facelets) {
-    const token = ++this.syncToken;
-    this.moveCount = 0;
-    if (facelets === SOLVED) {
-      this.player.experimentalSetupAlg = '';
-      this.player.alg = '';
-      return;
-    }
-    const kpuzzle = await this.kpuzzle;
-    const pattern = new KPattern(kpuzzle, faceletsToPatternData(facelets));
-    const solution = await experimentalSolve3x3x3IgnoringCenters(pattern);
-    // Inzwischen kam ein neuerer Zustand: diesen verwerfen
-    if (token !== this.syncToken) return;
-    this.player.experimentalSetupAlg = solution.invert();
-    this.player.alg = '';
+  setState(facelets) {
+    this.cube.setState(facelets);
+  }
+
+  setSkin(skin) {
+    this.cube.setSkin(skin);
   }
 
   /** Lage aus dem Gyroskop (GAN-Koordinaten: +X rot, +Y blau, +Z weiß) */
@@ -149,33 +126,5 @@ export class CubeView {
     this.gyroSeen = false;
     this.basis = null;
     this.target = this.base;
-  }
-
-  async #animate() {
-    let vantage = null;
-    let scene = null;
-    const frame = async () => {
-      try {
-        if (!scene) {
-          const vantages = [...(await this.player.experimentalCurrentVantages())];
-          vantage = vantages[0];
-          if (vantage) scene = await vantage.scene.scene();
-        }
-        if (scene && this.gyroActive) {
-          const Q = scene.quaternion.constructor;
-          const t = this.target;
-          const goal = new Q(t.x, t.y, t.z, t.w);
-          // Nur neu zeichnen, wenn sich die Lage noch sichtbar ändert (spart Akku)
-          if (scene.quaternion.angleTo(goal) > 0.002) {
-            scene.quaternion.slerp(goal, 0.25);
-            vantage.render();
-          }
-        }
-      } catch {
-        /* Player noch nicht bereit */
-      }
-      requestAnimationFrame(frame);
-    };
-    requestAnimationFrame(frame);
   }
 }
