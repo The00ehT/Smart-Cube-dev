@@ -8,16 +8,24 @@
  */
 import { load, save } from './storage.js';
 import { OLL_ALGS, PLL_ALGS } from './cube/ll-cases.js';
+import { F2L_CASES, f2lDefault } from './cube/alg-db.js';
 
 const KEY = 'smartcube.algs.v1';
 export const algData = { cases: {}, custom: [], train: {}, ...load(KEY, {}) };
 export const saveAlgs = () => save(KEY, algData);
 
 export const caseIds = (set) =>
-  set === 'PLL' ? Object.keys(PLL_ALGS).map((n) => `PLL ${n}`) : set === 'OLL' ? Object.keys(OLL_ALGS).map((n) => `OLL ${n}`) : algData.custom.map((c) => `Eigene ${c.id}`);
+  set === 'PLL'
+    ? Object.keys(PLL_ALGS).map((n) => `PLL ${n}`)
+    : set === 'OLL'
+      ? Object.keys(OLL_ALGS).map((n) => `OLL ${n}`)
+      : set === 'F2L'
+        ? F2L_CASES.map((c) => c.id)
+        : algData.custom.map((c) => `Eigene ${c.id}`);
 
 export function defaultAlg(id) {
   const [set, n] = id.split(' ');
+  if (set === 'F2L') return f2lDefault(n);
   return set === 'PLL' ? PLL_ALGS[n] : set === 'OLL' ? OLL_ALGS[n] : algData.custom.find((c) => String(c.id) === n)?.alg;
 }
 
@@ -82,7 +90,8 @@ export function removeCustom(id) {
 }
 export const caseName = (id) => {
   if (id.startsWith('Eigene')) return algData.custom.find((x) => `Eigene ${x.id}` === id)?.name ?? 'Eigener Algorithmus';
-  return id.replace('PLL ', '') + (id.startsWith('PLL') ? '-Perm' : '').replace('OLL ', 'OLL ');
+  if (id.startsWith('F2L')) return `F2L-Fall ${id.slice(4)}`;
+  return id.replace('PLL ', '') + (id.startsWith('PLL') ? '-Perm' : '');
 };
 
 export function recordTraining(id, exec, recog) {

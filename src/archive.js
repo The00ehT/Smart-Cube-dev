@@ -28,3 +28,9 @@ export function updateArchived(solveId, patch) {
   Object.assign(a, patch, { changedAt: new Date().toISOString() });
   persist();
 }
+
+/** Gelöschten Eintrag wiederherstellen (Rückgängig) */
+export function restoreArchived(entry) {
+  if (!archive.some((a) => a.solveId === entry.solveId)) archive.push(entry);
+  persist();
+}

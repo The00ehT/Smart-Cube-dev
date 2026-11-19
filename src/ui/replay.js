@@ -56,6 +56,7 @@ export class Replay {
           <label class="toggle rp-gyro-toggle" hidden><input type="checkbox" class="rp-gyro" checked /> Würfeldrehungen &amp; Griffwechsel (Gyro) zeigen</label>
           <div class="rp-actions">
             <button class="rp-share primary">Teilen</button>
+            <button class="rp-race ghost" type="button">👻 Dagegen antreten</button>
             <a class="rp-twizzle" target="_blank" rel="noopener">In Twizzle öffnen ↗</a>
             <span class="rp-msg small"></span>
           </div>
@@ -89,6 +90,10 @@ export class Replay {
       }
     });
     $('.rp-share', dialog).addEventListener('click', () => this.share());
+    $('.rp-race', dialog).addEventListener('click', () => {
+      dialog.close();
+      this.onRace?.(this.solve);
+    });
     $('.rp-gyro', dialog).addEventListener('change', (e) => {
       this.useGyro = e.target.checked;
       this.pause();

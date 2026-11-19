@@ -32,6 +32,14 @@ Aufgebaut auf [gan-web-bluetooth](https://github.com/afedotov/gan-web-bluetooth)
 - **Algorithmen** (eigener Tab): alle 21 PLL und 57 OLL mit Bild, Wahrscheinlichkeit und – aus deinen Solves –
   Häufigkeit, Ø Zeit, Ø Erkennung und Ø Ausführung je Fall; eigene Algorithmen eintippen oder **am Würfel ausführen**
   (Notation wird mitgeschrieben und geprüft, ob sie den Fall löst); freie eigene Algorithmen
+- **Algorithmen-Datenbank**: alle 41 F2L-Fälle (Slot vorne rechts) mit bis zu vier geprüften Algorithmen, dazu Varianten
+  für die anderen Slots (gespiegelt bzw. mit Drehung); Alternativen für PLL und OLL. Jeder Algorithmus wird automatisch
+  geprüft (`npm run gen:f2l` erzeugt die F2L-Daten neu)
+- **Schwächen üben**: findet deine langsamsten Fälle (aus Solves und Training) und trainiert sie gezielt
+- **Coach**: Hinweise aus deinen Daten (größter Hebel, Erkennung, Pausen, Kreuz, Drehungen, Fortschritt) mit passender Aktion
+- **Geister-Rennen**: gegen die eigene Bestzeit oder einen geteilten Solve – gleicher Startzustand, der Geist löst live mit
+- **Live-Phasen** beim Lösen, **Rekord-Feier** (Konfetti, Klang) und **Teilen-Karte** als Bild
+- **Rückgängig** statt Rückfragen beim Löschen
 - **Trainer**: stellt den Fall per berechnetem Setup her (vom aktuellen Zustand aus), misst Erkennung und Ausführung,
   langsame und neue Fälle kommen öfter
 - **Archiv**: gute Lösungen nach dem Solve mit einem Tipp sichern; Tabelle mit Zeit, Scramble, Zügen, TPS, Fällen und

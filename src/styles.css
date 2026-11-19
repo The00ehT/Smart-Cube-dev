@@ -620,3 +620,68 @@ dialog.big-dialog { width: min(1100px, calc(100vw - 24px)); max-width: none; max
   .ar-scr { min-width: 0; max-width: none; }
   .archive-table td, .archive-table th { padding: 8px 4px; }
 }
+
+/* ---------- Meldung mit Rückgängig ---------- */
+.toast { width: max-content; min-width: min(300px, calc(100vw - 32px));
+  position: fixed; left: 50%; bottom: calc(24px + var(--safe-bottom)); z-index: 60;
+  transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
+  display: flex; align-items: center; gap: 14px; max-width: calc(100vw - 32px);
+  background: #1c2129; color: #fff; padding: 12px 14px 12px 18px; border-radius: 14px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.3); transition: opacity 0.2s, transform 0.2s; font-size: 15px;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.toast button { background: transparent; color: #8cb4ff; font-weight: 700; padding: 6px 8px; margin-left: auto; flex: none; }
+.toast span { flex: 1; }
+@media (max-width: 700px) { .toast { bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 14px); } }
+
+/* ---------- Rekord ---------- */
+.confetti { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 70; }
+.timer.pop { animation: pop 0.6s cubic-bezier(0.2, 1.6, 0.4, 1); }
+@keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.14); } 100% { transform: scale(1); } }
+
+/* ---------- Live-Phasen ---------- */
+.live-bar { margin: 14px auto 0; max-width: 420px; display: grid; gap: 6px; }
+.lb-segs { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr 1.2fr 1.4fr; gap: 3px; }
+.lb-seg { height: 8px; border-radius: 4px; background: var(--chip); position: relative; overflow: hidden; }
+.lb-seg.done { background: var(--ph); }
+.lb-seg.cur::after { content: ''; position: absolute; inset: 0; background: var(--ph); opacity: 0.45; animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.1; } }
+.lb-label { font-size: 13px; color: var(--muted); font-weight: 600; text-align: center; }
+.small-bar .lb-seg { height: 6px; }
+.small-bar .lb-label { font-size: 12px; text-align: left; }
+
+/* ---------- Geist ---------- */
+.ghost-card { display: flex; align-items: center; gap: 14px; background: var(--panel-2); border-radius: 14px; padding: 10px 12px; position: relative; }
+.ghost-cube { width: 96px; height: 96px; flex: none; opacity: 0.85; }
+.ghost-cube .twisty { width: 100%; height: 100%; }
+.ghost-info { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.ghost-time { font: 750 26px/1 var(--num-font); }
+.ghost-stop { position: absolute; top: 8px; right: 8px; }
+.ghost-info .live-bar { margin: 0; max-width: none; }
+body.solving .ghost-card { display: flex !important; max-width: 520px; margin: 0 auto; width: 100%; }
+
+/* ---------- Coach ---------- */
+.coach-h { margin: 0 0 10px; font-size: 17px; }
+.coach-item { display: flex; gap: 12px; padding: 10px 0; }
+.coach-item + .coach-item { border-top: 1px solid var(--line); }
+.coach-icon { font-size: 24px; line-height: 1.2; flex: none; width: 32px; text-align: center; }
+.coach-item p { margin: 3px 0 8px; color: var(--muted); font-size: 14px; }
+.coach-tip { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; width: 100%; text-align: left; background: var(--accent-soft); border-radius: 12px; padding: 10px 12px; font-weight: 500; white-space: normal; }
+body.solving .coach-tip, body.solving .archive-btn { display: none !important; }
+
+/* ---------- Datenbank, Schwächen ---------- */
+.weak-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.weak-list li { display: flex; gap: 10px; align-items: center; }
+.alt-list { display: grid; gap: 6px; }
+.alt-row { display: flex; gap: 10px; align-items: center; padding: 8px 12px; border-radius: 12px; background: var(--panel-2); }
+.alt-row .alg-text { font-size: 14px; }
+.slot-name { min-width: 9.5em; }
+.sd-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.sd-row button { flex: 1; }
+#sd-archive { width: auto; margin-top: 0; }
+.f2l-dia { border-radius: 0; }
+@media (max-width: 700px) {
+  .alt-row { flex-wrap: wrap; }
+  .slot-name { min-width: 0; width: 100%; }
+  .algs-set button { padding: 7px 2px; }
+}

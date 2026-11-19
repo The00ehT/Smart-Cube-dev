@@ -29,3 +29,53 @@ export function llDiagram(state, mode = 'pll', size = 72) {
   RIGHT.forEach((i, k) => r(38, 7 + k * u, 5, u - 1, i));
   return `<svg class="ll-dia" viewBox="0 0 44 44" width="${size}" height="${size}" aria-hidden="true">${rects.join('')}</svg>`;
 }
+
+/**
+ * F2L-Fall als kleine 3D-Ansicht (oben, vorne, rechts). Farbig sind nur die Mitten und das Paar
+ * (Ecke und Kante des Slots vorne rechts), alles andere grau.
+ */
+const PAIR_CORNER = 'DFR';
+const PAIR_EDGE = 'FR';
+// Felder je Seite (Kociemba): U 0–8, R 9–17, F 18–26
+const FACE_PTS = {
+  U: (r, c) => [[c - 1.5, 1.5, r - 1.5], [c - 0.5, 1.5, r - 1.5], [c - 0.5, 1.5, r - 0.5], [c - 1.5, 1.5, r - 0.5]],
+  F: (r, c) => [[c - 1.5, 1.5 - r, 1.5], [c - 0.5, 1.5 - r, 1.5], [c - 0.5, 0.5 - r, 1.5], [c - 1.5, 0.5 - r, 1.5]],
+  R: (r, c) => [[1.5, 1.5 - r, 1.5 - c], [1.5, 1.5 - r, 0.5 - c], [1.5, 0.5 - r, 0.5 - c], [1.5, 0.5 - r, 1.5 - c]],
+};
+const FACE_OFF = { U: 0, R: 9, F: 18 };
+const proj = ([x, y, z]) => [(x - z) * 0.866 * 10 + 30, (-y + (x + z) * 0.5) * 10 + 30];
+
+/** Steine des Zustands: Feldindex → Farben aller Felder dieses Steins */
+import { STICKERS } from '../cube/facelets.js';
+const PIECE = STICKERS.map((s) => STICKERS.map((t, j) => (t.pos.every((v, k) => v === s.pos[k]) ? j : -1)).filter((j) => j >= 0));
+
+export function f2lDiagram(state, size = 72) {
+  const polys = [];
+  for (const f of ['U', 'F', 'R']) {
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        const i = FACE_OFF[f] + r * 3 + c;
+        const colors = PIECE[i].map((j) => state[j]).sort().join('');
+        const center = r === 1 && c === 1;
+        const inPair = colors === [...PAIR_CORNER].sort().join('') || colors === [...PAIR_EDGE].sort().join('');
+        const fill = center || inPair ? COLORS[state[i]] : 'var(--ll-gray)';
+        const pts = FACE_PTS[f](r, c);
+        // leicht nach innen versetzt, damit Fugen sichtbar sind
+        const mid = pts.reduce((a, p) => a.map((v, k) => v + p[k] / 4), [0, 0, 0]);
+        const inset = pts.map((p) => p.map((v, k) => mid[k] + (v - mid[k]) * 0.86));
+        polys.push(`<polygon points="${inset.map((p) => proj(p).map((v) => v.toFixed(1)).join(',')).join(' ')}" fill="${fill}"/>`);
+      }
+    }
+  }
+  return `<svg class="ll-dia f2l-dia" viewBox="0 0 60 64" width="${size}" height="${size}" aria-hidden="true"><polygon points="${[[-1.5, 1.5, -1.5], [1.5, 1.5, -1.5], [1.5, 1.5, 1.5], [1.5, -1.5, 1.5], [-1.5, -1.5, 1.5], [-1.5, 1.5, 1.5]].map((p) => proj(p).join(',')).join(' ')}" fill="#1a1d23"/>${polys.join('')}</svg>`;
+}
+
+/** Passende Grafik für eine Fall-ID */
+import { CASE_STATE } from '../cube/ll-cases.js';
+import { displayState } from '../cube/f2l-cases.js';
+export function caseDiagram(id, size = 64) {
+  const s = CASE_STATE[id];
+  if (!s) return '';
+  if (id.startsWith('F2L')) return f2lDiagram(displayState(s), size);
+  return llDiagram(s, id.startsWith('OLL') ? 'oll' : 'pll', size);
+}

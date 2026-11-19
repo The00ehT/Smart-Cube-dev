@@ -183,11 +183,22 @@ export const llOriented = (s) => U_FACE.every((i) => s[i] === s[4]);
 
 // ---------- Tabellen ----------
 
-const caseState = (alg) => applyAnyAlg(SOLVED, invertAnyAlg(alg));
+const ROTS = ['', 'x', 'x2', "x'", 'y', 'y2', "y'", 'z', "z'", 'x y', 'x y2', "x y'", "x' y", "x' y2", "x' y'", 'z y', 'z y2', "z y'", "z' y", "z' y2", "z' y'", 'x2 y', 'x2 y2', "x2 y'"];
+/**
+ * Fall-Zustand eines Algorithmus: der Zustand mit Mitten in Standardlage, den der Algorithmus löst.
+ * Enthält der Algorithmus Würfeldrehungen, wird deren Summe vorne ausgeglichen (der Löser hält den Würfel normal).
+ */
+function caseState(alg) {
+  const inv = invertAnyAlg(alg);
+  for (const q of ROTS) {
+    const s = applyAnyAlg(q ? applyAnyAlg(SOLVED, q) : SOLVED, inv);
+    if (s[4] === 'U' && s[13] === 'R' && s[22] === 'F') return s;
+  }
+  return recenter(applyAnyAlg(SOLVED, inv));
+}
 /** Drehung so, dass die Mitten wieder in Standardlage liegen (nach Algorithmen mit x/y/z/M) */
 export function recenter(state) {
-  const rots = ['', 'x', 'x2', "x'", 'y', 'y2', "y'", 'z', "z'", 'x y', 'x y2', "x y'", "x' y", "x' y2", "x' y'", 'z y', 'z y2', "z y'", "z' y", "z' y2", "z' y'", 'x2 y', 'x2 y2', "x2 y'"];
-  for (const r of rots) {
+  for (const r of ROTS) {
     const s = r ? applyAnyAlg(state, r) : state;
     if (s[4] === 'U' && s[13] === 'R' && s[22] === 'F') return s;
   }
@@ -198,12 +209,12 @@ export const OLL_CASES = {}; // Schlüssel → Nummer
 export const PLL_CASES = {}; // Schlüssel → Name
 export const CASE_STATE = {}; // 'OLL 27' / 'PLL T' → Zustand (Kreuz unten)
 for (const [n, alg] of Object.entries(OLL_ALGS)) {
-  const s = recenter(caseState(alg));
+  const s = caseState(alg);
   OLL_CASES[ollKey(s)] = Number(n);
   CASE_STATE['OLL ' + n] = s;
 }
 for (const [n, alg] of Object.entries(PLL_ALGS)) {
-  const s = recenter(caseState(alg));
+  const s = caseState(alg);
   PLL_CASES[pllKey(s)] = n;
   CASE_STATE['PLL ' + n] = s;
 }
@@ -295,7 +306,7 @@ export function caseProbabilities() {
 }
 
 /** Fall-Zustand (Kreuz unten, Mitten in Standardlage) für einen beliebigen Algorithmus */
-export const stateForAlg = (alg) => recenter(applyAnyAlg(SOLVED, invertAnyAlg(alg)));
+export const stateForAlg = (alg) => caseState(alg);
 
 /** Gelöst bis auf eine Drehung der oberen Schicht? */
 export const solvedUpToAuf = (s) => f2lSolved(s) && llOriented(s) && identifyPll(s) === 'Skip';
@@ -310,8 +321,11 @@ export function checkAlg(id, alg) {
   if (!tokenizeAlg(alg).length) return { ok: false, error: 'Leer' };
   const start = CASE_STATE[id];
   if (!start) return { ok: true, solves: true };
-  const end = recenter(applyAnyAlg(start, alg));
-  const solves = id.startsWith('OLL') ? f2lSolved(end) && llOriented(end) : solvedUpToAuf(end);
+  // Der Löser darf die obere Schicht vorher passend drehen (AUF)
+  const solves = ['', 'U', 'U2', "U'"].some((auf) => {
+    const end = recenter(applyAnyAlg(applyAnyAlg(start, auf), alg));
+    return id.startsWith('OLL') ? f2lSolved(end) && llOriented(end) : id.startsWith('F2L') ? f2lSolved(end) : solvedUpToAuf(end);
+  });
   return { ok: true, solves };
 }
 

@@ -387,3 +387,22 @@ export function relativeState(from, to) {
   sf.forEach((h, i) => (inv[h] = i));
   return st.map((h) => SOLVED[inv[h]]).join('');
 }
+
+/**
+ * Spiegelt einen Algorithmus an der Ebene zwischen R und L (rechts ↔ links), z. B. Jb → Ja.
+ * Regel: R ↔ L (r ↔ l), alle Drehrichtungen umkehren – außer x und M (ihre Achse steht senkrecht zur Spiegelebene).
+ */
+export function mirrorAlg(alg) {
+  const swap = { R: 'L', L: 'R', r: 'l', l: 'r' };
+  return tokenizeAlg(alg)
+    .map((t) => {
+      const p = parseAnyMove(t);
+      if (!p) return t;
+      let name = t.replace(/[2']/g, '');
+      name = name.replace(/^[RLrl]/, (c) => swap[c]);
+      const keep = /^(x|M)$/.test(name);
+      const amount = p.amount === 2 ? 2 : keep ? p.amount : 4 - p.amount;
+      return name + (amount === 2 ? '2' : amount === 3 ? "'" : '');
+    })
+    .join(' ');
+}

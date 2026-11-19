@@ -9,7 +9,7 @@ import { applyAnyAlg, CROSS_DOWN, isSolved, relativeState } from '../cube/facele
 import { stateForAlg, bodyCaseState, solvedUpToAuf, f2lSolved, llOriented, CASE_STATE } from '../cube/ll-cases.js';
 import { algData, mainAlg, recordTraining, caseName } from '../algs.js';
 import { setupAlgFor } from './cube-view.js';
-import { llDiagram } from './ll-diagram.js';
+import { caseDiagram } from './ll-diagram.js';
 import { formatTime } from '../stats.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -163,7 +163,8 @@ export class Trainer {
 
   checkDone(state, t) {
     const viewer = applyAnyAlg(state, CROSS_DOWN[this.h.crossFace()]);
-    const ok = this.caseId.startsWith('OLL') ? f2lSolved(viewer) && llOriented(viewer) : solvedUpToAuf(viewer) || isSolved(state);
+    const id = this.caseId;
+    const ok = id.startsWith('OLL') ? f2lSolved(viewer) && llOriented(viewer) : id.startsWith('F2L') ? f2lSolved(viewer) : solvedUpToAuf(viewer) || isSolved(state);
     if (ok) {
       const exec = t - this.firstAt;
       const recog = this.firstAt - this.readyAt;
@@ -188,7 +189,7 @@ export class Trainer {
     const hist = (algData.train[id] || []).slice(-12).map((x) => x.exec);
     d.querySelector('.tr-result').innerHTML = `
       <div class="tr-case">
-        ${CASE_STATE[id] ? llDiagram(CASE_STATE[id], set === 'OLL' ? 'oll' : 'pll', 64) : ''}
+        ${caseDiagram(id, 64)}
         <div>
           <b>${esc(caseName(id))}</b>
           <div class="small">Erkennung ${formatTime(recog)} · Ausführung ${formatTime(exec)} · ${this.moves} Züge</div>

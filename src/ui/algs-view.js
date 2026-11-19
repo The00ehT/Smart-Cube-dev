@@ -3,10 +3,13 @@
  * eigene Algorithmen (eintippen oder am Würfel ausführen) und Start des Trainers.
  */
 import { CASE_STATE, OLL_GROUPS, PLL_GROUPS, caseProbabilities, checkAlg } from '../cube/ll-cases.js';
-import { rotationFaceMap, CROSS_DOWN, COLOR_NAMES, groupMoves, tokenizeAlg } from '../cube/facelets.js';
-import { algData, algsOf, mainAlg, addAlg, removeAlg, setMain, addCustom, updateCustom, removeCustom, caseName } from '../algs.js';
+import { rotationFaceMap, CROSS_DOWN, COLOR_NAMES, groupMoves, tokenizeAlg, mirrorAlg } from '../cube/facelets.js';
+import { algData, algsOf, mainAlg, addAlg, removeAlg, setMain, addCustom, updateCustom, removeCustom, caseName, saveAlgs } from '../algs.js';
+import { undoable } from './toast.js';
 import { llStats } from '../case-stats.js';
-import { llDiagram } from './ll-diagram.js';
+import { caseDiagram } from './ll-diagram.js';
+import { F2L_GROUPS, dbAlgs } from '../cube/alg-db.js';
+import { weakCases } from '../weakness.js';
 import { formatTime } from '../stats.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -24,19 +27,24 @@ export class AlgsView {
     this.root = root;
     this.dlg = dlg;
     this.h = h;
-    this.set = 'PLL';
+    this.set = 'F2L';
     this.sort = 'std';
     this.recording = null; // { moves: [] } während „Am Würfel ausführen“
     root.innerHTML = `
       <div class="tab-head">
         <h2>Algorithmen</h2>
-        <button type="button" class="primary" data-act="train">▶ Trainieren</button>
+        <div class="tab-actions">
+          <button type="button" class="ghost" data-act="weak">🎯 Schwächen üben</button>
+          <button type="button" class="primary" data-act="train">▶ Trainieren</button>
+        </div>
       </div>
       <div class="seg-control algs-set" role="tablist">
-        <button type="button" data-set="PLL">PLL</button>
+        <button type="button" data-set="F2L">F2L</button>
         <button type="button" data-set="OLL">OLL</button>
+        <button type="button" data-set="PLL">PLL</button>
         <button type="button" data-set="Eigene">Eigene</button>
       </div>
+      <div class="card weak-card" hidden></div>
       <div class="card algs-summary"></div>
       <div class="algs-tools">
         <label class="small">Sortieren
@@ -57,6 +65,7 @@ export class AlgsView {
         return;
       }
       if (e.target.closest('[data-act=train]')) return this.trainSet();
+      if (e.target.closest('[data-act=weak]')) return this.trainWeak();
       if (e.target.closest('[data-act=new-custom]')) return this.openCustom(null);
       const card = e.target.closest('[data-case]');
       if (card) this.openCase(card.dataset.case);
@@ -73,8 +82,22 @@ export class AlgsView {
 
   ids() {
     if (this.set === 'Eigene') return algData.custom.map((c) => `Eigene ${c.id}`);
-    const groups = this.set === 'PLL' ? PLL_GROUPS : OLL_GROUPS;
+    const groups = this.set === 'PLL' ? PLL_GROUPS : this.set === 'F2L' ? F2L_GROUPS : OLL_GROUPS;
     return groups.flatMap(([, list]) => list.map((n) => `${this.set} ${n}`));
+  }
+
+  /** Schwächste Fälle trainieren (aus Solves und Training) */
+  trainWeak() {
+    const weak = weakCases(this.h.solves());
+    const card = this.root.querySelector('.weak-card');
+    card.hidden = false;
+    if (!weak.length) {
+      card.innerHTML = `<p class="small">Noch zu wenig Daten für eine Schwächen-Analyse. Mach ein paar Solves oder trainiere ein Set – dann findet die App deine langsamsten Fälle.</p>`;
+      return;
+    }
+    card.innerHTML = `<h3 class="sub-h">Deine Schwächen</h3>
+      <ol class="weak-list">${weak.map((w) => `<li>${caseDiagram(w.id, 40)}<div><b>${esc(w.name)}</b><div class="small">${esc(w.reason)}</div></div></li>`).join('')}</ol>`;
+    this.h.train(weak.map((w) => w.id), 'Schwächen');
   }
 
   trainSet() {
@@ -88,13 +111,18 @@ export class AlgsView {
     this.stats = stats;
     const probs = caseProbabilities();
     this.root.querySelectorAll('[data-set]').forEach((b) => b.classList.toggle('on', b.dataset.set === this.set));
-    this.root.querySelector('.algs-tools').hidden = this.set === 'Eigene';
+    this.root.querySelector('.algs-tools').hidden = this.set === 'Eigene' || this.set === 'F2L';
 
     // Zusammenfassung
     const sum = this.root.querySelector('.algs-summary');
     if (this.set === 'Eigene') {
-      sum.innerHTML = `<p class="small">Hier speicherst du Algorithmen, die zu keinem OLL/PLL-Fall gehören (z. B. F2L-Fälle, Tricks).
+      sum.innerHTML = `<p class="small">Hier speicherst du Algorithmen, die zu keinem Fall der Datenbank gehören (z. B. Tricks, Spezialfälle).
         Du kannst sie eintippen oder einfach am Würfel ausführen.</p>`;
+    } else if (this.set === 'F2L') {
+      const trained = this.ids().filter((id) => algData.train[id]?.length).length;
+      sum.innerHTML = `<p class="small">Alle 41 F2L-Fälle für den Slot vorne rechts, je mit bis zu vier geprüften Algorithmen
+        (kurz und mit möglichst wenig Umgreifen). Für den linken Slot zeigt jeder Fall die gespiegelte Variante, für hintere
+        Slots die Variante mit Drehung. ${trained ? `Trainiert: ${trained} / 41.` : ''}</p>`;
     } else {
       const tot = stats.total[this.set];
       const max = this.set === 'PLL' ? 21 : 57;
@@ -129,17 +157,28 @@ export class AlgsView {
       return;
     }
     let ids = this.ids();
-    const st = (id) => stats[this.set][id];
+    const st = (id) => stats[this.set]?.[id];
     if (this.sort === 'freq') ids = [...ids].sort((a, b) => (st(b)?.n || 0) - (st(a)?.n || 0));
     if (this.sort === 'slow') ids = [...ids].sort((a, b) => (st(b)?.mean ?? -1) - (st(a)?.mean ?? -1));
     if (this.sort === 'recog') ids = [...ids].sort((a, b) => (st(b)?.recog ?? -1) - (st(a)?.recog ?? -1));
-    const groups = this.set === 'PLL' ? PLL_GROUPS : OLL_GROUPS;
+    const groups = this.set === 'PLL' ? PLL_GROUPS : this.set === 'F2L' ? F2L_GROUPS : OLL_GROUPS;
     const card = (id) => {
       const s = st(id);
-      const p = this.set === 'PLL' ? probs.pll[id.slice(4)] : probs.oll[Number(id.slice(4))];
       const own = algsOf(id).own;
+      if (this.set === 'F2L') {
+        const tr = algData.train[id] || [];
+        return `<button type="button" class="case-card" data-case="${id}">
+          ${caseDiagram(id, 64)}
+          <div class="cc-body">
+            <div class="cc-name">${esc(caseName(id))}${own ? ' <span class="tag">eigener</span>' : ''}</div>
+            <div class="cc-alg">${esc(mainAlg(id))}</div>
+            <div class="cc-freq small">${tr.length ? `Training Ø ${t(avg(tr.slice(-8).map((x) => x.exec)))}` : `${dbAlgs(id).length} Algorithmen`}</div>
+          </div>
+        </button>`;
+      }
+      const p = this.set === 'PLL' ? probs.pll[id.slice(4)] : probs.oll[Number(id.slice(4))];
       return `<button type="button" class="case-card" data-case="${id}">
-        ${llDiagram(CASE_STATE[id], this.set === 'OLL' ? 'oll' : 'pll', 64)}
+        ${caseDiagram(id, 64)}
         <div class="cc-body">
           <div class="cc-name">${esc(caseName(id))}${own ? ' <span class="tag">eigener</span>' : ''}</div>
           <div class="cc-stats">${s ? `<b>${t(s.mean)}</b> · Erk. ${t(s.recog)}` : '<span class="small">noch nicht gehabt</span>'}</div>
@@ -168,15 +207,15 @@ export class AlgsView {
     const set = id.slice(0, 3);
     const s = this.stats?.[set]?.[id];
     const probs = caseProbabilities();
-    const p = set === 'PLL' ? probs.pll[id.slice(4)] : probs.oll[Number(id.slice(4))];
+    const p = set === 'PLL' ? probs.pll[id.slice(4)] : set === 'OLL' ? probs.oll[Number(id.slice(4))] : null;
     const tr = algData.train[id] || [];
     const { algs, main } = algsOf(id);
     this.dlg.innerHTML = `
       <div class="rp-head">
         <div class="case-head">
-          ${llDiagram(CASE_STATE[id], set === 'OLL' ? 'oll' : 'pll', 96)}
+          ${caseDiagram(id, 96)}
           <div><h2>${esc(caseName(id))}</h2>
-            <div class="small">Wahrscheinlichkeit ${pct(p)}${s ? ` · bei dir ${pct(s.share)} (${s.n}×)` : ''}</div></div>
+            <div class="small">${p != null ? `Wahrscheinlichkeit ${pct(p)}${s ? ` · bei dir ${pct(s.share)} (${s.n}×)` : ''}` : 'Slot vorne rechts · Kreuz unten'}</div></div>
         </div>
         <button type="button" class="rp-close" data-act="close" aria-label="Schließen">✕</button>
       </div>
@@ -199,6 +238,7 @@ export class AlgsView {
           .join('')}
       </div>
       <p class="small">Der markierte Algorithmus wird im Training gezeigt.</p>
+      ${this.altHtml(id, algs)}
       <div class="alg-editor-slot">${this.editorHtml()}</div>
       <menu>
         <button type="button" data-act="add" ${this.editing ? 'hidden' : ''}>＋ Algorithmus hinzufügen</button>
@@ -207,8 +247,35 @@ export class AlgsView {
     this.bindCase();
   }
 
+  /** Alternativen aus der Datenbank (und für F2L die Slot-Varianten) */
+  altHtml(id, mine) {
+    const norm = (x) => tokenizeAlg(x).join(' ');
+    const have = new Set(mine.map(norm));
+    const alts = dbAlgs(id).filter((a) => !have.has(norm(a)));
+    const rows = alts
+      .map((a) => `<div class="alt-row"><span class="alg-text">${esc(a)}</span><span class="small">${tokenizeAlg(a).length} Z.</span>
+        <button type="button" class="ghost small-btn" data-take="${esc(a)}">＋ Übernehmen</button></div>`)
+      .join('');
+    let slots = '';
+    if (id.startsWith('F2L')) {
+      const m = mainAlg(id);
+      const variants = [
+        ['Vorne links (gespiegelt)', mirrorAlg(m)],
+        ['Hinten rechts', `y ${m}`],
+        ['Hinten links', `y' ${mirrorAlg(m)}`],
+      ];
+      slots = `<h3 class="sub-h">Andere Slots</h3>
+        <div class="alt-list">${variants.map(([n, a]) => `<div class="alt-row"><span class="small slot-name">${n}</span><span class="alg-text">${esc(a)}</span></div>`).join('')}</div>`;
+    }
+    return (alts.length ? `<h3 class="sub-h">Alternativen aus der Datenbank</h3><div class="alt-list">${rows}</div>` : '') + slots;
+  }
+
   bindCase() {
     const d = this.dlg;
+    d.querySelectorAll('[data-take]').forEach((b) => (b.onclick = () => {
+      addAlg(this.caseId, b.dataset.take);
+      this.renderCase();
+    }));
     d.querySelector('[data-act=close]').onclick = () => d.close();
     d.querySelectorAll('input[name=main-alg]').forEach((r) => (r.onchange = () => {
       setMain(this.caseId, Number(r.value));
@@ -216,7 +283,14 @@ export class AlgsView {
     }));
     d.querySelectorAll('[data-del]').forEach((b) => (b.onclick = (e) => {
       e.preventDefault();
-      removeAlg(this.caseId, Number(b.dataset.del));
+      const id = this.caseId;
+      const before = JSON.stringify(algData.cases[id] || null);
+      undoable('Algorithmus gelöscht', () => removeAlg(id, Number(b.dataset.del)), () => {
+        const c = JSON.parse(before);
+        if (c) algData.cases[id] = c;
+        saveAlgs();
+        if (this.dlg.open && this.caseId === id) this.renderCase();
+      });
       this.renderCase();
     }));
     const add = d.querySelector('[data-act=add]');
@@ -258,8 +332,14 @@ export class AlgsView {
       d.querySelector('[data-act=close]').onclick = () => d.close();
       d.querySelector('.alg-name').oninput = (e) => (this.editing.name = e.target.value);
       d.querySelector('[data-act=del]')?.addEventListener('click', () => {
-        if (!confirm('Diesen Algorithmus löschen?')) return;
-        removeCustom(id);
+        const backup = algData.custom.find((x) => `Eigene ${x.id}` === id);
+        const train = algData.train[id];
+        undoable(`„${backup.name}“ gelöscht`, () => removeCustom(id), () => {
+          algData.custom.push(backup);
+          if (train) algData.train[id] = train;
+          saveAlgs();
+          this.render();
+        });
         d.close();
       });
       d.querySelector('[data-act=train-one]')?.addEventListener('click', () => {

@@ -66,6 +66,7 @@
                 <div class="scramble-buttons">
                   <button id="btn-new-scramble" class="ghost">Neues Scramble</button>
                   <button id="btn-own-scramble" class="ghost" title="Du verdrehst selbst – der nächste Zug startet die Zeit">Eigenes</button>
+                  <button id="btn-ghost" class="ghost" title="Gegen deine Bestzeit antreten – ihr Geisterwürfel löst live mit">👻 Gegen Bestzeit</button>
                 </div>
               </div>
               <div class="scramble" id="scramble" aria-live="polite"></div>
@@ -75,11 +76,24 @@
             <div class="timer-wrap">
               <div class="timer" id="timer">0.00</div>
               <div class="status" id="status">Verbinde deinen Würfel, um loszulegen.</div>
+              <div class="live-bar" id="live-bar" hidden></div>
               <div class="splits" id="splits"></div>
               <button type="button" class="ghost archive-btn" id="btn-archive" hidden>☆ Rekonstruktion archivieren</button>
             </div>
 
+            <div class="ghost-card" id="ghost-card" hidden>
+              <div class="ghost-cube" id="ghost-cube"></div>
+              <div class="ghost-info">
+                <div class="ghost-head"><span>👻</span> <b id="ghost-name"></b></div>
+                <div class="ghost-time" id="ghost-time">0.00</div>
+                <div class="live-bar small-bar" id="ghost-bar"></div>
+                <div class="small" id="ghost-msg"></div>
+              </div>
+              <button type="button" class="ghost small-btn ghost-stop" id="ghost-stop" aria-label="Geist beenden">✕</button>
+            </div>
+
             <div class="quick" id="stats-quick"></div>
+            <button type="button" class="coach-tip" id="coach-tip" hidden></button>
           </section>
 
           <section class="card cube-card">
@@ -105,6 +119,7 @@
       <!-- ============ Statistik ============ -->
       <section class="tab" id="tab-stats" data-tab="stats" hidden>
         <div class="tab-head"><h2>Statistik</h2></div>
+        <div class="card coach" id="coach"></div>
         <div class="card" id="phase-pie-card">
           <div id="phase-pie" class="mini-pie"></div>
         </div>
@@ -188,7 +203,11 @@
         <div class="label">Lösung</div>
         <div class="alg" id="sd-solution"></div>
         <button type="button" id="sd-replay" class="primary">▶ Rekonstruktion ansehen &amp; teilen</button>
-        <button type="button" id="sd-archive" class="ghost">☆ Im Archiv speichern</button>
+        <div class="sd-row">
+          <button type="button" id="sd-archive" class="ghost">☆ Im Archiv speichern</button>
+          <button type="button" id="sd-image" class="ghost">🖼 Als Bild teilen</button>
+          <button type="button" id="sd-ghost" class="ghost">👻 Dagegen antreten</button>
+        </div>
         <menu>
           <button value="ok-pen" id="sd-ok">OK</button>
           <button value="p2" id="sd-plus2">+2</button>

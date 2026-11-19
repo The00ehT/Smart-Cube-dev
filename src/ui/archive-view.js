@@ -2,7 +2,8 @@
  * Archiv-Ansicht: Tabelle mit Zeit, Scramble, Zügen, TPS, Fällen und Datum; sortierbar nach Zeit oder
  * Änderungsdatum. Ein Tipp auf eine Zeile öffnet die Rekonstruktion.
  */
-import { archive, removeFromArchive, updateArchived } from '../archive.js';
+import { archive, removeFromArchive, updateArchived, restoreArchived } from '../archive.js';
+import { undoable } from './toast.js';
 import { formatSolve, effectiveTime, DNF } from '../stats.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -32,7 +33,11 @@ export class ArchiveView {
       const del = e.target.closest('[data-del]');
       if (del) {
         e.stopPropagation();
-        if (confirm('Aus dem Archiv entfernen?')) removeFromArchive(Number(del.dataset.del));
+        const entry = archive.find((x) => String(x.solveId) === del.dataset.del);
+        undoable('Aus dem Archiv entfernt', () => removeFromArchive(entry.solveId), () => {
+          restoreArchived(entry);
+          this.render();
+        });
         return this.render();
       }
       const row = e.target.closest('tr[data-id]');

@@ -1,6 +1,7 @@
 import './styles.css';
 import { now } from 'gan-web-bluetooth';
-import { SOLVED, applyMove, applyAlg, isSolved, COLOR_NAMES, groupMoves, CROSS_DOWN } from './cube/facelets.js';
+import { SOLVED, FACES, applyMove, applyAlg, isSolved, COLOR_NAMES, groupMoves, CROSS_DOWN, phaseStatus, solvedSlots, relativeState } from './cube/facelets.js';
+import { analyzeSolve } from './cube/analysis.js';
 import { analyzeGyro, fromGan } from './cube/gyro.js';
 import { ScrambleTracker } from './cube/scramble-tracker.js';
 import { SolveRecorder } from './cube/solve-recorder.js';
@@ -23,6 +24,9 @@ import { ArchiveView } from './ui/archive-view.js';
 import { isArchived, addToArchive, removeFromArchive } from './archive.js';
 import { easyState } from './cube/easy-scramble.js';
 import { setupAlgFor } from './ui/cube-view.js';
+import { toast, undoable } from './ui/toast.js';
+import { confetti, chime, shareSolveImage } from './ui/celebrate.js';
+import { coachInsights } from './coach.js';
 
 const $ = (id) => document.getElementById(id);
 const SOLVES_KEY = 'smartcube.solves.v1';
@@ -189,6 +193,8 @@ function onMove(e) {
       break;
     case 'running':
       app.recorder.push(e);
+      app.liveStage = Math.max(app.liveStage || 0, liveStage(app.state));
+      renderLiveBar();
       if (isSolved(app.state)) finishSolve();
       break;
     default:
@@ -224,7 +230,8 @@ async function randomScramble() {
 }
 
 /** Neues Scramble; im Raum kommt es vom Gastgeber (given) */
-async function newScramble(given) {
+async function newScramble(given, opts = {}) {
+  if (!opts.ghost && app.ghost) endGhost();
   if (app.room && typeof given !== 'string') {
     setStatus('Im Raum gibt der Gastgeber die Scrambles vor.');
     return;
@@ -245,7 +252,7 @@ async function newScramble(given) {
   }
   if (app.phase !== 'scrambling') return; // inzwischen abgebrochen
   app.scrambleType = easy ? settings.scrambleType : 'wca';
-  $('scramble-label').textContent = easy ? (settings.scrambleType === 'xcross' ? 'Scramble · X-Cross üben' : 'Scramble · leicht') : 'Scramble';
+  $('scramble-label').textContent = opts.ghost ? 'Scramble · gegen den Geist' : easy ? (settings.scrambleType === 'xcross' ? 'Scramble · X-Cross üben' : 'Scramble · leicht') : 'Scramble';
   app.scramble = alg;
   app.tracker = new ScrambleTracker(alg);
   app.scrambleFromSolved = isSolved(app.state);
@@ -291,6 +298,9 @@ function startSolve(e, before) {
   app.startLocal = e.localTimestamp ?? now();
   app.recorder.push(e);
   updateViewOrientation();
+  app.liveStage = 0;
+  renderLiveBar();
+  if (app.ghost) startGhostRun();
   setStatus('Läuft …');
   if (isSolved(app.state)) finishSolve();
   renderTimer();
@@ -302,7 +312,7 @@ function finishSolve() {
   const solve = buildSolve(r, {
     ...(gyro ? { gyro } : {}),
     penalty: app.inspectionPenalty || 0,
-    scramble: app.scramble,
+    scramble: app.ghost ? (app.ghost.scramble && applyAlg(SOLVED, app.ghost.scramble) === r.start ? app.ghost.scramble : '') : app.scramble,
     device: app.conn?.name || '',
     ...(app.scrambleType && app.scrambleType !== 'wca' && app.scramble ? { scrambleType: app.scrambleType } : {}),
   });
@@ -318,6 +328,15 @@ function finishSolve() {
   renderArchiveBtn();
   renderSolves();
   const pb = best(solves) === effectiveTime(solve) && solves.length > 1;
+  const prev = solves.slice(0, -1);
+  const newAo = [12, 5].find((n) => {
+    const now5 = averageOf(solves, n);
+    const before = bestAverage(prev, n);
+    return now5 !== null && Number.isFinite(now5) && (before === null || now5 < before) && solves.length > n;
+  });
+  $('live-bar').hidden = true;
+  if (pb || newAo) celebrate(solve, pb ? 'Neue Bestzeit!' : `Neuer bester Ø${newAo}!`);
+  const ghostDone = app.ghost ? finishGhostRun(solve) : false;
   const summary = () => `${formatSolve(solve)} · ${solve.moveCount} Züge · ${solve.tps.toFixed(2)} TPS${pb ? ' · Neue Bestzeit! 🎉' : ''}`;
   setStatus(summary());
   if (app.room) {
@@ -330,7 +349,171 @@ function finishSolve() {
       app.pendingRound = null;
       setTimeout(() => onRoomEvent(r), 1500);
     }
-  } else if (settings.autoScramble) newScramble().then(() => setStatus('Letzter Solve: ' + summary()));
+  } else if (settings.autoScramble && !ghostDone) newScramble().then(() => setStatus('Letzter Solve: ' + summary()));
+  renderCoachTip();
+}
+
+// ---------------- Live-Phasen ----------------
+
+const STAGES = ['Kreuz', 'Paar 1', 'Paar 2', 'Paar 3', 'Paar 4', 'OLL', 'PLL'];
+const STAGE_CLASS = ['ph-cross', 'ph-pair', 'ph-pair', 'ph-pair', 'ph-pair', 'ph-oll', 'ph-pll'];
+const bits = (m) => (m & 1) + ((m >> 1) & 1) + ((m >> 2) & 1) + ((m >> 3) & 1);
+
+/** Wie weit ist der Solve? 0 = nichts, 1 = Kreuz, 2–5 = Paare, 6 = OLL, 7 = gelöst */
+function liveStage(state) {
+  if (isSolved(state)) return 7;
+  const st = phaseStatus(state);
+  let best = 0;
+  for (const f of FACES) {
+    if (!st[f].cross) continue;
+    best = Math.max(best, st[f].oll ? 6 : 1 + bits(solvedSlots(state, f)));
+  }
+  return best;
+}
+
+function barHtml(stage) {
+  return `<div class="lb-segs">${STAGES.map((n, i) => `<span class="lb-seg ${STAGE_CLASS[i]}${i < stage ? ' done' : i === stage ? ' cur' : ''}" title="${n}"></span>`).join('')}</div>
+    <div class="lb-label">${stage >= 7 ? 'Gelöst' : STAGES[stage]}</div>`;
+}
+function renderLiveBar() {
+  const el = $('live-bar');
+  el.hidden = app.phase !== 'running';
+  if (!el.hidden) el.innerHTML = barHtml(app.liveStage || 0);
+}
+
+// ---------------- Rekord-Feier ----------------
+
+function celebrate(solve, badge) {
+  confetti();
+  chime();
+  const t = $('timer');
+  t.classList.remove('pop');
+  void t.offsetWidth;
+  t.classList.add('pop');
+  toast(`🎉 ${badge}`, { action: 'Als Bild teilen', onAction: () => shareSolveImage(solve, profile, badge), duration: 9000 });
+}
+
+// ---------------- Geister-Rennen ----------------
+
+let ghostView = null;
+
+/** Gegen einen gespeicherten oder geteilten Solve antreten: gleicher Startzustand, Geist löst live mit */
+async function raceAgainst(g, label) {
+  if (app.room) return toast('Im Raum geht das Geister-Rennen nicht.');
+  if (!g?.start || !g.moves?.length || !g.times?.length) return toast('Für diesen Solve fehlen die Zugzeiten.');
+  if (!app.conn) return toast('Verbinde zuerst deinen Würfel.');
+  showTab('timer');
+  const a = analyzeSolve(g.start, g.moves, g.times);
+  // Zeitpunkte, zu denen der Geist jede Stufe erreicht
+  let acc = 0;
+  const stageTimes = a.phases.map((p) => (acc = p.end >= 0 ? g.times[p.end] : acc));
+  app.ghost = { ...g, label, stageTimes, total: a.time };
+  $('ghost-card').hidden = false;
+  $('ghost-name').textContent = label;
+  $('ghost-time').textContent = formatTime(a.time);
+  $('ghost-msg').textContent = 'Scramble ausführen – der Geist startet mit deinem ersten Zug.';
+  $('ghost-bar').innerHTML = barHtml(0);
+  if (!ghostView) ghostView = new CubeView($('ghost-cube'));
+  ghostView.setDownFace(a.crossFace);
+  ghostView.setState(g.start);
+  const setup = await setupAlgFor(relativeState(app.state, g.start));
+  newScramble(setup, { ghost: true });
+}
+
+function startGhostRun() {
+  const g = app.ghost;
+  g.k = 0;
+  g.running = true;
+  ghostView.setState(g.start);
+  $('ghost-msg').textContent = '';
+}
+
+function ghostTick() {
+  const g = app.ghost;
+  if (!g?.running) return;
+  const t = now() - app.startLocal;
+  while (g.k < g.moves.length && g.times[g.k] <= t) ghostView.addMove(g.moves[g.k++]);
+  const stage = g.stageTimes.filter((x, i) => i < 7 && x <= t && g.k > 0).length;
+  $('ghost-time').textContent = g.k >= g.moves.length ? formatTime(g.total) : formatTime(t);
+  $('ghost-bar').innerHTML = barHtml(g.k >= g.moves.length ? 7 : Math.min(stage, 6));
+}
+
+/** Ergebnis gegen den Geist; true = Geist bleibt aktiv (kein automatisches neues Scramble) */
+function finishGhostRun(solve) {
+  const g = app.ghost;
+  g.running = false;
+  const diff = solve.time - g.total;
+  const msg = diff < 0 ? `🏆 Du warst ${formatTime(-diff)} schneller!` : diff > 0 ? `Der Geist war ${formatTime(diff)} schneller.` : 'Exakt gleich schnell!';
+  $('ghost-msg').innerHTML = `${msg} <button type="button" class="link-btn" id="ghost-again">Revanche</button>`;
+  $('ghost-again').onclick = () => raceAgainst(g, g.label);
+  $('ghost-time').textContent = formatTime(g.total);
+  $('ghost-bar').innerHTML = barHtml(7);
+  if (diff < 0) confetti(1600);
+  return true;
+}
+
+function endGhost() {
+  app.ghost = null;
+  $('ghost-card').hidden = true;
+}
+$('ghost-stop').addEventListener('click', () => {
+  endGhost();
+  if (app.phase === 'scrambling' || app.phase === 'done') newScramble();
+});
+$('btn-ghost').addEventListener('click', () => {
+  const det = solves.filter((s) => hasDetail(s) && s.penalty !== 'DNF');
+  if (!det.length) return toast('Noch keine Bestzeit mit Zugdaten – mach erst ein paar Solves.');
+  const pbSolve = det.reduce((a, b) => (effectiveTime(b) < effectiveTime(a) ? b : a));
+  raceAgainst({ ...pbSolve, moves: pbSolve.solution.split(' ').filter(Boolean) }, `Deine Bestzeit (${formatSolve(pbSolve)})`);
+});
+
+// ---------------- Coach ----------------
+
+function coachHtml(list) {
+  return list
+    .map((c, i) => `<div class="coach-item"><div class="coach-icon">${c.icon}</div><div><b>${c.title}</b><p>${c.text}</p>
+      ${c.action ? `<button type="button" class="ghost small-btn" data-coach="${i}">${c.action.label} →</button>` : ''}</div></div>`)
+    .join('');
+}
+function runCoachAction(a) {
+  if (!a) return;
+  if (a.kind === 'weak') {
+    showTab('algs');
+    algsView.trainWeak();
+  } else if (a.kind === 'train-set') {
+    showTab('algs');
+    algsView.set = a.arg;
+    algsView.render();
+  } else if (a.kind === 'easy-scramble') {
+    settings.scrambleType = 'cross2';
+    save(SETTINGS_KEY, settings);
+    $('opt-scramble-type').value = 'cross2';
+    toast('Leichte Scrambles sind an (2 Kreuzkanten gelöst). Umstellen unter Einstellungen → Training.');
+    showTab('timer');
+    newScramble();
+  }
+}
+function renderCoach() {
+  const list = coachInsights(solves).slice(0, 4);
+  app.coach = list;
+  $('coach').innerHTML = `<h3 class="coach-h">💡 Coach</h3>${coachHtml(list)}`;
+}
+$('coach').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-coach]');
+  if (b) runCoachAction(app.coach[Number(b.dataset.coach)]?.action);
+});
+/** Ein Tipp unter dem Timer (wechselt nach jedem Solve) */
+function renderCoachTip() {
+  const list = coachInsights(solves).filter((c) => c.action);
+  const el = $('coach-tip');
+  if (!list.length || solves.length % 3 !== 0) {
+    el.hidden = true;
+    return;
+  }
+  const c = list[0];
+  el.hidden = false;
+  el.innerHTML = `<span>${c.icon}</span> <b>${c.title}</b> <span class="small">${c.action.label} →</span>`;
+  el.onclick = () => runCoachAction(c.action);
 }
 
 /** Gyro-Messung merken (Zeit = Gerätezeit beim Empfang) */
@@ -450,6 +633,7 @@ function renderTimer() {
 
 function tick() {
   if (app.phase === 'running' || app.phase === 'inspecting') renderTimer();
+  if (app.ghost?.running) ghostTick();
   // Fokus-Modus: beim Lösen nur Timer (und Würfel) zeigen
   const solving = app.phase === 'running' || app.phase === 'inspecting';
   if (solving !== app.focus) {
@@ -649,9 +833,21 @@ function openSolve(i) {
   $('sd-solution').textContent = s.solution ? groupMoves(s.solution.split(' ').filter(Boolean)).map((g) => g.text).join(' ') : '–';
   $('sd-replay').hidden = !replayData(s);
   $('sd-archive').hidden = !hasDetail(s);
+  $('sd-ghost').hidden = !hasDetail(s);
   $('sd-archive').textContent = isArchived(s) ? '★ Im Archiv (entfernen)' : '☆ Im Archiv speichern';
   dlg.showModal();
 }
+
+$('sd-image').addEventListener('click', () => {
+  const s = solves[Number($('solve-dialog').dataset.index)];
+  if (s) shareSolveImage(s, profile, best(solves) === effectiveTime(s) ? 'Bestzeit' : '');
+});
+$('sd-ghost').addEventListener('click', () => {
+  const s = solves[Number($('solve-dialog').dataset.index)];
+  if (!s || !hasDetail(s)) return;
+  $('solve-dialog').close();
+  raceAgainst({ ...s, moves: s.solution.split(' ').filter(Boolean) }, `Solve ${formatSolve(s)}`);
+});
 
 $('sd-archive').addEventListener('click', () => {
   const s = solves[Number($('solve-dialog').dataset.index)];
@@ -683,9 +879,21 @@ $('solve-dialog').addEventListener('close', () => {
   else if (v === 'p2') s.penalty = 2000;
   else if (v === 'dnf') s.penalty = 'DNF';
   else if (v === 'del') {
-    if (!confirm('Diesen Solve löschen?')) return;
-    solves.splice(i, 1);
-    if (app.lastSolve === s) app.lastSolve = null;
+    const wasLast = app.lastSolve === s;
+    undoable(
+      `Solve ${formatSolve(s)} gelöscht`,
+      () => {
+        solves.splice(i, 1);
+        if (wasLast) app.lastSolve = null;
+      },
+      () => {
+        solves.splice(i, 0, s);
+        if (wasLast) app.lastSolve = s;
+        persistSolves();
+        renderSolves();
+        renderTimer();
+      },
+    );
   } else return;
   persistSolves();
   renderSolves();
@@ -734,6 +942,7 @@ bindToggle('opt-gyro', 'gyro', (on) => {
   if (!on) app.lastGyro = null;
 });
 replay.useGyro = settings.replayGyro;
+replay.onRace = (sol) => raceAgainst(sol, sol.name ? `${sol.name} (${formatTime(analyzeSolve(sol.start, sol.moves, sol.times).time)})` : 'Geteilter Solve');
 replay.onGyroToggle = (on) => {
   settings.replayGyro = on;
   save(SETTINGS_KEY, settings);
@@ -807,7 +1016,10 @@ function showTab(name) {
   app.tab = name;
   for (const sec of document.querySelectorAll('main > .tab')) sec.hidden = sec.dataset.tab !== name;
   for (const b of document.querySelectorAll('[role=tab][data-tab]')) b.setAttribute('aria-selected', String(b.dataset.tab === name));
-  if (name === 'stats') statsView.open(solves);
+  if (name === 'stats') {
+    statsView.open(solves);
+    renderCoach();
+  }
   if (name === 'algs') {
     const before = solves.filter((x) => x.ll === undefined).length;
     algsView.render();
@@ -917,9 +1129,23 @@ $('opt-view-down').addEventListener('change', (e) => {
 });
 
 $('btn-clear').addEventListener('click', () => {
-  if (!solves.length || !confirm(`Alle ${solves.length} Solves löschen? Tipp: vorher exportieren.`)) return;
-  solves = [];
-  app.lastSolve = null;
+  if (!solves.length) return;
+  const backup = solves;
+  const last = app.lastSolve;
+  undoable(
+    `${backup.length} Solves gelöscht`,
+    () => {
+      solves = [];
+      app.lastSolve = null;
+    },
+    () => {
+      solves = backup;
+      app.lastSolve = last;
+      persistSolves();
+      renderSolves();
+      renderTimer();
+    },
+  );
   persistSolves();
   renderSolves();
   renderTimer();
