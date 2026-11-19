@@ -1004,3 +1004,30 @@ body.solving .mode-chip { display: none; }
 }
 .tabbar [role=tab]:focus:not(:focus-visible), .tabs-top [role=tab]:focus:not(:focus-visible) { outline: none; box-shadow: none; }
 .tabbar [role=tab], .tabbar [role=tab]:hover { border-color: transparent; }
+
+/* Ergebnis-Buttons: nichts läuft über den Rand */
+.res-actions { flex-wrap: nowrap; }
+.res-actions button { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.res-actions #res-close, .res-actions #res-replay { flex: 1 1 0; }
+.res-actions #res-archive, .res-actions #res-share { flex: none; min-width: 52px; padding-left: 12px; padding-right: 12px; }
+
+/* ---------- Handy: App-Rahmen ----------
+   Nicht die Seite scrollt, sondern nur der Inhalt zwischen Kopfzeile und Tab-Leiste.
+   So wandert die Leiste nicht mit, wenn iOS/Bluefy am Seitenende nachfedert. */
+@media (max-width: 700px) {
+  html { height: 100%; overflow: hidden; overscroll-behavior: none; }
+  body, body.tab-timer {
+    position: fixed; inset: 0; height: auto; min-height: 0; overflow: hidden;
+    display: flex; flex-direction: column; overscroll-behavior: none;
+  }
+  body > .topbar { flex: none; position: relative; }
+  body > .app, body.tab-timer > .app {
+    flex: 1 1 0; min-height: 0; width: 100%;
+    overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain;
+    padding-bottom: 20px;
+  }
+  body.tab-timer > .app { padding-bottom: 8px; }
+  body > .tabbar { position: relative; flex: none; }
+}
+.res-actions #res-close, .res-actions #res-replay { padding: 11px 10px; }
+.res-actions #res-replay { flex-grow: 1.35; }

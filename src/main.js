@@ -1453,6 +1453,7 @@ function showTab(name) {
   }
   if (name === 'solves' && !$('archive-view').hidden) archiveView.render();
   window.scrollTo({ top: 0 });
+  document.querySelector('.app').scrollTop = 0; // am Handy scrollt nur der Inhaltsbereich
   try {
     sessionStorage.setItem('smartcube.tab', name);
   } catch {

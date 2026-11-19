@@ -144,6 +144,7 @@ const STATIC = {
   'Offline-Prüfung': 'Offline check',
   Zurück: 'Back',
   '▶ Wiederholung': '▶ Replay',
+  '▶ Ansehen': '▶ Replay',
   'Drehe eine beliebige Seite, um weiterzumachen.': 'Turn any face to continue.',
   'Ergebnis-Analyse nach jedem Solve zeigen': 'Show result analysis after every solve',
   'Als Bild teilen': 'Share as image',
