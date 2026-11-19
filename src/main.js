@@ -32,13 +32,15 @@ import { L, locale, dec, translateStatic, lang } from './i18n.js';
 const MV = L('Züge', 'moves');
 import { metricsOf, skillProfile, SKILLS } from './metrics.js';
 import { radarSvg } from './ui/radar.js';
+import { cfopTable } from './ui/cfop-table.js';
+import { caseDiagram } from './ui/ll-diagram.js';
 
 const $ = (id) => document.getElementById(id);
 translateStatic(); // feste Texte der Seite (bei Englisch)
 const SOLVES_KEY = 'smartcube.solves.v1';
 const SETTINGS_KEY = 'smartcube.settings.v1';
 
-const settings = { inspection: false, autoScramble: true, hideTime: false, gyro: true, viewDown: 'auto', theme: 'auto', replayGyro: true, crossColor: 'auto', scrambleType: 'wca', ...load(SETTINGS_KEY, {}) };
+const settings = { inspection: false, autoScramble: true, hideTime: false, gyro: true, viewDown: 'auto', theme: 'auto', replayGyro: true, showResult: true, crossColor: 'auto', scrambleType: 'wca', ...load(SETTINGS_KEY, {}) };
 let solves = load(SOLVES_KEY, []);
 
 const app = {
@@ -59,7 +61,7 @@ setDefaultSkin(settings.skin || {});
 const view = new CubeView($('cube'));
 view.setGyroEnabled(settings.gyro);
 const replay = new Replay($('replay-dialog'));
-const statsView = new StatsView($('stats-view'));
+const statsView = new StatsView($('stats-view'), { coach: (el) => renderCoach(el) });
 const trainer = new Trainer($('trainer-dialog'), {
   state: () => app.state,
   crossFace: () => crossFace(),
@@ -176,6 +178,7 @@ function onDisconnected() {
 // ---------------- Züge und Ablauf ----------------
 
 function onMove(e) {
+  if (!$('result-overlay').hidden) hideResult();
   const before = app.state;
   app.state = applyMove(app.state, e.move);
   view.addMove(e.move);
@@ -347,6 +350,7 @@ function finishSolve() {
   $('live-bar').hidden = true;
   if (pb || newAo) celebrate(solve, pb ? L('Neue Bestzeit!', 'New PB!') : L(`Neuer bester Ø${newAo}!`, `New best ao${newAo}!`));
   const ghostDone = app.ghost ? finishGhostRun(solve) : false;
+  if (settings.showResult) showResult(solve, pb ? L('Neue Bestzeit!', 'New PB!') : newAo ? L(`Neuer bester Ø${newAo}!`, `New best ao${newAo}!`) : '');
   const summary = () => `${formatSolve(solve)} · ${metricsOf(solve)?.htm ?? solve.moveCount} ${L('Züge', 'moves')} · ${solve.tps.toFixed(2)} TPS${pb ? ` · ${L('Neue Bestzeit!', 'New PB!')} 🎉` : ''}`;
   setStatus(summary());
   if (app.room) {
@@ -362,6 +366,82 @@ function finishSolve() {
   } else if (settings.autoScramble && !ghostDone) newScramble().then(() => setStatus(L('Letzter Solve: ', 'Last solve: ') + summary()));
   renderCoachTip();
 }
+
+// ---------------- Ergebnis nach dem Solve ----------------
+
+/** CFOP-Zeilen eines Solves für die Tabelle */
+function solveRows(s) {
+  const ph = s.phases;
+  const pairs = ph.slice(1, 5);
+  const sum = (k) => pairs.reduce((a, p) => a + (p[k] || 0), 0);
+  const llNote = (p, label) => {
+    const id = label === 'OLL' ? (s.ll?.oll ? `OLL ${s.ll.oll}` : null) : s.ll?.pll && s.ll.pll !== 'Skip' ? `PLL ${s.ll.pll}` : null;
+    const name = label === 'OLL' ? (s.ll?.oll ? `OLL ${s.ll.oll}` : s.ll?.oll === 0 || p.skip ? 'OLL-Skip' : '–') : s.ll?.pll === 'Skip' || p.skip ? 'PLL-Skip' : s.ll?.pll ? `${s.ll.pll}-Perm` : '–';
+    return `<div class="ct-case">${id ? caseDiagram(id, 44) : ''}<div><b>${name}</b><div>Recog ${formatTime(p.recog || 0)} · Exec ${formatTime(p.time - (p.recog || 0))}</div></div></div>`;
+  };
+  return [
+    { cls: 'ph-cross', name: 'Cross', extra: ` ${colorChip(s.crossFace)}${s.xcross ? ' <span class="tag">X</span>' : ''}`, time: ph[0].time, moves: ph[0].moves },
+    {
+      cls: 'ph-pair', name: 'F2L', time: sum('time'), moves: sum('moves'), recog: sum('recog'), open: false,
+      sub: pairs.map((p, i) => ({ name: `${L('Paar', 'Pair')} ${i + 1}`, extra: p.slot ? ` ${[...p.slot].map(colorChip).join('')}` : '', time: p.time, moves: p.moves, recog: p.recog })),
+    },
+    { cls: 'ph-oll', name: 'OLL', extra: ph[5].skip ? ' <span class="tag">Skip</span>' : '', time: ph[5].time, moves: ph[5].moves, recog: ph[5].recog, note: llNote(ph[5], 'OLL') },
+    { cls: 'ph-pll', name: 'PLL', extra: ph[6].skip ? ' <span class="tag">Skip</span>' : '', time: ph[6].time, moves: ph[6].moves, recog: ph[6].recog, note: llNote(ph[6], 'PLL') },
+  ];
+}
+
+function showResult(solve, badge) {
+  if (!hasDetail(solve)) return;
+  const m = metricsOf(solve);
+  const [c, f, o, p] = phasesOf(solve, { mergeF2l: true });
+  $('res-device').textContent = solve.device || '';
+  $('res-badge').hidden = !badge;
+  $('res-badge').textContent = badge ? `🏆 ${badge}` : '';
+  $('res-ring').innerHTML = donut(phaseSegments({ cross: c.time, f2l: f.time, oll: o.time, pll: p.time }), { value: formatTime(solve.time), label: L('gesamt', 'total') }, { size: 170 });
+  $('res-time').textContent = formatSolve(solve);
+  const tile = (v, k) => `<div><b>${v}</b><span>${k}</span></div>`;
+  $('res-metrics').innerHTML = [
+    tile(m?.htm ?? solve.moveCount, L('Züge', 'Moves')),
+    tile(dec(m?.tps ?? solve.tps), 'TPS'),
+    tile(dec(m?.etps), 'Exec TPS'),
+    `<div>${m?.fluency == null ? '<b>–</b>' : gauge(m.fluency)}<span>Fluency</span></div>`,
+  ].join('');
+  $('res-table').innerHTML = cfopTable(solveRows(solve));
+  const g = solve.gyro;
+  $('res-extra').textContent = [
+    g ? `${g.rotations.length} Rotations · ~${g.regrips.length} Regrips` : '',
+    m ? `${L('Recog gesamt', 'Total recog')} ${formatTime(m.recog)} · ${m.pauses} ${L('Pausen', 'pauses')}` : '',
+  ].filter(Boolean).join(' · ');
+  $('res-archive').textContent = isArchived(solve) ? '★' : '☆';
+  $('result-overlay').dataset.id = solve.id;
+  $('result-overlay').hidden = false;
+}
+function hideResult() {
+  $('result-overlay').hidden = true;
+}
+const resultSolve = () => solves.find((x) => String(x.id) === $('result-overlay').dataset.id);
+$('res-close').addEventListener('click', hideResult);
+$('result-overlay').addEventListener('click', (e) => {
+  if (e.target.id === 'result-overlay') hideResult();
+});
+$('res-replay').addEventListener('click', () => {
+  const s = resultSolve();
+  const data = s && replayData(s);
+  hideResult();
+  if (data) replay.open({ ...data, name: profile.name }, { title: `Solve ${solves.indexOf(s) + 1}` });
+});
+$('res-archive').addEventListener('click', () => {
+  const s = resultSolve();
+  if (!s) return;
+  if (isArchived(s)) removeFromArchive(s.id);
+  else addToArchive(s);
+  $('res-archive').textContent = isArchived(s) ? '★' : '☆';
+  renderArchiveBtn();
+});
+$('res-share').addEventListener('click', () => {
+  const s = resultSolve();
+  if (s) shareSolveImage(s, profile, $('res-badge').hidden ? '' : $('res-badge').textContent.replace('🏆 ', ''));
+});
 
 // ---------------- Live-Phasen ----------------
 
@@ -503,12 +583,12 @@ function runCoachAction(a) {
     newScramble();
   }
 }
-function renderCoach() {
+function renderCoach(el) {
   const list = coachInsights(solves).slice(0, 4);
   app.coach = list;
-  $('coach').innerHTML = `<h3 class="coach-h">💡 Coach</h3>${coachHtml(list)}`;
+  if (el) el.innerHTML = `<h3 class="coach-h">💡 Coach</h3>${coachHtml(list)}`;
 }
-$('coach').addEventListener('click', (e) => {
+$('stats-view').addEventListener('click', (e) => {
   const b = e.target.closest('[data-coach]');
   if (b) runCoachAction(app.coach[Number(b.dataset.coach)]?.action);
 });
@@ -776,7 +856,7 @@ function renderQuick() {
 /** Kuchendiagramm der Phasen über die letzten 12 Solves mit Detaildaten */
 function renderMiniPie(det) {
   const el = $('phase-pie');
-  $('phase-pie-card').hidden = !det.length;
+  if (!el) return; // Zeitverteilung steht jetzt unter Statistik → Phasen
   if (!det.length) {
     el.innerHTML = '';
     return;
@@ -973,6 +1053,7 @@ const bindToggle = (id, key, after) => {
 bindToggle('opt-inspection', 'inspection');
 bindToggle('opt-auto-scramble', 'autoScramble');
 bindToggle('opt-hide-time', 'hideTime');
+bindToggle('opt-result', 'showResult');
 bindToggle('opt-gyro', 'gyro', (on) => {
   view.setGyroEnabled(on);
   if (!on) app.lastGyro = null;
@@ -1196,10 +1277,7 @@ function showTab(name) {
   app.tab = name;
   for (const sec of document.querySelectorAll('main > .tab')) sec.hidden = sec.dataset.tab !== name;
   for (const b of document.querySelectorAll('[role=tab][data-tab]')) b.setAttribute('aria-selected', String(b.dataset.tab === name));
-  if (name === 'stats') {
-    statsView.open(solves);
-    renderCoach();
-  }
+  if (name === 'stats') statsView.open(solves);
   if (name === 'algs') {
     const before = solves.filter((x) => x.ll === undefined).length;
     algsView.render();

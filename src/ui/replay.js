@@ -315,8 +315,13 @@ export class Replay {
       if (k < last) el.classList.add('done');
       else if (last >= first && last <= k) el.classList.add('cur');
     });
+    // Aktuellen Zug sichtbar halten – nur innerhalb der Zugliste scrollen, nie die ganze Ansicht
     const cur = d.querySelector('.rp-mv.cur');
-    if (cur && this.playing) cur.scrollIntoView({ block: 'nearest' });
+    const box = $('.rp-phases', d);
+    if (cur && box.scrollHeight > box.clientHeight) {
+      const top = cur.offsetTop;
+      if (top < box.scrollTop + 8 || top > box.scrollTop + box.clientHeight - 40) box.scrollTop = Math.max(0, top - box.clientHeight / 3);
+    }
   }
 
   async share() {

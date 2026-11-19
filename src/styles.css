@@ -435,7 +435,7 @@ dialog.big-dialog { width: min(1100px, calc(100vw - 24px)); max-width: none; max
 .rp-controls button { min-width: 44px; min-height: 42px; }
 .rp-play { min-width: 130px !important; }
 .rp-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.rp-phases { display: grid; gap: 8px; max-height: 480px; overflow: auto; }
+.rp-phases { display: grid; gap: 8px; max-height: 480px; overflow: auto; position: relative; overscroll-behavior: contain; }
 .rp-ph { border-left: 4px solid var(--ph); padding: 4px 0 4px 10px; }
 .rp-ph-head { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
 .rp-ph-num { color: var(--muted); font-size: 14px; }
@@ -525,7 +525,14 @@ dialog.big-dialog { width: min(1100px, calc(100vw - 24px)); max-width: none; max
   }
   .rp-body { grid-template-columns: 1fr; }
   .rp-cube { max-height: 300px; }
-  .rp-phases { max-height: none; }
+  /* Würfel und Steuerung bleiben stehen, nur die Zugliste scrollt */
+  dialog.big-dialog#replay-dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
+  #replay-dialog[open] .rp-body { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 10px; }
+  #replay-dialog .rp-stage { flex: none; }
+  #replay-dialog .rp-cube { max-height: 32vh; }
+  #replay-dialog .rp-side { flex: 1; min-height: 0; }
+  #replay-dialog .rp-phases { max-height: none; flex: 1; min-height: 80px; }
+  #replay-dialog .rp-head { margin-bottom: 4px; }
 }
 
 /* ---------- Algorithmen ---------- */
@@ -763,3 +770,75 @@ body.solving .solve-metrics { display: none !important; }
 .skin-img { display: grid; justify-items: center; gap: 2px; cursor: pointer; }
 .skin-img-prev { width: 44px; height: 44px; border-radius: 10px; background: var(--chip) center / cover; border: 1px dashed var(--line); display: flex; align-items: flex-end; justify-content: flex-end; padding: 3px; }
 @media (max-width: 700px) { .skin-images { grid-template-columns: repeat(3, 1fr); } }
+
+/* ---------- Ergebnis nach dem Solve ---------- */
+.result-overlay {
+  position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+  padding: calc(16px + var(--safe-top)) 16px calc(16px + var(--safe-bottom));
+  background: rgb(10 14 22 / 0.45); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  animation: fade 0.18s ease-out;
+}
+.result-card {
+  width: min(900px, 100%); max-height: 100%; overflow: auto; background: var(--panel); border-radius: 22px;
+  box-shadow: 0 24px 70px rgb(0 0 0 / 0.35); padding: 18px 20px; display: grid; gap: 14px;
+}
+.res-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 22px; }
+.res-badge { background: #ffd500; color: #1a1a1a; font-weight: 750; border-radius: 999px; padding: 4px 12px; font-size: 14px; }
+.res-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 20px; align-items: start; }
+.res-left { display: grid; gap: 12px; justify-items: center; }
+.res-ring .donut-wrap { justify-content: center; }
+.res-ring .donut-legend { min-width: 150px; }
+.res-time { font: 800 clamp(52px, 11vw, 76px)/1 var(--num-font); letter-spacing: -0.02em; color: var(--accent); }
+.res-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; width: 100%; }
+.res-metrics > div { display: grid; justify-items: center; align-content: center; gap: 2px; background: var(--panel-2); border-radius: 12px; padding: 8px 4px; min-height: 64px; }
+.res-metrics b { font-size: 19px; }
+.res-metrics span { font-size: 11px; color: var(--muted); }
+.res-h { margin: 0 0 8px; font-size: 16px; }
+.res-extra { margin-top: 8px; }
+.res-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.res-actions button { min-width: 64px; }
+.res-actions #res-close, .res-actions #res-replay { flex: 1; max-width: 220px; padding: 11px 16px; font-size: 16px; }
+.res-hint { text-align: center; }
+
+/* ---------- CFOP-Tabelle ---------- */
+.cfop-table { display: grid; gap: 4px; }
+.ct-row {
+  display: grid; grid-template-columns: minmax(0, 1.5fr) 1fr 0.7fr 0.7fr 0.9fr; gap: 6px; align-items: center;
+  padding: 9px 10px; border-radius: 12px; font-variant-numeric: tabular-nums;
+}
+.ct-row > span:not(.ct-n) { text-align: right; }
+.ct-head { font-size: 12px; color: var(--muted); font-weight: 600; padding-top: 0; padding-bottom: 2px; }
+.ct-main { background: var(--panel-2); font-weight: 650; }
+.ct-main .ct-t { font-size: 16px; }
+.ct-n { display: flex; align-items: center; gap: 2px; min-width: 0; white-space: nowrap; }
+.ct-group > summary { list-style: none; cursor: pointer; position: relative; }
+.ct-group > summary::-webkit-details-marker { display: none; }
+.ct-group > summary .ct-n::after { content: '▸'; margin-left: 6px; color: var(--muted); transition: transform 0.15s; display: inline-block; }
+.ct-group[open] > summary .ct-n::after { transform: rotate(90deg); }
+.ct-sub { font-size: 14px; padding: 6px 10px 6px 26px; color: var(--text); }
+.ct-sub + .ct-sub { border-top: 1px solid var(--line); }
+.ct-note { padding: 8px 10px 4px 26px; }
+.ct-case { display: flex; gap: 10px; align-items: center; color: var(--text); }
+.ct-case .small, .ct-case div div { color: var(--muted); font-size: 13px; }
+@media (max-width: 760px) {
+  .result-overlay { padding: calc(8px + var(--safe-top)) 8px calc(8px + var(--safe-bottom)); align-items: stretch; }
+  .result-card { padding: 14px; border-radius: 18px; }
+  .res-body { grid-template-columns: 1fr; gap: 14px; }
+  .ct-row { grid-template-columns: minmax(0, 1.35fr) 1fr 0.6fr 0.7fr 0.9fr; padding: 8px; font-size: 14px; }
+  .ct-main .ct-t { font-size: 15px; }
+}
+
+/* ---------- Statistik: Bereiche ---------- */
+.sv-top { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.sv-views { flex: 1 1 280px; max-width: 420px; }
+.sv-top .sv-range { margin: 0; }
+.kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.kpi { background: var(--panel-2); border-radius: 14px; padding: 12px 14px; display: grid; gap: 2px; }
+.kpi-k { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+.kpi-v { font: 750 26px/1.15 var(--num-font); }
+.kpi-b { font-size: 12px; color: var(--muted); }
+.sv-coach { box-shadow: none; background: var(--accent-soft); margin-bottom: 22px; }
+@media (max-width: 700px) {
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi-v { font-size: 22px; }
+}
