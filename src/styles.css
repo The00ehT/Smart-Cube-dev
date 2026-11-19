@@ -1153,3 +1153,23 @@ dialog.trainer-dialog[open] { display: flex; flex-direction: column; gap: 12px; 
 .wv-back { align-self: center; margin-top: 10px; }
 .wv-hint { text-align: center; margin-top: 4px; }
 .tr-log tr.pb-row td:last-child { color: var(--good); font-weight: 700; }
+
+/* Raum: kleine Live-Würfel der anderen im Timer-Tab */
+.room-minis { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 8px; }
+.rm-p { display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 12px; background: var(--panel-2); border: 1.5px solid transparent; }
+.rm-p.live { border-color: var(--good); }
+.rm-cube { width: 64px; height: 64px; flex: none; }
+.rm-info { display: grid; text-align: left; line-height: 1.2; }
+.rm-name { font-size: 12px; color: var(--muted); max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
+.rm-time { font: 700 15px var(--num-font); }
+body.solving .room-minis:not([hidden]) { display: flex !important; }
+@media (max-width: 700px) {
+  body.tab-timer .room-minis { order: 3; margin-top: 0; gap: 6px; }
+  .rm-cube { width: 52px; height: 52px; }
+}
+
+/* Obere Leiste: bei mittlerer Breite nur Symbole, nie breiter als der Bildschirm */
+@media (max-width: 1120px) { .tabs-top [role=tab] span { display: none; } .tabs-top [role=tab] { padding: 7px 10px; } }
+.topbar { min-width: 0; }
+.top-right { min-width: 0; }
+.device { min-width: 0; }

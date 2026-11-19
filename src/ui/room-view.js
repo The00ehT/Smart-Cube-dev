@@ -50,6 +50,10 @@ export class RoomView {
     panel.querySelector('.room-next').addEventListener('click', () => this.h.onNextRound());
     panel.querySelector('.room-leave').addEventListener('click', () => this.h.onLeave());
     panel.querySelector('.room-auto input').addEventListener('change', (e) => this.h.onAutoChange(e.target.checked));
+    document.getElementById('room-minis')?.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-watch]');
+      if (b) this.openWatch(b.dataset.watch);
+    });
     panel.querySelector('.room-people').addEventListener('click', (e) => {
       const el = e.target.closest('.person:not(.me)');
       if (el) this.openWatch(el.dataset.id);
@@ -100,8 +104,15 @@ export class RoomView {
       this.strip.hidden = true;
       this.stripHtml = '';
     }
-    for (const c of this.cards.values()) c.el.remove();
+    for (const c of this.cards.values()) {
+      c.el.remove();
+      c.cube?.cube.dispose();
+      c.mini?.cube.dispose();
+      c.miniEl?.remove();
+    }
     this.cards.clear();
+    const minis = document.getElementById('room-minis');
+    if (minis) minis.hidden = true;
     this.room = null;
   }
 
@@ -117,6 +128,8 @@ export class RoomView {
       if (!ids.has(id)) {
         c.el.remove();
         c.cube?.cube.dispose();
+        c.mini?.cube.dispose();
+        c.miniEl?.remove();
         this.cards.delete(id);
         if (this.watchId === id) this.watch.close();
       }
@@ -133,15 +146,29 @@ export class RoomView {
           <div class="person-cube"></div>
           <div class="person-time">–</div>
           ${me ? '' : `<div class="person-watch small">👁 ${L('Zuschauen', 'Watch')}</div>`}`;
-        box.append(el);
-        c = { el, cube: null, phase: 'idle', startedAt: 0, last: null, state: SOLVED, moves: [], times: [], start: null, recent: [] };
-        // Für die anderen ein kleiner Live-Würfel (eigener Würfel ist ja groß zu sehen)
-        if (!me) c.cube = new CubeView(el.querySelector('.person-cube'));
-        else el.querySelector('.person-cube').innerHTML = `<div class="person-me small">${L('Du', 'You')}</div>`;
+        // Eigene Karte zuerst
+        if (me) box.prepend(el);
+        else box.append(el);
+        c = { el, cube: null, phase: 'idle', startedAt: 0, last: null, state: SOLVED, moves: [], times: [], start: null, recent: [], me };
+        // Live-Würfel für alle – auch für dich selbst
+        c.cube = new CubeView(el.querySelector('.person-cube'));
+        // Im Timer-Tab: kleine Live-Würfel der anderen unter dem eigenen großen Würfel
+        const minis = document.getElementById('room-minis');
+        if (!me && minis) {
+          c.miniEl = document.createElement('button');
+          c.miniEl.type = 'button';
+          c.miniEl.className = 'rm-p';
+          c.miniEl.dataset.watch = p.id;
+          c.miniEl.innerHTML = `<div class="rm-cube"></div><div class="rm-info"><span class="rm-name"></span><b class="rm-time">–</b></div>`;
+          minis.append(c.miniEl);
+          minis.hidden = false;
+          c.mini = new CubeView(c.miniEl.querySelector('.rm-cube'));
+        }
         this.cards.set(p.id, c);
       }
       c.el.querySelector('.avatar').innerHTML = avatarHtml({ name: p.name, avatar: p.avatar });
-      c.el.querySelector('.person-name').textContent = p.name + (p.host ? ' ★' : '');
+      c.el.querySelector('.person-name').textContent = (me ? `${p.name} (${L('du', 'you')})` : p.name) + (p.host ? ' ★' : '');
+      if (c.miniEl) c.miniEl.querySelector('.rm-name').textContent = p.name;
       c.name = p.name;
       c.avatar = p.avatar;
       this.#status(c);
@@ -174,7 +201,7 @@ export class RoomView {
     } else if (msg.kind === 'move') {
       const before = c.state;
       c.state = applyMove(c.state, msg.m);
-      c.cube?.addMove(msg.m);
+      for (const v of [c.cube, c.mini]) v?.addMove(msg.m);
       if (watched) this.watchCube?.addMove(msg.m);
       c.recent.push(msg.m);
       if (c.recent.length > 40) c.recent.shift();
@@ -200,9 +227,14 @@ export class RoomView {
       const [x, y, z, w] = msg.q || [];
       if (w == null) return;
       c.view = { x, y, z, w };
-      if (c.cube) c.cube.target = c.view;
+      for (const v of [c.cube, c.mini]) if (v) v.target = c.view;
       if (watched && this.watchCube) this.watchCube.target = c.view;
     }
+  }
+
+  /** Eigene Daten in der eigenen Karte zeigen (gleiches Format wie von den anderen) */
+  self(kind, data) {
+    if (this.room?.myId) this.live({ kind, ...data, from: this.room.myId });
   }
 
   /** Ergebnis eines Teilnehmers: Zeit in der Karte stehen lassen */
@@ -218,7 +250,7 @@ export class RoomView {
 
   #setState(c, facelets) {
     c.state = facelets;
-    c.cube?.setState(facelets);
+    for (const v of [c.cube, c.mini]) v?.setState(facelets);
     if (this.watchId && this.cards.get(this.watchId) === c) this.watchCube?.setState(facelets);
   }
 
@@ -346,6 +378,12 @@ export class RoomView {
     const now = performance.now();
     for (const c of this.cards.values()) {
       if (c.phase === 'running') c.el.querySelector('.person-time').textContent = formatTime(now - c.startedAt);
+      if (c.miniEl) {
+        const t = c.phase === 'running' ? formatTime(now - c.startedAt) : c.phase === 'done' && c.result ? formatSolve(c.result) : STATUS[c.phase] ?? '';
+        const el = c.miniEl.querySelector('.rm-time');
+        if (el.textContent !== t) el.textContent = t;
+        c.miniEl.classList.toggle('live', c.phase === 'running');
+      }
     }
     const wc = this.watchId && this.cards.get(this.watchId);
     if (wc && this.watch.open) {

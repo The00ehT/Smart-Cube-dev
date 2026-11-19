@@ -210,7 +210,7 @@ function onMove(e) {
   if (app.room) {
     // t = Zeit im Solve (0 = dieser Zug startet ihn) – damit Zuschauer Splits berechnen können
     const t = app.phase === 'running' ? Math.round(now() - app.startLocal) : app.phase === 'ready' || app.phase === 'inspecting' ? 0 : null;
-    app.room.live('move', { m: e.move, t });
+    roomSend('move', { m: e.move, t });
   }
   app.lastMoves.push(e.move);
   if (app.lastMoves.length > 40) app.lastMoves.shift();
@@ -408,11 +408,12 @@ function finishSolve() {
   setStatus(summary());
   if (app.room) {
     app.room.result(app.roomRound, solve);
+    roomView.result({ from: app.room.myId, time: solve.time, penalty: solve.penalty });
     app.lastRoomRound = app.roomRound;
     app.roomRound = null;
     renderResultCompare();
     setStatus(summary() + L(' · warte auf die anderen …', ' · waiting for the others …'));
-    app.room.live('state', { facelets: app.state });
+    roomSend('state', { facelets: app.state });
     if (app.pendingRound) {
       const r = app.pendingRound;
       app.pendingRound = null;
@@ -915,7 +916,7 @@ function tick() {
     if (q && (!last || Math.abs(q.x - last.x) + Math.abs(q.y - last.y) + Math.abs(q.z - last.z) + Math.abs(q.w - last.w) > 0.01)) {
       app.sentView = { ...q };
       app.sentViewAt = nowMs;
-      app.room.live('view', { q: [q.x, q.y, q.z, q.w].map((v) => Math.round(v * 1000) / 1000) });
+      roomSend('view', { q: [q.x, q.y, q.z, q.w].map((v) => Math.round(v * 1000) / 1000) });
     }
   }
   // Flüssig nur, wenn eine Zeit läuft; im Raum reichen ~12 Durchläufe pro Sekunde (Lage senden)
@@ -1343,7 +1344,7 @@ function applySkin(skin) {
   view.setSkin(skin);
   ghostView?.setSkin(skin);
   skinPreview?.setSkin(skin);
-  for (const c of roomView.cards.values()) c.cube?.setSkin(skin);
+  for (const c of roomView.cards.values()) for (const v of [c.cube, c.mini]) v?.setSkin(skin);
   renderSkinUi();
   if ($('settings-dialog').open) renderPresetThumbs();
 }
@@ -1840,9 +1841,16 @@ async function inviteToRoom() {
   }
 }
 
+/** Live-Daten an die anderen schicken und in der eigenen Karte zeigen */
+function roomSend(kind, data) {
+  if (!app.room) return;
+  app.room.live(kind, data);
+  roomView.self(kind, data);
+}
+
 /** Eigenen Stand an die anderen: Phase, laufende Zeit und Würfelzustand */
 function sendRoomStatus() {
-  app.room?.live('status', { phase: app.phase, elapsed: app.phase === 'running' ? now() - app.startLocal : 0, facelets: app.state });
+  roomSend('status', { phase: app.phase, elapsed: app.phase === 'running' ? now() - app.startLocal : 0, facelets: app.state });
 }
 
 function onRoomEvent(ev) {
@@ -1877,7 +1885,7 @@ function onRoomEvent(ev) {
       if (!isSolved(app.state) && app.conn) setStatus(L('Löse zuerst deinen Würfel (oder „Als gelöst markieren“), dann stimmt das Scramble.', 'Solve your cube first (or “Mark as solved”) so the scramble matches.'));
       newScramble(ev.scramble);
       showTab('timer');
-      room.live('state', { facelets: app.state });
+      roomSend('state', { facelets: app.state });
       break;
     case 'live':
       roomView.live(ev);
@@ -1925,7 +1933,7 @@ async function enterRoom(mode, code) {
     $('room-intro').hidden = true;
     document.querySelectorAll('.tab-dot').forEach((d) => (d.hidden = false));
     app.sentPhase = null;
-    room.live('state', { facelets: app.state });
+    roomSend('state', { facelets: app.state });
     if (app.phase === 'scrambling' || app.phase === 'done') {
       app.phase = 'idle';
       renderTimer();
