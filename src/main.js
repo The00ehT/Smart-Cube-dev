@@ -32,6 +32,8 @@ import { L, locale, dec, translateStatic, lang } from './i18n.js';
 const MV = L('Züge', 'moves');
 import { metricsOf, skillProfile, SKILLS } from './metrics.js';
 import { modeGroups, findMode } from './modes.js';
+import { InsightsView } from './ui/insights-view.js';
+import { algsOf } from './algs.js';
 import { radarSvg } from './ui/radar.js';
 import { cfopTable, splitTone } from './ui/cfop-table.js';
 import { splitBaseline } from './split-compare.js';
@@ -466,6 +468,14 @@ const resultSolve = () => solves.find((x) => String(x.id) === $('result-overlay'
 $('res-close').addEventListener('click', hideResult);
 $('result-overlay').addEventListener('click', (e) => {
   if (e.target.id === 'result-overlay') hideResult();
+});
+const insights = new InsightsView($('insights-dialog'), {
+  // eigene Algorithmen des Nutzers zusätzlich prüfen
+  extraAlgs: (id) => (algsOf(id).own ? algsOf(id).algs : []),
+});
+$('res-insights').addEventListener('click', () => {
+  const s = resultSolve();
+  if (s && hasDetail(s)) insights.open(s);
 });
 $('res-replay').addEventListener('click', () => {
   const s = resultSolve();
@@ -1090,6 +1100,7 @@ function openSolve(i) {
   $('sd-replay').hidden = !replayData(s);
   $('sd-archive').hidden = !hasDetail(s);
   $('sd-ghost').hidden = !hasDetail(s);
+  $('sd-insights').hidden = !hasDetail(s);
   $('sd-archive').textContent = isArchived(s) ? '★ Im Archiv (entfernen)' : '☆ Im Archiv speichern';
   dlg.showModal();
 }
@@ -1097,6 +1108,10 @@ function openSolve(i) {
 $('sd-image').addEventListener('click', () => {
   const s = solves[Number($('solve-dialog').dataset.index)];
   if (s) shareSolveImage(s, profile, best(solves) === effectiveTime(s) ? 'Bestzeit' : '');
+});
+$('sd-insights').addEventListener('click', () => {
+  const s = solves[Number($('solve-dialog').dataset.index)];
+  if (s && hasDetail(s)) insights.open(s);
 });
 $('sd-ghost').addEventListener('click', () => {
   const s = solves[Number($('solve-dialog').dataset.index)];

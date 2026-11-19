@@ -48,6 +48,8 @@ const STATIC = {
   'Als gelöst markieren': 'Mark as solved',
   'Ausrichten': 'Reset',
   'Modus': 'Mode',
+  '🔍 Was wäre besser gewesen?': '🔍 What could have been better?',
+  '🔍 Analyse': '🔍 Analysis',
   'Modus wählen': 'Choose mode',
   'Bleibt eingestellt, bis du ihn wechselst.': 'Stays on until you switch.',
   'Neu': 'New',
