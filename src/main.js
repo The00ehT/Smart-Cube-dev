@@ -33,6 +33,7 @@ const MV = L('Züge', 'moves');
 import { metricsOf, skillProfile, SKILLS } from './metrics.js';
 import { modeGroups, findMode } from './modes.js';
 import { liveStage, barHtml } from './ui/live-bar.js';
+import { keepAwake } from './wake.js';
 import { InsightsView } from './ui/insights-view.js';
 import { algsOf } from './algs.js';
 import { radarSvg } from './ui/radar.js';
@@ -45,7 +46,7 @@ translateStatic(); // feste Texte der Seite (bei Englisch)
 const SOLVES_KEY = 'smartcube.solves.v1';
 const SETTINGS_KEY = 'smartcube.settings.v1';
 
-const settings = { inspection: false, autoScramble: true, hideTime: false, gyro: true, viewDown: 'auto', theme: 'auto', replayGyro: true, showResult: true, crossColor: 'auto', scrambleType: 'wca', ...load(SETTINGS_KEY, {}) };
+const settings = { keepAwake: true, inspection: false, autoScramble: true, hideTime: false, gyro: true, viewDown: 'auto', theme: 'auto', replayGyro: true, showResult: true, crossColor: 'auto', scrambleType: 'wca', ...load(SETTINGS_KEY, {}) };
 let solves = load(SOLVES_KEY, []);
 
 // Modus: früher nur „Scramble-Art“ – übernehmen
@@ -1214,6 +1215,8 @@ bindToggle('opt-inspection', 'inspection');
 bindToggle('opt-auto-scramble', 'autoScramble');
 bindToggle('opt-hide-time', 'hideTime');
 bindToggle('opt-result', 'showResult');
+bindToggle('opt-awake', 'keepAwake', (on) => keepAwake(on));
+keepAwake(settings.keepAwake);
 bindToggle('opt-gyro', 'gyro', (on) => {
   view.setGyroEnabled(on);
   if (!on) app.lastGyro = null;
@@ -1278,15 +1281,15 @@ const PRESET_NAMES = {
   gan: 'GAN',
   classic: L('Klassisch', 'Classic'),
   tiles: L('Fliesen', 'Tiles'),
-  pastel: L('Pastell', 'Pastel'),
-  neon: 'Neon',
-  galaxy: L('Galaxie', 'Galaxy'),
-  cow: L('Kuh 🐄', 'Cow 🐄'),
-  pcb: 'PCB',
+  custom: L('Eigene', 'Custom'),
 };
 const SKIN_KEYS = ['style', 'body', 'scheme', 'finish', 'theme'];
 let skinPreview = null;
-const currentSkin = () => ({ ...SKIN_PRESETS.gan, ...(settings.skin || {}) });
+const currentSkin = () => {
+  const sk = { ...SKIN_PRESETS.gan, ...(settings.skin || {}) };
+  if (sk.theme !== 'custom') sk.theme = 'colors'; // entfernte Designs (Kuh, Neon …)
+  return sk;
+};
 function applySkin(skin) {
   settings.skin = skin;
   if (!save(SETTINGS_KEY, settings)) toast(L('Speicher voll – Bilder bitte kleiner wählen.', 'Storage full – please use smaller images.'));
@@ -1316,7 +1319,7 @@ async function renderPresetThumbs() {
   try {
     cv.setState(applyAlg(SOLVED, "R U R' U'"));
     for (const [k, p] of Object.entries(SKIN_PRESETS)) {
-      cv.setSkin({ ...sk, ...p });
+      cv.setSkin(k === 'custom' ? { ...sk, theme: 'custom' } : { ...sk, ...p });
       await cv.cube.skinReady;
       presetThumbs[k] = cv.cube.snapshot();
       const img = document.querySelector(`#skin-presets [data-preset="${k}"] img`);
@@ -1336,9 +1339,9 @@ function renderSkinUi() {
   const sk = currentSkin();
   $('skin-presets').innerHTML = Object.entries(SKIN_PRESETS)
     .map(([k, p]) => {
-      const on = SKIN_KEYS.every((f) => p[f] === sk[f]);
+      const on = k === 'custom' ? sk.theme === 'custom' : sk.theme !== 'custom' && SKIN_KEYS.every((f) => p[f] === sk[f]);
       return `<button type="button" data-preset="${k}" class="skin-card${on ? ' on' : ''}" aria-pressed="${on}">
-        <img alt="" ${presetThumbs[k] ? `src="${presetThumbs[k]}"` : ''} /><span>${PRESET_NAMES[k]}</span></button>`;
+        <img alt="" ${presetThumbs[k] ? `src="${presetThumbs[k]}"` : ''} />${k === 'custom' ? '<i class="skin-badge">📷</i>' : ''}<span>${PRESET_NAMES[k]}</span></button>`;
     })
     .join('');
   for (const f of SKIN_KEYS) $(`skin-${f}`).value = sk[f];
@@ -1400,8 +1403,11 @@ $('skin-logo-clear').addEventListener('click', () => {
 });
 $('skin-presets').addEventListener('click', (e) => {
   const b = e.target.closest('[data-preset]');
-  // Vorlage übernehmen, eigene Bilder und Logo behalten
-  if (b) applySkin({ ...currentSkin(), ...SKIN_PRESETS[b.dataset.preset] });
+  // Vorlage übernehmen, eigene Bilder und Logo behalten; „Eigene“ behält Stil und Farben
+  if (!b) return;
+  const k = b.dataset.preset;
+  applySkin(k === 'custom' ? { ...currentSkin(), theme: 'custom' } : { ...currentSkin(), ...SKIN_PRESETS[k] });
+  if (k === 'custom' && !Object.keys(currentSkin().images || {}).length) toast(L('Tippe unten auf eine Seite, um ein Bild dafür zu wählen.', 'Tap a face below to pick an image for it.'));
 });
 for (const f of SKIN_KEYS) {
   $(`skin-${f}`).addEventListener('change', (e) => applySkin({ ...currentSkin(), [f]: e.target.value }));
@@ -1448,7 +1454,14 @@ async function offlineStatus() {
     el.innerHTML = html;
   };
   if (!('serviceWorker' in navigator) || !window.caches) {
-    return set('bad', L('✗ Dieser Browser unterstützt keine Offline-Speicherung (Service Worker). Die App braucht beim Öffnen Internet.', '✗ This browser doesn’t support offline storage (service workers). The app needs internet when opening.'));
+    // z. B. Bluefy: Apple erlaubt in eingebetteten Browsern keine Service Worker
+    return set(
+      'warn',
+      L(
+        'ⓘ Dieser Browser (z. B. Bluefy) erlaubt keine Offline-Speicherung – das legt Apple für eingebettete Browser fest, die App kann es nicht umgehen. Zum <b>Öffnen</b> braucht sie deshalb Internet. <b>Danach läuft alles ohne Internet weiter</b> (Scrambles, Analyse, Statistiken), bis du die App schließt – nur Online-Räume brauchen Netz. Deine Solves sind immer auf dem Gerät gespeichert.',
+        'ⓘ This browser (e.g. Bluefy) doesn’t allow offline storage – Apple decides this for embedded browsers, the app can’t work around it. So it needs internet to <b>open</b>. <b>After that everything keeps working without internet</b> (scrambles, analysis, stats) until you close the app – only online rooms need a connection. Your solves are always stored on the device.',
+      ),
+    );
   }
   if (!import.meta.env.PROD) return set('warn', L('Entwicklungsmodus – offline nur im fertigen Build.', 'Dev mode – offline only in the production build.'));
   try {
@@ -1472,6 +1485,23 @@ async function offlineStatus() {
     set('bad', L('✗ Offline-Speicherung fehlgeschlagen: ', '✗ Offline storage failed: ') + (err?.message || err));
   }
 }
+/**
+ * Nachladbare Teile (Scramble-Generator, Löser) gleich nach dem Start laden: so funktioniert die App
+ * auch ohne Service Worker (Bluefy) weiter, wenn danach das Internet weg ist – und das erste Scramble kommt schneller.
+ */
+function warmUp() {
+  setTimeout(async () => {
+    try {
+      const { randomScrambleForEvent } = await import('cubing/scramble');
+      await randomScrambleForEvent('333');
+      await setupAlgFor(applyAlg(SOLVED, "R U R' U'"));
+    } catch (err) {
+      console.warn('Vorladen:', err);
+    }
+  }, 2500);
+}
+warmUp();
+
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   navigator.serviceWorker
     .register('./sw.js')

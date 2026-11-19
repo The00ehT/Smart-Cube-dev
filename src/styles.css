@@ -1114,3 +1114,6 @@ dialog.watch-dialog[open] { display: flex; flex-direction: column; }
   .wv-side { flex: none; max-height: 48%; }
   .wv-time { font-size: 56px; text-align: center; }
 }
+.skin-presets .skin-card { position: relative; }
+.skin-badge { position: absolute; top: 4px; right: 6px; font-style: normal; font-size: 14px; }
+@media (max-width: 700px) { .skin-presets { grid-template-columns: repeat(4, minmax(0, 1fr)); } }

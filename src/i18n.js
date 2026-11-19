@@ -48,6 +48,7 @@ const STATIC = {
   'Als gelöst markieren': 'Mark as solved',
   'Ausrichten': 'Reset',
   'Modus': 'Mode',
+  'Bildschirm anlassen (kein Bildschirmschoner)': 'Keep screen on (no auto-lock)',
   '🗑 Alle Bilder zurücksetzen': '🗑 Reset all images',
   'Zum Drehen ziehen': 'Drag to rotate',
   '🔍 Was wäre besser gewesen?': '🔍 What could have been better?',

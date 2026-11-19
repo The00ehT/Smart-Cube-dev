@@ -10,7 +10,7 @@
  *   body    'black' | 'gray' | 'white'
  *   scheme  'bright' | 'standard' | 'pastel'        (Farben)
  *   finish  'gloss' | 'matte'
- *   theme   'colors' | 'cow' | 'neon' | 'galaxy' | 'pcb' | 'custom'   (Design; Bilder werden wie bei einem
+ *   theme   'colors' | 'custom'   (Design; Bilder werden wie bei einem
  *           Bilderwürfel zerteilt und wandern samt Drehung mit ihrem Stein)
  *   images  { U: dataUrl, … } für 'custom', logo: dataUrl fürs weiße Mittelstück
  */
@@ -30,11 +30,7 @@ export const SKIN_PRESETS = {
   gan: { style: 'gan', body: 'black', scheme: 'bright', finish: 'gloss', theme: 'colors' },
   classic: { style: 'classic', body: 'black', scheme: 'standard', finish: 'gloss', theme: 'colors' },
   tiles: { style: 'tiles', body: 'black', scheme: 'bright', finish: 'matte', theme: 'colors' },
-  pastel: { style: 'stickerless', body: 'white', scheme: 'pastel', finish: 'matte', theme: 'colors' },
-  neon: { style: 'gan', body: 'black', scheme: 'bright', finish: 'gloss', theme: 'neon' },
-  galaxy: { style: 'gan', body: 'black', scheme: 'bright', finish: 'gloss', theme: 'galaxy' },
-  cow: { style: 'gan', body: 'black', scheme: 'bright', finish: 'matte', theme: 'cow' },
-  pcb: { style: 'gan', body: 'black', scheme: 'bright', finish: 'gloss', theme: 'pcb' },
+  custom: { style: 'gan', body: 'black', scheme: 'bright', finish: 'gloss', theme: 'custom' },
 };
 export let DEFAULT_SKIN = SKIN_PRESETS.gan;
 /** Aussehen für alle neu erzeugten Würfel (z. B. aus den Einstellungen) */
@@ -117,6 +113,8 @@ export class Cube3D {
   /** Steine und Farbflächen (neu) aufbauen */
   setSkin(skin) {
     this.skin = { ...SKIN_PRESETS.gan, ...skin };
+    // Frühere Designs (Kuh, Neon, Galaxie, Platine) gibt es nicht mehr
+    if (!['colors', 'custom'].includes(this.skin.theme)) this.skin.theme = 'colors';
     const { body, scheme, finish, theme } = this.skin;
     const st = STYLES[this.skin.style] ?? STYLES.gan;
     this.finishAnim(true);
@@ -190,9 +188,8 @@ export class Cube3D {
           t.anisotropy = 4;
           this.faceTex[f] = t;
         }
-        const Mat = theme === 'neon' ? THREE.MeshBasicMaterial : THREE.MeshStandardMaterial;
-        const env = theme === 'galaxy' ? 0.12 : finish === 'matte' ? 0.15 : 0.35;
-        this.texMats = this.stickers.map(() => new Mat(theme === 'neon' ? {} : { roughness: theme === 'galaxy' ? 0.5 : rough, metalness: 0, envMapIntensity: env }));
+        const env = finish === 'matte' ? 0.15 : 0.35;
+        this.texMats = this.stickers.map(() => new THREE.MeshStandardMaterial({ roughness: rough, metalness: 0, envMapIntensity: env }));
         this.paint();
       }).catch(() => {});
     }
