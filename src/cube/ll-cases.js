@@ -353,3 +353,38 @@ export function bodyCaseState(viewerCase, crossFace, rnd = Math.random) {
   const relabeled = [...s].map((c) => inv[c]).join('');
   return rot ? applyAnyAlg(relabeled, invertAnyAlg(rot)) : relabeled;
 }
+
+/**
+ * Bevorzugte Ausrichtung eines OLL/PLL-Falls (Kreuz unten): wie oft U, damit der Fall „richtig herum“ liegt.
+ *   PLL: U-Perms mit dem durchgehenden Block hinten; sonst Headlights (gleichfarbige Ecken, andere Kante) links
+ *   OLL: Headlights (beide oberen Ecken der Seite mit der oberen Farbe) links
+ * Bei Gleichstand bleibt 0 (so, wie der Algorithmus geschrieben ist).
+ * @returns 0–3 (Anzahl U-Drehungen auf den Fall-Zustand)
+ */
+export function autoOrient(state, set, id = '') {
+  const L0 = 36;
+  const B0 = 45;
+  const score = (s) => {
+    let v = 0;
+    if (set === 'PLL') {
+      const barBack = s[B0] === s[B0 + 1] && s[B0 + 1] === s[B0 + 2];
+      const headLeft = s[L0] === s[L0 + 2] && s[L0 + 1] !== s[L0];
+      if (/^PLL U[ab]$/.test(id) && barBack) v += 10;
+      if (headLeft) v += 4;
+    } else if (set === 'OLL') {
+      const top = s[4];
+      if (s[L0] === top && s[L0 + 2] === top) v += 4;
+    }
+    return v;
+  };
+  let best = 0;
+  let bestScore = -1;
+  for (let k = 0; k < 4; k++) {
+    const sc = score(applyAnyAlg(state, ['', 'U', 'U2', "U'"][k]));
+    if (sc > bestScore) {
+      bestScore = sc;
+      best = k;
+    }
+  }
+  return best;
+}

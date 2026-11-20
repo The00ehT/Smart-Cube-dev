@@ -5,15 +5,19 @@
  *   cases:  { 'PLL T': { algs: ['…'], main: 0 } }   (ohne Eintrag gilt der Standard-Algorithmus)
  *   custom: [{ id, name, alg }]
  *   train:  { 'PLL T': [{ exec, recog, date }] }    (die letzten 50 je Fall)
+ *   orient: { 'PLL T': { '<alg>': 0–3 } }            bevorzugte Ausrichtung je Algorithmus (U-Drehungen auf
+ *           den Fall, so wie der Alg ihn löst); ohne Eintrag automatisch (Headlights links, U-Perm-Block hinten)
  */
 import { L } from './i18n.js';
 import { load, save } from './storage.js';
-import { OLL_ALGS, PLL_ALGS } from './cube/ll-cases.js';
+import { OLL_ALGS, PLL_ALGS, stateForAlg, autoOrient, CASE_STATE } from './cube/ll-cases.js';
+import { applyAnyAlg } from './cube/facelets.js';
 import { F2L_CASES, f2lDefault } from './cube/alg-db.js';
 
 const KEY = 'smartcube.algs.v1';
 export const algData = { cases: {}, custom: [], train: {}, best: {}, ...load(KEY, {}) };
 algData.best ??= {};
+algData.orient ??= {};
 export const saveAlgs = () => save(KEY, algData);
 
 export const caseIds = (set) =>
@@ -114,4 +118,43 @@ export function recordTraining(id, exec, recog) {
   if (list.length > 50) list.shift();
   saveAlgs();
   return isPb && prev != null;
+}
+
+// ---------------- Bevorzugte Ausrichtung (OLL/PLL) ----------------
+
+const ORIENT_AUF = ['', 'U', 'U2', "U'"];
+const normAlg = (x) => String(x || '').replace(/[()]/g, ' ').split(/\s+/).filter(Boolean).join(' ');
+
+/** Fall-Zustand so, wie der Algorithmus ihn direkt löst (Kreuz unten) */
+export function algState(id, alg = mainAlg(id)) {
+  try {
+    return alg ? stateForAlg(alg) : CASE_STATE[id] || null;
+  } catch {
+    return CASE_STATE[id] || null;
+  }
+}
+
+/** Bevorzugte Ausrichtung des Algs: { k (0–3 U-Drehungen auf den Fall), auto } */
+export function orientOf(id, alg = mainAlg(id)) {
+  const set = id.slice(0, 3);
+  const own = algData.orient[id]?.[normAlg(alg)];
+  if (own != null) return { k: own, auto: false };
+  const s = algState(id, alg);
+  return { k: s && (set === 'OLL' || set === 'PLL') ? autoOrient(s, set, id) : 0, auto: true };
+}
+
+/** Ausrichtung für einen Alg festlegen (null = wieder automatisch) */
+export function setOrient(id, alg, k) {
+  const m = (algData.orient[id] ??= {});
+  if (k == null) delete m[normAlg(alg)];
+  else m[normAlg(alg)] = ((k % 4) + 4) % 4;
+  saveAlgs();
+}
+
+/** Fall in bevorzugter Ausrichtung und der AUF, der vor dem Alg nötig ist */
+export function orientedCase(id, alg = mainAlg(id)) {
+  const base = algState(id, alg);
+  if (!base) return null;
+  const { k, auto } = orientOf(id, alg);
+  return { state: applyAnyAlg(base, ORIENT_AUF[k]), k, auto, preAuf: ['', "U'", 'U2', 'U'][k] };
 }

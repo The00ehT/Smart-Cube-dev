@@ -12,7 +12,7 @@ import { applyAnyAlg, rotationFaceMap, CROSS_DOWN, HtmCounter } from '../cube/fa
 import { CASE_STATE, stateForAlg, solvedUpToAuf, f2lSolved, llOriented } from '../cube/ll-cases.js';
 import { displayState } from '../cube/f2l-cases.js';
 import { AlgDetector } from '../cube/alg-detect.js';
-import { algData, mainAlg, recordTraining, caseName, trainingBest } from '../algs.js';
+import { algData, mainAlg, recordTraining, caseName, trainingBest, orientedCase } from '../algs.js';
 import { groupAlg } from '../cube/alg-format.js';
 import { llDiagram, f2lDiagram } from './ll-diagram.js';
 import { CubeView } from './cube-view.js';
@@ -45,6 +45,7 @@ export class Trainer {
       /* egal */
     }
     this.showName = pref.showName ?? false;
+    this.prefOrient = pref.prefOrient ?? false; // OLL/PLL in bevorzugter Ausrichtung statt zufällig
     dlg.innerHTML = `
       <div class="rp-head">
         <div><h2 class="tr-title">Training</h2>
@@ -62,6 +63,7 @@ export class Trainer {
             <button type="button" class="ghost" data-act="skip">⏭ ${L('Überspringen', 'Skip')}</button>
           </div>
           <label class="toggle small"><input type="checkbox" class="pd-names" /> ${L('Namen gleich anzeigen', 'Show names right away')}</label>
+          <label class="toggle small pd-orient-row"><input type="checkbox" class="pd-orient" /> ${L('Bevorzugte Ausrichtung (OLL/PLL)', 'Preferred orientation (OLL/PLL)')}</label>
         </div>
       </div>
       <div class="pd-stats"></div>
@@ -73,7 +75,9 @@ export class Trainer {
     dlg.addEventListener('close', () => this.stop());
     q('[data-act=skip]').onclick = () => this.next();
     q('[data-act=hint]').onclick = () => {
-      q('.pd-msg').innerHTML = `<span class="pd-alg">${esc(groupAlg(mainAlg(this.id)))}</span>`;
+      // In bevorzugter Ausrichtung: nötigen AUF davor zeigen
+      const pre = this.oriented?.preAuf ? `<span class="pd-auf">${this.oriented.preAuf}</span> ` : '';
+      q('.pd-msg').innerHTML = `${pre}<span class="pd-alg">${esc(groupAlg(mainAlg(this.id)))}</span>`;
       this.revealed = true;
       this.renderName();
     };
@@ -81,16 +85,26 @@ export class Trainer {
       this.revealed = true;
       this.renderName();
     };
+    const savePref = () => {
+      try {
+        localStorage.setItem(PREF, JSON.stringify({ showName: this.showName, prefOrient: this.prefOrient }));
+      } catch {
+        /* egal */
+      }
+    };
     const names = q('.pd-names');
     names.checked = this.showName;
     names.onchange = () => {
       this.showName = names.checked;
-      try {
-        localStorage.setItem(PREF, JSON.stringify({ showName: this.showName }));
-      } catch {
-        /* egal */
-      }
+      savePref();
       this.renderName();
+    };
+    const orient = q('.pd-orient');
+    orient.checked = this.prefOrient;
+    orient.onchange = () => {
+      this.prefOrient = orient.checked;
+      savePref();
+      if (this.active && !this.firstAt && !this.done) this.next(this.id); // aktuellen Fall gleich neu zeigen
     };
     this.tick = this.tick.bind(this);
   }
@@ -144,15 +158,27 @@ export class Trainer {
     return this.ids[0];
   }
 
-  next() {
+  next(sameId) {
     clearTimeout(this.nextTimer);
-    this.id = this.pick();
+    this.id = sameId || this.pick();
     this.last = this.id;
     const set = this.id.slice(0, 3);
-    const base = this.caseState(this.id);
-    // Zufälliger AUF; bei OLL/PLL auch zufälliger Blickwinkel (F2L bleibt im Slot vorne rechts)
-    let shown = applyAnyAlg(base, pickOne(AUF));
-    if (set === 'OLL' || set === 'PLL') shown = applyAnyAlg(shown, pickOne(VIEW));
+    let base = this.caseState(this.id);
+    let shown;
+    this.oriented = null;
+    const ll = set === 'OLL' || set === 'PLL';
+    this.dlg.querySelector('.pd-orient-row').hidden = !this.ids.some((id) => /^(OLL|PLL) /.test(id));
+    if (ll && this.prefOrient && (this.oriented = orientedCase(this.id))) {
+      // Bevorzugte Ausrichtung: Muster oben liegt immer gleich (z. B. Headlights links);
+      // zufälliger Blickwinkel nur für die Farben – y mit U-Gegendrehung lässt das Muster an seinem Platz
+      base = this.oriented.state;
+      const v = Math.floor(Math.random() * 4);
+      shown = applyAnyAlg(base, `${['', "U'", 'U2', 'U'][v]} ${VIEW[v]}`);
+    } else {
+      // Zufälliger AUF; bei OLL/PLL auch zufälliger Blickwinkel (F2L bleibt im Slot vorne rechts)
+      shown = applyAnyAlg(base, pickOne(AUF));
+      if (ll) shown = applyAnyAlg(shown, pickOne(VIEW));
+    }
     if (set === 'F2L') shown = displayState(shown);
     this.detector = new AlgDetector(base, DONE[set] || solvedUpToAuf);
     this.htm = new HtmCounter(); // angezeigte Züge: R2 = 1 Zug

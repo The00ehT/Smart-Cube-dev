@@ -5,11 +5,11 @@
 import { groupAlg } from '../cube/alg-format.js';
 import { L, pctText } from '../i18n.js';
 import { OLL_GROUPS, PLL_GROUPS, caseProbabilities, checkAlg } from '../cube/ll-cases.js';
-import { rotationFaceMap, CROSS_DOWN, COLOR_NAMES, groupMoves, tokenizeAlg, mirrorAlg } from '../cube/facelets.js';
-import { algData, algsOf, mainAlg, addAlg, removeAlg, setMain, addCustom, updateCustom, removeCustom, caseName, saveAlgs, trainingBest } from '../algs.js';
+import { rotationFaceMap, CROSS_DOWN, COLOR_NAMES, groupMoves, tokenizeAlg, mirrorAlg, applyAnyAlg } from '../cube/facelets.js';
+import { algData, algsOf, mainAlg, addAlg, removeAlg, setMain, addCustom, updateCustom, removeCustom, caseName, saveAlgs, trainingBest, algState, orientOf, setOrient } from '../algs.js';
 import { undoable } from './toast.js';
 import { llStats } from '../case-stats.js';
-import { caseDiagram } from './ll-diagram.js';
+import { caseDiagram, llDiagram } from './ll-diagram.js';
 import { F2L_GROUPS, dbAlgs } from '../cube/alg-db.js';
 import { weakCases } from '../weakness.js';
 import { formatTime } from '../stats.js';
@@ -238,6 +238,7 @@ export class AlgsView {
           .join('')}
       </div>
       <p class="small">${L('Der markierte Algorithmus wird im Training gezeigt.', 'The selected algorithm is shown in training.')}</p>
+      ${this.orientHtml(id)}
       ${this.altHtml(id, algs)}
       <div class="alg-editor-slot">${this.editorHtml()}</div>
       <menu>
@@ -245,6 +246,25 @@ export class AlgsView {
         <button type="button" class="primary" data-act="train-one">▶ ${L('Diesen Fall trainieren', 'Train this case')}</button>
       </menu>`;
     this.bindCase();
+  }
+
+  /** Bevorzugte Ausrichtung des markierten Algs (für Training und Endlos-OLL/-PLL mit „Bevorzugte Ausrichtung“) */
+  orientHtml(id) {
+    const set = id.slice(0, 3);
+    if (set !== 'OLL' && set !== 'PLL') return '';
+    const alg = mainAlg(id);
+    const base = algState(id, alg);
+    if (!base) return '';
+    const { k, auto } = orientOf(id, alg);
+    const PRE = ['', "U'", 'U2', 'U'];
+    const opts = ['', 'U', 'U2', "U'"]
+      .map((u, i) => `<button type="button" class="orient-opt${i === k ? ' on' : ''}" data-orient="${i}" aria-pressed="${i === k}">
+          ${llDiagram(applyAnyAlg(base, u), set === 'OLL' ? 'oll' : 'pll', 56)}
+          <span class="small">${PRE[i] ? `${PRE[i]} ${L('vorher', 'first')}` : L('direkt', 'direct')}</span></button>`)
+      .join('');
+    return `<h3 class="sub-h">${L('Bevorzugte Ausrichtung', 'Preferred orientation')}</h3>
+      <div class="orient-row">${opts}</div>
+      <p class="small">${auto ? L('Automatisch: Headlights links, U-Perm-Block hinten.', 'Automatic: headlights left, U-perm block at the back.') : `${L('Von dir gewählt', 'Chosen by you')} · <button type="button" class="link-btn" data-orient="auto">${L('automatisch', 'automatic')}</button>`} ${L('Gilt für den markierten Alg im Training mit „Bevorzugte Ausrichtung“.', 'Applies to the selected alg in training with “Preferred orientation”.')}</p>`;
   }
 
   /** Alternativen aus der Datenbank (und für F2L die Slot-Varianten) */
@@ -272,6 +292,13 @@ export class AlgsView {
 
   bindCase() {
     const d = this.dlg;
+    d.querySelectorAll('[data-orient]').forEach((b) => (b.onclick = () => {
+      const v = b.dataset.orient;
+      setOrient(this.caseId, mainAlg(this.caseId), v === 'auto' ? null : Number(v));
+      const top = d.scrollTop;
+      this.renderCase();
+      d.scrollTop = top;
+    }));
     d.querySelectorAll('[data-take]').forEach((b) => (b.onclick = () => {
       addAlg(this.caseId, b.dataset.take);
       this.renderCase();

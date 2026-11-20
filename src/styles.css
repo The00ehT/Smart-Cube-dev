@@ -1326,3 +1326,10 @@ details.in-sec > summary { cursor: pointer; list-style: none; }
 details.in-sec > summary::before { content: '▸ '; color: var(--muted); }
 details.in-sec[open] > summary::before { content: '▾ '; }
 details.in-sec[open] > summary { margin-bottom: 8px; }
+.pd-auf { font: 700 15px var(--mono); color: var(--accent); }
+
+/* Bevorzugte Ausrichtung (OLL/PLL) */
+.orient-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.orient-opt { display: grid; justify-items: center; gap: 4px; padding: 8px 4px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--panel-2); color: inherit; }
+.orient-opt.on { border-color: var(--accent); background: var(--accent-soft); }
+.orient-opt .ll-dia { width: 56px; height: 56px; }
