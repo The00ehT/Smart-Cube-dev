@@ -465,3 +465,57 @@ export class HtmCounter {
     return this.n;
   }
 }
+
+/**
+ * Algorithmus nur mit Seitenzügen (U R F D L B) – ohne weite Züge (r, Rw), Mittelschichten (M E S)
+ * und Würfeldrehungen (x y z). So kann man ihn genau so am Würfel ausführen, wie er dasteht, ohne
+ * umzugreifen; das Ergebnis ist dasselbe (bis auf die Lage des ganzen Würfels).
+ *   r = L x, M = R L' x', E = U D' y', S = F' B z
+ */
+const WIDE_EQ = { R: ['L', 'x', 1], L: ['R', 'x', -1], U: ['D', 'y', 1], D: ['U', 'y', -1], F: ['B', 'z', 1], B: ['F', 'z', -1] };
+const SLICE_EQ = { M: [['R', 1], ['L', -1], 'x', -1], E: [['U', 1], ['D', -1], 'y', -1], S: [['F', -1], ['B', 1], 'z', 1] };
+const powTok = (base, k) => {
+  const n = ((k % 4) + 4) % 4;
+  return n === 0 ? null : base + (n === 1 ? '' : n === 2 ? '2' : "'");
+};
+export function flattenAlg(alg) {
+  const rot = [];
+  const out = [];
+  let inv = null;
+  const physical = (face) => {
+    if (!inv) {
+      const map = rotationFaceMap(rot.join(' ')); // echt → Sicht
+      inv = Object.fromEntries(Object.entries(map).map(([a, b]) => [b, a]));
+    }
+    return inv[face];
+  };
+  const turn = (face, k) => {
+    const t = powTok(physical(face), k);
+    if (t) out.push(t);
+  };
+  const rotate = (axis, k) => {
+    const t = powTok(axis, k);
+    if (t) {
+      rot.push(t);
+      inv = null;
+    }
+  };
+  for (const tok of tokenizeAlg(alg)) {
+    const mv = parseAnyMove(tok);
+    if (!mv) throw new Error('Unbekannter Zug: ' + tok);
+    const a = mv.amount;
+    const b = mv.base;
+    if (/^[URFDLB]$/.test(b)) turn(b, a);
+    else if (/^[URFDLB]w$/.test(b)) {
+      const [opp, axis, dir] = WIDE_EQ[b[0]];
+      turn(opp, a);
+      rotate(axis, dir * a);
+    } else if (SLICE_EQ[b]) {
+      const [m1, m2, axis, dir] = SLICE_EQ[b];
+      turn(m1[0], m1[1] * a);
+      turn(m2[0], m2[1] * a);
+      rotate(axis, dir * a);
+    } else rotate(b, a);
+  }
+  return out.join(' ');
+}

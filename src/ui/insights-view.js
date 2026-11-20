@@ -123,9 +123,9 @@ function eoTip(p) {
   const e = p.eo;
   if (!e) return '';
   const m = e.mine;
-  let html = m ? `<div class="small in-eo">🧭 ${L('Danach', 'After')}: ${L('Kanten oben', 'top edges')} <b>${m.eo}/4</b> · ${ollText(m)}</div>` : '';
-  if (e.better) html += tip('🔭', L('Mit Blick auf OLL', 'With OLL in mind'), e.better.alg, `${L('Paar + OLL', 'Pair + OLL')}: ${sum(e.better.len, e.better.oll.len)} ${L('statt', 'vs')} ${e.better.baseTotal} · ${ollText(e.better.oll)} · ${handNote(e.better)}`);
-  if (e.allEdges) html += tip('🧭', L('Alle Kanten oben richtig', 'All top edges oriented'), e.allEdges.alg, `${L('Paar + OLL', 'Pair + OLL')}: ${sum(e.allEdges.len, e.allEdges.oll.len)} ${L('statt', 'vs')} ${e.allEdges.baseTotal} · ${ollText(e.allEdges.oll)} · ${handNote(e.allEdges)}`);
+  let html = m ? `<div class="small in-eo">🧭 ${L('In deinem Solve nach diesem Paar', 'In your solve after this pair')}: ${L('Kanten oben', 'top edges')} <b>${m.eo}/4</b> ${L('richtig', 'oriented')}${m.n || m.skip ? ` · ${ollText(m)}` : ''}</div>` : '';
+  if (e.better) html += tip('🔭', L('Mit Blick auf OLL', 'With OLL in mind'), e.better.alg, `${L('Mit diesem Alg', 'With this alg')}: ${L('Kanten oben', 'top edges')} ${e.better.oll.eo}/4 · ${L('Paar + OLL', 'Pair + OLL')}: ${sum(e.better.len, e.better.oll.len)} ${L('statt', 'vs')} ${e.better.baseTotal} · ${ollText(e.better.oll)} · ${handNote(e.better)}`);
+  if (e.allEdges) html += tip('🧭', L('So wären alle Kanten oben richtig', 'This would orient all top edges'), e.allEdges.alg, `${L('Paar + OLL', 'Pair + OLL')}: ${sum(e.allEdges.len, e.allEdges.oll.len)} ${L('statt', 'vs')} ${e.allEdges.baseTotal} · ${ollText(e.allEdges.oll)} · ${handNote(e.allEdges)}`);
   return html;
 }
 
@@ -270,10 +270,13 @@ export class InsightsView {
     const state = this.deps.state();
     if (pr.phase === 'setup') {
       pr.tracker.push(e.move);
-      if (pr.tracker.done || state === pr.target) {
+      // Erst „los“, wenn der Würfel wirklich genau im Stand vor der Phase ist (nicht nur die Setup-Züge abgehakt) –
+      // sonst stimmen z. B. die Kanten oben nicht mit der Analyse überein
+      if (state === pr.target) {
         pr.phase = 'go';
         pr.note = '';
-      } else if (pr.tracker.corrections > 0) this.scheduleRescramble();
+      } else if (pr.tracker.done) this.resetup(L('Stand weicht ab (Zug nicht erkannt?) – neues Setup', 'State differs (missed move?) – new setup'));
+      else if (pr.tracker.corrections > 0) this.scheduleRescramble();
     } else if (pr.phase === 'go') {
       if (pr.startAt == null) pr.startAt = t;
       pr.moves = pr.htm.push(e.move); // R2 = 1 Zug
@@ -284,6 +287,20 @@ export class InsightsView {
     }
     this.renderPractice();
     return true;
+  }
+
+  /** Setup neu vom jetzigen Stand des Würfels aus berechnen */
+  async resetup(note) {
+    const pr = this.practice;
+    if (!pr || pr.busy) return;
+    pr.busy = true;
+    const alg = await setupAlgFor(relativeState(this.deps.state(), pr.target));
+    pr.busy = false;
+    if (this.practice !== pr || pr.phase !== 'setup') return;
+    pr.tracker = new ScrambleTracker(alg);
+    pr.note = note;
+    if (pr.tracker.done || this.deps.state() === pr.target) pr.phase = 'go';
+    this.renderPractice();
   }
 
   /** Bei Fehlern im Setup: kürzester Weg zum Ziel, wenn das weniger Züge sind */

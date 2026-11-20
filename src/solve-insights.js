@@ -7,7 +7,7 @@
  *   OLL/PLL – direkter Algorithmus gegen die tatsächlichen Züge (erkennt z. B. 2-Look)
  * Alles wird aus Startzustand und Zügen berechnet, funktioniert also für jeden gespeicherten Solve.
  */
-import { FACES, SOLVED, applyMove, applyAnyAlg, translateMoves, mirrorState, mirrorAlg, tokenizeAlg, parseAnyMove, phaseStatus, solvedSlots, F2L_SLOTS, CROSS_DOWN } from './cube/facelets.js';
+import { FACES, SOLVED, applyMove, applyAnyAlg, flattenAlg, translateMoves, mirrorState, mirrorAlg, tokenizeAlg, parseAnyMove, phaseStatus, solvedSlots, F2L_SLOTS, CROSS_DOWN } from './cube/facelets.js';
 import { analyzeSolve } from './cube/analysis.js';
 import { solveCross, solveXCross } from './cube/cross-solver.js';
 import { f2lKey } from './cube/f2l-cases.js';
@@ -46,6 +46,27 @@ const holdColors = (state, face, extra = '') => {
   return { up: s[4], down: s[31], front: s[22], right: s[13], left: s[40], back: s[49] };
 };
 
+/** Algs nur aus Seitenzügen (ohne r, M, x/y/z …): genau so am Würfel ausführbar, wie er dasteht.
+ *  Doppelte (z. B. „y' R U R'“ = „F U F'“) fallen weg; ungültige werden übersprungen. */
+const flatCache = new Map();
+function flatAlgs(list) {
+  const out = [];
+  for (const a of list) {
+    if (!flatCache.has(a)) {
+      let f = null;
+      try {
+        f = flattenAlg(a);
+      } catch {
+        f = null;
+      }
+      flatCache.set(a, f);
+    }
+    const f = flatCache.get(a);
+    if (f && !out.includes(f)) out.push(f);
+  }
+  return out;
+}
+
 /** Bester Datenbank-Algorithmus für den FR-Slot (mit AUF vorab), sonst null */
 function bestPair(s, extraAlgs = () => []) {
   if (solvedSlots(s, 'D') & FR_BIT) return null;
@@ -54,7 +75,7 @@ function bestPair(s, extraAlgs = () => []) {
   if (!c) return { stuck: true };
   const keep = solvedSlots(s, 'D');
   let best = null;
-  for (const alg of [...dbAlgs(c.id), ...extraAlgs(c.id)]) {
+  for (const alg of flatAlgs([...dbAlgs(c.id), ...extraAlgs(c.id)])) {
     for (const auf of AUF) {
       const after = recenter(applyAnyAlg(s, `${auf} ${alg}`));
       const mask = solvedSlots(after, 'D');
@@ -75,7 +96,7 @@ function pairVariants(s, extraAlgs) {
   if (!c) return [];
   const out = [];
   const seen = new Set();
-  for (const alg of [...dbAlgs(c.id), ...extraAlgs(c.id)]) {
+  for (const alg of flatAlgs([...dbAlgs(c.id), ...extraAlgs(c.id)])) {
     for (const auf of AUF) {
       const full = `${auf} ${alg}`.trim();
       if (seen.has(full)) break;
@@ -121,11 +142,22 @@ function nextPairLen(s, extraAlgs, cache) {
 }
 /** Kanten der letzten Schicht richtig orientiert (U-Farbe oben): 0, 2 oder 4 */
 const eoCount = (s) => [1, 3, 5, 7].filter((i) => s[i] === s[4]).length;
+const OPP = { U: 'D', D: 'U', R: 'L', L: 'R', F: 'B', B: 'F' };
+/** Dasselbe direkt am Würfel gezählt (ohne Umrechnung in die Haltung): Seite gegenüber dem Kreuz */
+const eoPhysical = (state, cross) => {
+  const f = FACES.indexOf(OPP[cross]) * 9;
+  return [1, 3, 5, 7].filter((i) => state[f + i] === state[f + 4]).length;
+};
+/** Gelöste Slots (Bitmaske → Menge) */
+const slotsIn = (s) => {
+  const m = solvedSlots(s, 'D');
+  return new Set([0, 1, 2, 3].filter((i) => m & (1 << i)));
+};
 
 /** Bester Algorithmus für OLL/PLL im Zustand s (Kreuz unten); done prüft das Ergebnis */
 function bestLl(id, s, done, extraAlgs) {
   let best = null;
-  for (const alg of [...dbAlgs(id), ...extraAlgs(id)]) {
+  for (const alg of flatAlgs([...dbAlgs(id), ...extraAlgs(id)])) {
     for (const auf of AUF) {
       let after = recenter(applyAnyAlg(s, `${auf} ${alg}`));
       let post = '';
@@ -369,6 +401,42 @@ export function solveInsights(solve, opts = {}) {
       // Alle Kanten richtig ohne (viel) Mehraufwand?
       if (bestEo && base && bestEo.oll.eo === 4 && base.oll.eo < 4 && bestEo !== best && bestEo.total <= base.total + 1)
         entry.eo.allEdges = { id: bestEo.id, alg: bestEo.alg, len: bestEo.len, oll: bestEo.oll, total: bestEo.total, baseTotal: base.total, mirrored: bestEo.mirrored, ...holdInfo(bestEo) };
+    }
+
+    // ---- Gegenprobe: jeden Vorschlag vom echten Stand aus in der angezeigten Haltung ausführen ----
+    // Stimmt das Ergebnis nicht mit der Ankündigung überein, wird der Vorschlag weggelassen statt falsch angezeigt.
+    const kOf = (hold) => options.findIndex((o) => o.hold.front === hold.front);
+    const run = (k, alg) => (k < 0 ? null : recenter(applyAnyAlg(options[k].s0, alg)));
+    const solvesPair = (k, alg) => {
+      const s0 = options[k]?.s0;
+      const s1 = run(k, alg);
+      if (!s0 || !s1 || !phaseStatus(s1).D.cross) return false;
+      const a0 = slotsIn(s0);
+      const a1 = slotsIn(s1);
+      return a1.size > a0.size && [...a0].every((x) => a1.has(x));
+    };
+    if (entry.best && !entry.best.stuck && !solvesPair(hk, entry.best.alg)) {
+      entry.best = null;
+      entry.saved = 0;
+    }
+    if (entry.easier && !solvesPair(kOf(entry.easier.hold), entry.easier.alg)) entry.easier = null;
+    if (entry.lookahead) {
+      const la = entry.lookahead;
+      const k = kOf(la.hold);
+      const s1 = solvesPair(k, la.alg) ? run(k, la.alg) : null;
+      if (!s1 || nextPairLen(s1, extraAlgs, new Map()) !== la.next) entry.lookahead = null;
+    }
+    if (entry.eo) {
+      for (const key of ['better', 'allEdges']) {
+        const x = entry.eo[key];
+        if (!x) continue;
+        const s1 = run(kOf(x.hold), x.alg);
+        const ok = s1 && f2lSolved(s1) && eoCount(s1) === x.oll.eo && (x.oll.skip ? llOriented(s1) : identifyOll(s1) === x.oll.n);
+        if (!ok) delete entry.eo[key];
+      }
+      // Deine eigene Kanten-Zahl: zweite, unabhängige Zählung direkt am Würfel (Seite gegenüber dem Kreuz, Mitten fest)
+      const real = eoPhysical(after, face);
+      if (entry.eo.mine && entry.eo.mine.eo !== real) entry.eo.mine = { ...entry.eo.mine, eo: real, n: null, len: Infinity };
     }
   }
 
