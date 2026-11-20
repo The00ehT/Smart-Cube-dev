@@ -10,6 +10,11 @@
  *   – das Video darf NICHT stumm sein (es hat eine stille Tonspur) und NICHT in Schleife laufen –
  *     stattdessen springt es per timeupdate immer wieder zurück
  *   – play() muss direkt in der Berührung aufgerufen werden (nicht erst nach einem await)
+ *
+ * Musik im Hintergrund (Spotify …): Die stille Tonspur würde sie normalerweise anhalten. Deshalb wird die
+ * Audio-Session der Seite auf „ambient“ gestellt (iOS 17+, navigator.audioSession) – dann mischt sich das
+ * Video mit anderer Wiedergabe, statt sie zu unterbrechen. Ohne diese API: Einstellung „Musik hat Vorrang“
+ * → stummes Video (lässt die Musik in Ruhe, hält den Bildschirm auf iOS aber evtl. nicht an).
  */
 import media from 'nosleep.js/src/media.js';
 
@@ -18,6 +23,27 @@ let lock = null;
 let lockFailed = false;
 let video = null;
 let lastError = '';
+let musicFirst = false; // „Musik hat Vorrang“ (nur nötig ohne Audio-Session-API)
+
+/** Audio-Session auf „ambient“: mischt sich mit Musik anderer Apps statt sie anzuhalten */
+export const canMixAudio = () => typeof navigator !== 'undefined' && !!navigator.audioSession;
+function mixWithOthers() {
+  try {
+    if (navigator.audioSession && navigator.audioSession.type !== 'ambient') navigator.audioSession.type = 'ambient';
+  } catch {
+    /* egal */
+  }
+}
+
+/** Ohne Audio-Session-API: stummes Video, damit Musik weiterläuft */
+export function setMusicFirst(on) {
+  musicFirst = !!on;
+  if (video) {
+    video.muted = musicFirst && !canMixAudio();
+    if (video.muted) video.setAttribute('muted', '');
+    else video.removeAttribute('muted');
+  }
+}
 
 const isIOS = () => /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 /** Video nötig? Ohne Wake-Lock-API, auf iOS immer (dort unzuverlässig), oder wenn die API abgelehnt hat */
@@ -46,6 +72,8 @@ function videoEl() {
 /** Video starten – muss synchron in einer Berührung passieren */
 function playVideo() {
   const v = videoEl();
+  mixWithOthers();
+  v.muted = musicFirst && !canMixAudio();
   if (!v.paused) return;
   try {
     const p = v.play();
@@ -92,7 +120,7 @@ export function awakeStatus() {
   if (!want) return { state: 'off' };
   const v = !!video && !video.paused;
   const l = !!lock;
-  return { state: l && v ? 'both' : l ? 'lock' : v ? 'video' : 'waiting', error: lastError, ios: isIOS() };
+  return { state: l && v ? 'both' : l ? 'lock' : v ? 'video' : 'waiting', error: lastError, ios: isIOS(), mix: canMixAudio(), muted: !!video?.muted };
 }
 
 document.addEventListener('visibilitychange', () => {

@@ -37,7 +37,7 @@ import { metricsOf, skillProfile, SKILLS } from './metrics.js';
 import { modeGroups, findMode } from './modes.js';
 import { scopeOf, scopeName, scopeList, filterScope } from './sessions.js';
 import { liveStage, barHtml } from './ui/live-bar.js';
-import { keepAwake, awakeStatus } from './wake.js';
+import { keepAwake, awakeStatus, setMusicFirst, canMixAudio } from './wake.js';
 import { InsightsView } from './ui/insights-view.js';
 import { algsOf } from './algs.js';
 import { radarSvg } from './ui/radar.js';
@@ -1427,7 +1427,12 @@ bindToggle('opt-awake', 'keepAwake', (on) => {
   keepAwake(on);
   setTimeout(renderAwake, 400);
 });
+setMusicFirst(settings.musicFirst);
 keepAwake(settings.keepAwake);
+bindToggle('opt-music-first', 'musicFirst', (on) => {
+  setMusicFirst(on);
+  renderAwake();
+});
 /** Zustand „Bildschirm anlassen“ in den Einstellungen anzeigen */
 function renderAwake() {
   const st = awakeStatus();
@@ -1438,7 +1443,10 @@ function renderAwake() {
     both: `✓ ${L('Aktiv (Wake Lock + Video)', 'Active (wake lock + video)')}`,
     waiting: `⏳ ${L('Wird beim nächsten Antippen aktiv', 'Activates on your next tap')}`,
   }[st.state];
-  $('awake-status').textContent = txt + (st.ios && st.state !== 'off' ? ` · ${L('iPhone: kann Musik im Hintergrund pausieren', 'iPhone: may pause background music')}` : '');
+  // Musik-Hinweis nur auf iPhone/iPad: mit Audio-Session-API läuft Musik weiter, sonst Wahl „Musik hat Vorrang“
+  $('music-first-row').hidden = !st.ios || st.mix || st.state === 'off';
+  const music = !st.ios || st.state === 'off' ? '' : st.mix ? ` · 🎵 ${L('Musik läuft weiter', 'music keeps playing')}` : st.muted ? ` · 🎵 ${L('Musik hat Vorrang', 'music first')}` : ` · ${L('kann Musik anhalten', 'may pause music')}`;
+  $('awake-status').textContent = txt + music;
 }
 $('opt-awake').closest('.toggle').addEventListener('click', () => setTimeout(renderAwake, 600));
 document.addEventListener('click', () => $('settings-dialog')?.open && setTimeout(renderAwake, 500), { capture: true });

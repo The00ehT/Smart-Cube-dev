@@ -167,6 +167,7 @@ const STATIC = {
   'Drehe eine beliebige Seite, um weiterzumachen.': 'Turn any face to continue.',
   'Ergebnis-Analyse nach jedem Solve zeigen': 'Show result analysis after every solve',
   'Erklärungen der Symbole (⏱ 🏆 …) zeigen': 'Show explanations of the symbols (⏱ 🏆 …)',
+  'Musik im Hintergrund hat Vorrang (Bildschirm geht evtl. aus)': 'Background music first (screen may turn off)',
   'Als Bild teilen': 'Share as image',
   'GAN-Stil (spitze Ecken)': 'GAN style (sharp corners)',
   'Stickerless (rund)': 'Stickerless (round)',
