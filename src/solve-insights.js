@@ -2,6 +2,8 @@
  * Solve-Analyse: Was wäre bei diesem Solve besser gegangen?
  *   Cross   – optimales Kreuz (und X-Cross) für das Scramble, auch mit anderen Farben
  *   F2L     – je Paar: welcher Fall, wie kurz der Datenbank-Algorithmus ist, ob ein anderes Paar leichter war
+ *           + Vorausschau: anderes Paar / anderer Alg, damit das nächste Paar leichter wird;
+ *             beim letzten Paar Kanten oben (EO) und OLL mitdenken
  *   OLL/PLL – direkter Algorithmus gegen die tatsächlichen Züge (erkennt z. B. 2-Look)
  * Alles wird aus Startzustand und Zügen berechnet, funktioniert also für jeden gespeicherten Solve.
  */
@@ -64,6 +66,61 @@ function bestPair(s, extraAlgs = () => []) {
   }
   return best ?? { id: c.id, stuck: true };
 }
+
+/** Alle Datenbank-Varianten, die den FR-Slot lösen (je Alg die erste passende AUF): [{ id, alg, len, after }] */
+function pairVariants(s, extraAlgs) {
+  const keep = solvedSlots(s, 'D');
+  if (keep & FR_BIT) return [];
+  const c = F2L_CASES.find((x) => x.key === f2lKey(s));
+  if (!c) return [];
+  const out = [];
+  const seen = new Set();
+  for (const alg of [...dbAlgs(c.id), ...extraAlgs(c.id)]) {
+    for (const auf of AUF) {
+      const full = `${auf} ${alg}`.trim();
+      if (seen.has(full)) break;
+      const after = recenter(applyAnyAlg(s, full));
+      const mask = solvedSlots(after, 'D');
+      if (!phaseStatus(after).D.cross || !(mask & FR_BIT) || (mask & keep) !== keep) continue;
+      seen.add(full);
+      out.push({ id: c.id, alg: full, len: moveCount(alg) + (auf ? 1 : 0), after });
+      break;
+    }
+  }
+  return out;
+}
+const yView = (s, r) => (r ? relabelToCenters(applyAnyAlg(s, r)) : s);
+/** Varianten für den Slot vorne rechts von sv – direkt (rechte Hand) und gespiegelt von vorne links (linke Hand).
+ *  k = y-Schritte gegenüber sv für die Haltung, in der der Alg gilt. */
+function slotVariants(sv, extraAlgs) {
+  const out = pairVariants(sv, extraAlgs).map((v) => ({ ...v, dk: 0, mirrored: false }));
+  const left = yView(sv, 'y'); // Slot liegt jetzt vorne links
+  for (const v of pairVariants(mirrorState(left), extraAlgs)) {
+    const a = mirrorAlg(v.alg);
+    out.push({ id: v.id, alg: a, len: v.len, after: recenter(applyAnyAlg(left, a)), dk: 1, mirrored: true });
+  }
+  return out;
+}
+/** Kürzestes nächstes Paar (Datenbank, beide Hände, jede Haltung); 0 = F2L fertig */
+function nextPairLen(s, extraAlgs, cache) {
+  if (cache.has(s)) return cache.get(s);
+  let best = Infinity;
+  let open = false;
+  for (const r of Y) {
+    const v = yView(s, r);
+    if (solvedSlots(v, 'D') & FR_BIT) continue;
+    open = true;
+    for (const t of [v, mirrorState(yView(v, "y"))]) {
+      const b = bestPair(t, extraAlgs);
+      if (b && !b.stuck && b.len < best) best = b.len;
+    }
+  }
+  const res = open ? best : 0;
+  cache.set(s, res);
+  return res;
+}
+/** Kanten der letzten Schicht richtig orientiert (U-Farbe oben): 0, 2 oder 4 */
+const eoCount = (s) => [1, 3, 5, 7].filter((i) => s[i] === s[4]).length;
 
 /** Bester Algorithmus für OLL/PLL im Zustand s (Kreuz unten); done prüft das Ergebnis */
 function bestLl(id, s, done, extraAlgs) {
@@ -246,6 +303,63 @@ export function solveInsights(solve, opts = {}) {
     const myLen = entry.best && !entry.best.stuck ? entry.best.len : Infinity;
     if (easiest && easiest.best.len + 2 <= Math.min(myLen, p.moves)) entry.easier = { ...easiest.best, hold: easiest.hold };
     entry.saved = entry.best && !entry.best.stuck ? Math.max(0, p.moves - entry.best.len) : 0;
+
+    // ---- Vorausschau: anderes Paar / anderer Alg, damit das nächste Paar (bzw. OLL) leichter wird ----
+    const lastPair = f2lSolved(view(after, face));
+    const cands = [];
+    for (let j = 0; j < 4; j++) {
+      if (lastPair && j !== rt) continue; // beim letzten Paar gibt es keine Wahl des Slots
+      for (const v of slotVariants(options[j].s0, extraAlgs)) cands.push({ ...v, slotK: j, k: mod4(j + v.dk) });
+    }
+    const pickBase = (list, score) => list.filter((c) => c.slotK === rt).sort((a, b) => a.len - b.len || score(a) - score(b))[0];
+    const holdInfo = (c) => ({ hold: holdColors(before, face, Y[c.k]), pairHold: options[c.slotK].hold });
+    if (!lastPair && cands.length) {
+      const cache = new Map();
+      for (const c of cands) {
+        c.next = nextPairLen(c.after, extraAlgs, cache);
+        c.total = c.len + c.next;
+      }
+      const base = pickBase(cands, (c) => c.total);
+      const best = cands.filter((c) => Number.isFinite(c.total)).sort((a, b) => a.total - b.total || (b.slotK === rt) - (a.slotK === rt) || a.len - b.len)[0];
+      if (base && best && Number.isFinite(base.total) && base.total - best.total >= 2) {
+        entry.lookahead = {
+          sameSlot: best.slotK === rt,
+          id: best.id,
+          alg: best.alg,
+          len: best.len,
+          next: best.next,
+          total: best.total,
+          baseAlg: base.alg,
+          baseLen: base.len,
+          baseNext: base.next,
+          baseTotal: base.total,
+          mirrored: best.mirrored,
+          ...holdInfo(best),
+        };
+        if (!entry.lookahead.sameSlot) entry.easier = null; // die Vorausschau ersetzt den einfachen Vergleich
+      }
+    }
+    // ---- Letztes Paar: Kanten oben (EO) und OLL gleich mitdenken ----
+    if (lastPair) {
+      const ollOf = (s) => {
+        if (!f2lSolved(s)) return null;
+        if (llOriented(s)) return { n: null, len: 0, eo: 4, skip: true };
+        const n = identifyOll(s);
+        const b = n ? bestLl(`OLL ${n}`, s, (t) => f2lSolved(t) && llOriented(t), extraAlgs) : null;
+        return { n, len: b ? b.len : Infinity, eo: eoCount(s), skip: false };
+      };
+      const mineOll = ollOf(view(after, face));
+      const scored = cands.map((c) => ({ ...c, oll: ollOf(c.after) })).filter((c) => c.oll && Number.isFinite(c.oll.len));
+      for (const c of scored) c.total = c.len + c.oll.len;
+      const base = pickBase(scored, (c) => c.total);
+      const best = [...scored].sort((a, b) => a.total - b.total || b.oll.eo - a.oll.eo || a.len - b.len)[0];
+      const bestEo = [...scored].sort((a, b) => b.oll.eo - a.oll.eo || a.total - b.total)[0];
+      entry.eo = { last: true, mine: mineOll };
+      if (base && best && base.total - best.total >= 2) entry.eo.better = { id: best.id, alg: best.alg, len: best.len, oll: best.oll, total: best.total, baseTotal: base.total, baseOll: base.oll, baseAlg: base.alg, mirrored: best.mirrored, ...holdInfo(best) };
+      // Alle Kanten richtig ohne (viel) Mehraufwand?
+      if (bestEo && base && bestEo.oll.eo === 4 && base.oll.eo < 4 && bestEo !== best && bestEo.total <= base.total + 1)
+        entry.eo.allEdges = { id: bestEo.id, alg: bestEo.alg, len: bestEo.len, oll: bestEo.oll, total: bestEo.total, baseTotal: base.total, mirrored: bestEo.mirrored, ...holdInfo(bestEo) };
+    }
   }
 
   // ---------- OLL / PLL ----------

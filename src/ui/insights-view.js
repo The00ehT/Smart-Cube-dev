@@ -88,7 +88,8 @@ function pairDiagram(p) {
 function pairRow(p, r) {
   const tag = p.free ? `<span class="in-tag good">✓ ${L('mit dem Kreuz', 'with the cross')}</span>` : p.best && !p.best.stuck ? verdict(p.saved) : p.best?.stuck ? '<span class="in-tag warn">⚠</span>' : '';
   const flag = p.rotation?.unnecessary ? `<span class="in-tag warn">↻</span>` : '';
-  const head = `<summary class="in-head"><b>${L('Paar', 'Pair')} ${p.k}</b> ${pairIcon(p.slot, r.crossFace)}<span class="small">${mv(p.moves)} · ${formatTime(p.time)}</span>${tag}${flag}</summary>`;
+  const look = p.lookahead || p.eo?.better || p.eo?.allEdges ? `<span class="in-tag">🔭</span>` : '';
+  const head = `<summary class="in-head"><b>${L('Paar', 'Pair')} ${p.k}</b> ${pairIcon(p.slot, r.crossFace)}<span class="small">${mv(p.moves)} · ${formatTime(p.time)}</span>${tag}${flag}${look}</summary>`;
   if (p.free) return `<details class="in-item in-collapse">${head}<div class="small">✓ ${L('Schon mit dem Kreuz bzw. einem anderen Paar gelöst', 'Already solved with the cross or another pair')}</div></details>`;
   const open = p.saved > 1 || p.rotation?.unnecessary || p.best?.stuck;
   const b = p.best;
@@ -111,7 +112,38 @@ function pairRow(p, r) {
   const easier = p.easier
     ? `<div class="in-tip">💡 ${L('Leichter wäre gewesen', 'Easier would have been')}: ${pairIcon(p.easier.hold.front + p.easier.hold.right, r.crossFace)} ${p.easier.id} · ${mv(p.easier.len)}${alg(p.easier.alg)}<div class="small">${colorChip(p.easier.hold.front)} ${L('vorne', 'front')}</div></div>`
     : '';
-  return `<details class="in-item in-collapse"${open ? ' open' : ''}>${head}<div class="in-meta">${frontPicker(p)}${practiceBtn(p.k)}</div>${rot}${body}${easier}</details>`;
+  return `<details class="in-item in-collapse"${open ? ' open' : ''}>${head}<div class="in-meta">${frontPicker(p)}${practiceBtn(p.k)}</div>${rot}${body}${easier}${lookTip(p, r)}${eoTip(p)}</details>`;
+}
+
+const handNote = (x) => `${colorChip(x.hold.front)} ${L('vorne', 'front')}${x.mirrored ? ` · ${L('linke Hand', 'left hand')}` : ''}`;
+const nextText = (n) => (n === 0 ? L('danach ist F2L fertig', 'then F2L is done') : L(`nächstes Paar nur ${mv(n)}`, `next pair only ${mv(n)}`));
+
+/** Vorausschau: anderes Paar zuerst oder anderer Alg, damit das nächste Paar leichter wird */
+function lookTip(p, r) {
+  const a = p.lookahead;
+  if (!a) return '';
+  const title = a.sameSlot
+    ? L('Anderer Alg für dieses Paar macht das nächste leichter', 'A different alg for this pair makes the next one easier')
+    : `${L('Besser zuerst dieses Paar', 'Better do this pair first')} ${pairIcon(a.pairHold.front + a.pairHold.right, r.crossFace)}`;
+  return `<div class="in-tip">🔭 <b>${title}</b>${alg(a.alg)}
+    <div class="small">${a.id} · ${mv(a.len)} → ${nextText(a.next)} · ${L('zusammen', 'together')} <b>${a.total}</b> ${L('statt', 'instead of')} ${a.baseTotal} ${L('Züge', 'moves')} · ${handNote(a)}</div>
+    <div class="small">${L('Kürzester Alg', 'Shortest alg')} ${esc(groupAlg(a.baseAlg))} (${a.baseLen}) → ${L('nächstes Paar', 'next pair')} ${a.baseNext}</div></div>`;
+}
+
+const ollText = (o) => (!o ? '–' : o.skip ? L('OLL-Skip', 'OLL skip') : `OLL ${o.n ?? '?'} (${mv(o.len)})`);
+/** Letztes Paar: Kanten der letzten Schicht (EO) und OLL gleich mitdenken */
+function eoTip(p) {
+  const e = p.eo;
+  if (!e) return '';
+  const m = e.mine;
+  let html = m ? `<div class="small in-eo">🧭 ${L('Nach deinem letzten Paar', 'After your last pair')}: ${L('Kanten oben', 'Top edges')} <b>${m.eo}/4</b> ${L('richtig', 'oriented')} · ${ollText(m)}</div>` : '';
+  if (e.better)
+    html += `<div class="in-tip">🔭 <b>${L('Letztes Paar mit Blick auf OLL', 'Last pair with OLL in mind')}</b>${alg(e.better.alg)}
+      <div class="small">${mv(e.better.len)} → ${L('Kanten oben', 'top edges')} ${e.better.oll.eo}/4 · ${ollText(e.better.oll)} · ${L('zusammen', 'together')} <b>${e.better.total}</b> ${L('statt', 'instead of')} ${e.better.baseTotal} ${L('Züge', 'moves')} · ${handNote(e.better)}</div></div>`;
+  if (e.allEdges)
+    html += `<div class="in-tip">🧭 <b>${L('Alle Kanten oben richtig (EO)', 'All top edges oriented (EO)')}</b>${alg(e.allEdges.alg)}
+      <div class="small">${mv(e.allEdges.len)} → ${ollText(e.allEdges.oll)} · ${L('zusammen', 'together')} ${e.allEdges.total} ${L('statt', 'instead of')} ${e.allEdges.baseTotal} ${L('Züge', 'moves')} · ${L('Kreuz oben – leichtere OLL-Fälle', 'cross on top – easier OLL cases')} · ${handNote(e.allEdges)}</div></div>`;
+  return html;
 }
 
 /** OLL/PLL sind feste Algorithmen: nur Fall, Zeiten und eigene Züge – ohne Verbesserungsvorschlag */

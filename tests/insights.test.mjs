@@ -52,3 +52,15 @@ for (const scr of ["R U' F2 D L' B R2 U2 F' L D2 R' B2 U F", "D2 F' R U L2 B' D 
   console.log('Haltungen geprüft:', checked, '| Rotations:', JSON.stringify(q2.rotations), q2.pairs.map((x) => x.pos || '-').join(','));
 }
 console.log('insights: alle Tests bestanden');
+
+// Vorausschau und EO beim letzten Paar
+{
+  const sol = "F R U' R' U R U R' U' L' U2 L U L' U' L U R' U2 R U' R' U R U L U L' U' L U' L' R U2 R' U' R U' R'";
+  const q = solveInsights({ start: applyAlg(SOLVED, invertAlg(sol)), solution: sol, times: sol.split(' ').map((_, i) => i * 100) });
+  const la = q.pairs.find((p) => p.lookahead)?.lookahead;
+  assert.ok(la && la.total + 2 <= la.baseTotal, 'Vorausschau findet leichteres nächstes Paar');
+  const last = q.pairs.filter((p) => !p.free).at(-1);
+  assert.ok(last.eo && last.eo.mine && [0, 2, 4].includes(last.eo.mine.eo), 'EO nach dem letzten Paar');
+  assert.ok(!q.pairs.slice(0, -1).some((p) => p.eo && p !== last), 'EO nur beim letzten Paar');
+  console.log('Vorausschau ok', la.alg, la.total, '<', la.baseTotal);
+}
