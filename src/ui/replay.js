@@ -4,6 +4,7 @@
  * mit Gyroskop-Daten auf Wunsch inklusive Würfeldrehungen (x/y/z) und Griffwechseln,
  * Lösung nach Phasen gegliedert, als Link teilbar.
  */
+import { pairIcon } from './pair-icon.js';
 import { L, locale, dec } from '../i18n.js';
 import { moveCounts } from '../metrics.js';
 import { TwistyPlayer } from 'cubing/twisty';
@@ -125,7 +126,7 @@ export class Replay {
     const g = solve.gyro;
     const sub = [
       solve.date ? new Date(solve.date).toLocaleString(locale) : null,
-      `${moveCounts(solve.moves).htm} ${L('Züge', 'moves')} · ${a.tps.toFixed(2)} TPS`,
+      `${moveCounts(solve.moves).htm} ${L('Züge', 'moves')} · ${a.time > 0 ? ((moveCounts(solve.moves).htm / a.time) * 1000).toFixed(2) : '–'} TPS`,
       `Cross ${COLOR_NAMES[a.crossFace]}${a.xcross ? ' · X-Cross' : ''}`,
       g ? `${g.rotations.length} Rotations · ~${g.regrips.length} Regrips` : null,
       solve.estimated ? L('ohne gemessene Zugzeiten (gleichmäßig verteilt)', 'no measured move times (evenly spread)') : null,
@@ -230,7 +231,7 @@ export class Replay {
             .join(' ')
         : '';
       const rots = r ? this.events.slice(r[0], r[1] + 1).filter((e) => e.kind === 'rot').length : 0;
-      const slot = p.slot ? ` ${[...p.slot].map(colorChip).join('')}` : '';
+      const slot = p.slot ? ` ${pairIcon(p.slot, this.analysis?.crossFace)}` : '';
       const skip = p.skip ? ' <span class="tag">Skip</span>' : '';
       const recog = p.recog > 0 ? `<span class="small">Recog ${formatTime(p.recog)}</span>` : '';
       const rotTag = rots ? `<span class="small">${rots} Rot.</span>` : '';

@@ -41,7 +41,7 @@ const view = (state, face, extra = '') => relabelToCenters(applyAnyAlg(state, `$
 /** Original-Farbe vorne/rechts in dieser Haltung */
 const holdColors = (state, face, extra = '') => {
   const s = applyAnyAlg(state, `${CROSS_DOWN[face]} ${extra}`);
-  return { down: s[31], front: s[22], right: s[13], left: s[40], back: s[49] };
+  return { up: s[4], down: s[31], front: s[22], right: s[13], left: s[40], back: s[49] };
 };
 
 /** Bester Datenbank-Algorithmus für den FR-Slot (mit AUF vorab), sonst null */
@@ -107,12 +107,19 @@ export function solveInsights(solve, opts = {}) {
     const c = solveCross(view(start, f));
     return { face: f, len: c.length, moves: c.moves.join(' '), hold: holdColors(start, f) };
   });
-  const mine = colors.find((c) => c.face === face);
+  // Haltung beim Cross (welche Farbe vorne) – einstellbar wie bei den Paaren
+  const ck = opts.fronts?.cross != null ? mod4(opts.fronts.cross) : null;
+  let mine = colors.find((c) => c.face === face);
+  if (ck != null) {
+    const c = solveCross(view(start, face, Y[ck]));
+    mine = { ...mine, moves: c.moves.join(' '), len: c.length, hold: holdColors(start, face, Y[ck]) };
+  }
   // X-Cross: Paar immer in den Slot hinten links (vorne bleibt frei für die nächsten Paare).
-  // Dafür die Haltung (y-Drehung) wählen, in der das günstigste Paar hinten links liegt.
+  // Dafür die Haltung (y-Drehung) wählen, in der das günstigste Paar hinten links liegt –
+  // oder die eingestellte Haltung nehmen.
   let x = null;
   try {
-    for (const r of Y) {
+    for (const r of ck != null ? [Y[ck]] : Y) {
       const cand = solveXCross(view(start, face, r), { slots: ['BL'], maxDepth: x ? x.length - 1 : 11 });
       if (cand && (!x || cand.length < x.length)) x = { ...cand, r, hold: holdColors(start, face, r) };
     }
@@ -123,7 +130,10 @@ export function solveInsights(solve, opts = {}) {
     user: ph[0].moves,
     optimal: mine,
     xcross: x && { len: x.length, moves: x.moves.join(' '), complete: x.complete, hold: x.hold, pair: x.hold.left + x.hold.back, r: x.r },
-    userMoves: userAlg(ph[0], ''),
+    userMoves: userAlg(ph[0], ck != null ? Y[ck] : ''),
+    frontOptions: Y.map((r) => holdColors(start, face, r).front),
+    holdK: ck ?? 0,
+    source: ck != null ? 'set' : 'assumed',
     colors,
     bestColor: colors.reduce((p, c) => (c.len < p.len ? c : p)),
   };
@@ -209,6 +219,8 @@ export function solveInsights(solve, opts = {}) {
     const sug = inHold(before, hk, rt);
     entry.best = sug && !sug.stuck ? sug : sug?.stuck ? { stuck: true, id: sug.id } : null;
     entry.pos = POS[mod4(rt - hk)];
+    // Bild des Falls aus deiner Haltung: Stand vor dem Paar, das Paar an seiner echten Stelle
+    entry.dia = { state: options[hk].s0, pair: entry.pos, hold: options[hk].hold };
     entry.userMoves = userAlg(p, Y[hk]);
     // Drehung vor diesem Paar? (nur bewerten, wenn die Haltungen bekannt sind)
     if (prevK != null && (gyroRots || fronts[k] != null)) {

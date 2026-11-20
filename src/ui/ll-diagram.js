@@ -49,7 +49,17 @@ const proj = ([x, y, z]) => [(x - z) * 0.866 * 10 + 30, (-y + (x + z) * 0.5) * 1
 import { STICKERS } from '../cube/facelets.js';
 const PIECE = STICKERS.map((s) => STICKERS.map((t, j) => (t.pos.every((v, k) => v === s.pos[k]) ? j : -1)).filter((j) => j >= 0));
 
-export function f2lDiagram(state, size = 72) {
+/** Echte Würfelfarben (Weiß oben, Grün vorne) */
+export const PHYS = { U: '#f2f2f2', R: '#d92b2b', F: '#1fa64a', D: '#ffd500', L: '#ff8a00', B: '#1e5bd6' };
+
+/**
+ * @param opts.pair    Slot des hervorgehobenen Paars aus Sicht des Bildes ('FR', 'FL', 'BR', 'BL'; Standard FR)
+ * @param opts.palette Farbe je (mitten-bezogenem) Buchstaben – z. B. echte Farben in der Haltung des Lösers
+ */
+export function f2lDiagram(state, size = 72, opts = {}) {
+  const COLORS_ = opts.palette || COLORS;
+  const pairCorner = [...('D' + (opts.pair || 'FR'))].sort().join('');
+  const pairEdge = [...(opts.pair || 'FR')].sort().join('');
   const polys = [];
   for (const f of ['U', 'F', 'R']) {
     for (let r = 0; r < 3; r++) {
@@ -57,8 +67,8 @@ export function f2lDiagram(state, size = 72) {
         const i = FACE_OFF[f] + r * 3 + c;
         const colors = PIECE[i].map((j) => state[j]).sort().join('');
         const center = r === 1 && c === 1;
-        const inPair = colors === [...PAIR_CORNER].sort().join('') || colors === [...PAIR_EDGE].sort().join('');
-        const fill = center || inPair ? COLORS[state[i]] : 'var(--ll-gray)';
+        const inPair = colors === pairCorner || colors === pairEdge;
+        const fill = center || inPair ? COLORS_[state[i]] : 'var(--ll-gray)';
         const pts = FACE_PTS[f](r, c);
         // leicht nach innen versetzt, damit Fugen sichtbar sind
         const mid = pts.reduce((a, p) => a.map((v, k) => v + p[k] / 4), [0, 0, 0]);

@@ -3,6 +3,7 @@
  * Erkennung vs. Ausführung), Skips, Lookahead, Kreuzfarben und F2L-Slots.
  * Diagramme sind schlichtes SVG mit Hover-Tooltip.
  */
+import { pairIcon } from './pair-icon.js';
 import { L, dec } from '../i18n.js';
 import { formatTime, averageOf, bestAverage, best } from '../stats.js';
 import { detailStats, series } from '../stats-detail.js';
@@ -57,6 +58,7 @@ export class StatsView {
     });
     this.tip = dialog.querySelector('.sv-tip');
     dialog.addEventListener('pointermove', (e) => this.hover(e));
+    dialog.addEventListener('pointerdown', (e) => this.hover(e)); // Antippen mit dem Finger zeigt sofort den Wert
     // Bestzeit antippen → Details dieses Solves
     dialog.addEventListener('click', (e) => {
       if (e.target.closest('[data-act=best]')) this.hooks.openBest?.();
@@ -90,8 +92,10 @@ export class StatsView {
     if (this.view === 'phases') body.innerHTML = this.phaseSection(s);
     else if (this.view === 'details') body.innerHTML = [this.detailTiles(s), this.histogram(s.times), this.extras(s)].join('');
     else {
-      body.innerHTML = [this.kpis(all, s), '<div class="card coach sv-coach"></div>', this.trend(sel, offset)].join('');
+      // Verlauf oben, Coach darunter und einklappbar
+      body.innerHTML = [this.kpis(all, s), this.trend(sel, offset), `<details class="card coach sv-coach-box"${this.coachOpen ? ' open' : ''}><summary>💡 ${L('Coach-Hinweise', 'Coach tips')}</summary><div class="sv-coach"></div></details>`].join('');
       this.hooks.coach?.(body.querySelector('.sv-coach'));
+      body.querySelector('.sv-coach-box').addEventListener('toggle', (e) => (this.coachOpen = e.target.open));
     }
   }
 
@@ -301,7 +305,7 @@ export class StatsView {
       .join('');
     const slotRows = s.slotStats
       .sort((a, b) => a.mean - b.mean)
-      .map((x) => `<tr><td>${[...x.slot].map(colorChip).join('')} ${[...x.slot].map((f) => COLOR_NAMES[f]).join('–')}</td><td>${x.n}</td><td>${t(x.mean)}</td></tr>`)
+      .map((x) => `<tr><td>${pairIcon(x.slot, x.cross)} ${[...x.slot].map((f) => COLOR_NAMES[f]).join('–')}</td><td>${x.n}</td><td>${t(x.mean)}</td></tr>`)
       .join('');
     return `${gyroSec}<section class="sv-sec">
       <h3>Skips &amp; Lookahead</h3>
@@ -320,8 +324,10 @@ export class StatsView {
   }
 
   hover(e) {
-    const el = e.target.closest('[data-tip]');
-    const svg = e.target.closest('svg');
+    // Finger „klebt“ am Start-Element (Pointer-Capture) – deshalb das Element unter der Fingerposition nehmen
+    const under = document.elementFromPoint(e.clientX, e.clientY) || e.target;
+    const el = under.closest?.('[data-tip]');
+    const svg = under.closest?.('svg');
     const cross = svg?.querySelector('.cross');
     if (!el) {
       this.tip.hidden = true;

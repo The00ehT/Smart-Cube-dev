@@ -1,3 +1,4 @@
+import { metricsOf } from '../metrics.js';
 /**
  * Rekord-Momente: Konfetti, kurzer Klang und eine Teilen-Karte als Bild.
  */
@@ -183,7 +184,9 @@ export async function shareCard(solve, profile, badge = '') {
   x.fillText(formatSolve(solve), 80, y + 210);
   x.fillStyle = '#ffffffb3';
   x.font = font(500, 36);
-  x.fillText(`${solve.metrics?.htm ?? solve.moveCount ?? '–'} ${L('Züge', 'moves')}  ·  ${(solve.tps ?? 0).toFixed(2)} TPS`, 92, y + 280);
+  const mt = metricsOf(solve);
+  const tpsTxt = `${(mt?.tps ?? solve.tps ?? 0).toFixed(2)} TPS${mt?.etps ? `  ·  ${mt.etps.toFixed(2)} Exec TPS` : ''}`;
+  x.fillText(`${mt?.htm ?? solve.moveCount ?? '–'} ${L('Züge', 'moves')}  ·  ${tpsTxt}`, 92, y + 280);
   // Phasen als Ring
   if (hasDetail(solve)) {
     const [cr, f2, ol, pl] = phasesOf(solve, { mergeF2l: true });

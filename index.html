@@ -204,6 +204,7 @@
         <div class="res-head">
           <span class="small" id="res-device"></span>
           <span class="res-badge" id="res-badge" hidden></span>
+          <button type="button" class="ghost small-btn res-del" id="res-delete" title="Solve löschen" aria-label="Solve löschen">🗑</button>
         </div>
         <div id="res-room" hidden></div>
         <div class="res-body">
@@ -346,14 +347,7 @@
           <div class="skin-opts">
             <div class="skin-presets" id="skin-presets" role="group" aria-label="Würfel-Aussehen"></div>
             <div class="skin-grid">
-              <label class="select-row">Stil
-                <select id="skin-style">
-                  <option value="gan">GAN-Stil (spitze Ecken)</option>
-                  <option value="stickerless">Stickerless (rund)</option>
-                  <option value="classic">Klassisch (Sticker)</option>
-                  <option value="tiles">Fliesen</option>
-                </select>
-              </label>
+              
               <label class="select-row">Körper
                 <select id="skin-body">
                   <option value="black">Schwarz</option>
@@ -361,19 +355,8 @@
                   <option value="white">Weiß</option>
                 </select>
               </label>
-              <label class="select-row">Farben
-                <select id="skin-scheme">
-                  <option value="bright">Kräftig</option>
-                  <option value="standard">Standard</option>
-                  <option value="pastel">Pastell</option>
-                </select>
-              </label>
-              <label class="select-row">Design
-                <select id="skin-theme">
-                  <option value="colors">Farben</option>
-                  <option value="custom">Eigene Bilder</option>
-                </select>
-              </label>
+              
+              
               <label class="select-row">Oberfläche
                 <select id="skin-finish">
                   <option value="gloss">Glänzend</option>

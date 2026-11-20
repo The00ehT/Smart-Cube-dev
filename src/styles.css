@@ -804,7 +804,7 @@ body.solving .solve-metrics { display: none !important; }
 /* ---------- CFOP-Tabelle ---------- */
 .cfop-table { display: grid; gap: 4px; }
 .ct-row {
-  display: grid; grid-template-columns: minmax(0, 1.5fr) 1fr 0.7fr 0.7fr 0.9fr; gap: 6px; align-items: center;
+  display: grid; grid-template-columns: minmax(0, 1.6fr) 1fr 0.7fr 0.8fr; gap: 6px; align-items: center;
   padding: 9px 10px; border-radius: 12px; font-variant-numeric: tabular-nums;
 }
 .ct-row > span:not(.ct-n) { text-align: right; }
@@ -825,7 +825,7 @@ body.solving .solve-metrics { display: none !important; }
   .result-overlay { padding: calc(8px + var(--safe-top)) 8px calc(8px + var(--safe-bottom)); align-items: stretch; }
   .result-card { padding: 14px; border-radius: 18px; }
   .res-body { grid-template-columns: 1fr; gap: 14px; }
-  .ct-row { grid-template-columns: minmax(0, 1.35fr) 1fr 0.6fr 0.7fr 0.9fr; padding: 8px; font-size: 14px; }
+  .ct-row { grid-template-columns: minmax(0, 1.5fr) 1fr 0.6fr 0.8fr; padding: 8px; font-size: 14px; }
   .ct-main .ct-t { font-size: 15px; }
 }
 
@@ -1247,3 +1247,15 @@ body.solving .room-minis:not([hidden]) { display: flex !important; }
 .rr-l { margin-top: 12px; }
 .rr-replays { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .rr-people { margin-top: 12px; }
+.ct-rec { color: var(--muted); font-size: 11.5px; margin-left: 6px; font-weight: 500; }
+
+/* Statistik: Diagramme mit dem Finger abfahren (waagerecht), senkrecht scrollt die Seite weiter */
+.stats-full svg { touch-action: pan-y; }
+.sv-coach-box > summary { cursor: pointer; font-weight: 700; font-size: 16px; list-style: none; }
+.sv-coach-box > summary::-webkit-details-marker { display: none; }
+.sv-coach-box > summary::after { content: ' ▸'; color: var(--muted); }
+.sv-coach-box[open] > summary::after { content: ' ▾'; }
+.sv-coach-box .sv-coach { margin-top: 8px; }
+.res-head { display: flex; align-items: center; gap: 8px; }
+.res-del { margin-left: auto; padding: 5px 9px; }
+.pair-ic { vertical-align: middle; flex: none; margin: 0 2px; }

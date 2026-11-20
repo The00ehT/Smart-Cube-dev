@@ -27,10 +27,10 @@ export const SCHEMES = {
 };
 const BODIES = { black: '#121316', white: '#d4d6da', gray: '#3a3d44' };
 export const SKIN_PRESETS = {
-  gan: { style: 'gan', body: 'black', scheme: 'bright', finish: 'gloss', theme: 'colors' },
+  gan: { style: 'gan', body: 'black', scheme: 'standard', finish: 'gloss', theme: 'colors' },
   classic: { style: 'classic', body: 'black', scheme: 'standard', finish: 'gloss', theme: 'colors' },
-  tiles: { style: 'tiles', body: 'black', scheme: 'bright', finish: 'matte', theme: 'colors' },
-  custom: { style: 'gan', body: 'black', scheme: 'bright', finish: 'gloss', theme: 'custom' },
+  tiles: { style: 'tiles', body: 'black', scheme: 'standard', finish: 'matte', theme: 'colors' },
+  custom: { style: 'gan', body: 'black', scheme: 'standard', finish: 'gloss', theme: 'custom' },
 };
 export let DEFAULT_SKIN = SKIN_PRESETS.gan;
 /** Aussehen für alle neu erzeugten Würfel (z. B. aus den Einstellungen) */
@@ -114,6 +114,7 @@ export class Cube3D {
     this.skin = { ...SKIN_PRESETS.gan, ...skin };
     // Frühere Designs (Kuh, Neon, Galaxie, Platine) gibt es nicht mehr
     if (!['colors', 'custom'].includes(this.skin.theme)) this.skin.theme = 'colors';
+    this.skin.scheme = 'standard'; // Farben immer Standard (keine Auswahl mehr)
     const { body, scheme, finish, theme } = this.skin;
     const st = STYLES[this.skin.style] ?? STYLES.gan;
     this.finishAnim(true);

@@ -1,4 +1,5 @@
 import './styles.css';
+import { pairIcon } from './ui/pair-icon.js';
 import { now } from 'gan-web-bluetooth';
 import { SOLVED, applyMove, applyAlg, isSolved, COLOR_NAMES, groupMoves, CROSS_DOWN, relativeState } from './cube/facelets.js';
 import { analyzeSolve } from './cube/analysis.js';
@@ -51,6 +52,23 @@ const SETTINGS_KEY = 'smartcube.settings.v1';
 
 const settings = { keepAwake: true, inspection: false, autoScramble: true, hideTime: false, gyro: true, viewDown: 'auto', theme: 'auto', replayGyro: true, showResult: true, crossColor: 'auto', scrambleType: 'wca', ...load(SETTINGS_KEY, {}) };
 let solves = load(SOLVES_KEY, []);
+// Früher zählte TPS jede Vierteldrehung (R2 = 2): einmalig auf HTM umrechnen, passend zur Zugzahl
+{
+  let fixed = 0;
+  for (const s of solves) {
+    if (s.tpsHtm || !s.solution || !s.time) continue;
+    const mv = s.solution.split(' ').filter(Boolean);
+    let n = 0;
+    for (let i = 0; i < mv.length; i++) {
+      n++;
+      if (i + 1 < mv.length && mv[i + 1] === mv[i] && !mv[i].endsWith('2')) i++;
+    }
+    s.tps = Math.round((n / s.time) * 100000) / 100;
+    s.tpsHtm = true;
+    fixed++;
+  }
+  if (fixed) save(SOLVES_KEY, solves);
+}
 
 // Modus: früher nur „Scramble-Art“ – übernehmen
 if (!settings.mode) settings.mode = settings.scrambleType || 'wca';
@@ -424,7 +442,7 @@ function finishSolve() {
   const ghostDone = app.ghost ? finishGhostRun(solve) : false;
   // Im Raum immer: Ergebnis mit Vergleich zu den anderen
   if (settings.showResult || app.room) showResult(solve, pb ? L('Neue Bestzeit!', 'New PB!') : newAo ? L(`Neuer bester Ø${newAo}!`, `New best ao${newAo}!`) : '');
-  const summary = () => `${formatSolve(solve)} · ${metricsOf(solve)?.htm ?? solve.moveCount} ${L('Züge', 'moves')} · ${solve.tps.toFixed(2)} TPS${pb ? ` · ${L('Neue Bestzeit!', 'New PB!')} 🎉` : ''}`;
+  const summary = () => `${formatSolve(solve)} · ${metricsOf(solve)?.htm ?? solve.moveCount} ${L('Züge', 'moves')} · ${dec(metricsOf(solve)?.tps ?? solve.tps, 2)} TPS${metricsOf(solve)?.etps ? ` · Exec ${dec(metricsOf(solve).etps, 2)}` : ''}${pb ? ` · ${L('Neue Bestzeit!', 'New PB!')} 🎉` : ''}`;
   setStatus(summary());
   if (app.room) {
     app.room.result(app.roomRound, solve);
@@ -460,7 +478,7 @@ function solveRows(s) {
     { cls: 'ph-cross', name: 'Cross', extra: ` ${colorChip(s.crossFace)}${s.xcross ? ' <span class="tag">X</span>' : ''}`, time: ph[0].time, moves: ph[0].moves, ref: ref.cross },
     {
       cls: 'ph-pair', name: 'F2L', time: sum('time'), moves: sum('moves'), recog: sum('recog'), ref: ref.f2l, open: false,
-      sub: pairs.map((p, i) => ({ name: `${L('Paar', 'Pair')} ${i + 1}`, extra: p.slot ? ` ${[...p.slot].map(colorChip).join('')}` : '', time: p.time, moves: p.moves, recog: p.recog, ref: ref.pair })),
+      sub: pairs.map((p, i) => ({ name: `${L('Paar', 'Pair')} ${i + 1}`, extra: p.slot ? ` ${pairIcon(p.slot, s.crossFace)}` : '', time: p.time, moves: p.moves, recog: p.recog, ref: ref.pair })),
     },
     { cls: 'ph-oll', name: 'OLL', extra: ph[5].skip ? ' <span class="tag">Skip</span>' : '', time: ph[5].time, moves: ph[5].moves, recog: ph[5].recog, ref: ref.oll, note: llNote(ph[5], 'OLL') },
     { cls: 'ph-pll', name: 'PLL', extra: ph[6].skip ? ' <span class="tag">Skip</span>' : '', time: ph[6].time, moves: ph[6].moves, recog: ph[6].recog, ref: ref.pll, note: llNote(ph[6], 'PLL') },
@@ -537,6 +555,29 @@ $('res-replay').addEventListener('click', () => {
   const data = s && replayData(s);
   hideResult();
   if (data) replay.open({ ...data, name: profile.name }, { title: `Solve ${solves.indexOf(s) + 1}` });
+});
+// Solve direkt in der Endansicht löschen (mit Rückgängig)
+$('res-delete').addEventListener('click', () => {
+  const s = resultSolve();
+  const i = solves.indexOf(s);
+  if (i < 0) return;
+  const wasLast = app.lastSolve === s;
+  hideResult();
+  undoable(
+    L(`Solve ${formatSolve(s)} gelöscht`, `Solve ${formatSolve(s)} deleted`),
+    () => {
+      solves.splice(i, 1);
+      if (wasLast) app.lastSolve = null;
+      persistSolves();
+      renderSolves();
+    },
+    () => {
+      solves.splice(i, 0, s);
+      if (wasLast) app.lastSolve = s;
+      persistSolves();
+      renderSolves();
+    },
+  );
 });
 $('res-archive').addEventListener('click', () => {
   const s = resultSolve();
@@ -641,7 +682,8 @@ $('ghost-stop').addEventListener('click', () => {
 });
 /** Gegner für die Geister-Modi: Bestzeit oder ein typischer Solve aus dem Ø12 */
 function ghostOpponent(id) {
-  const det = inScope(activeScope()).filter((s) => hasDetail(s) && s.penalty !== 'DNF');
+  // Geister-Rennen laufen mit normalen Scrambles: Gegner aus der aktuellen Session (nicht Leichtes Cross/X-Cross)
+  const det = inScope(settings.session || 'main').filter((s) => hasDetail(s) && s.penalty !== 'DNF');
   if (!det.length) return null;
   if (id === 'ghost-avg') {
     const recent = det.slice(-12);
@@ -750,7 +792,7 @@ function runCoachAction(a) {
 function renderCoach(el) {
   const list = coachInsights(inScope(activeScope())).slice(0, 4);
   app.coach = list;
-  if (el) el.innerHTML = `<h3 class="coach-h">💡 Coach</h3>${coachHtml(list)}`;
+  if (el) el.innerHTML = el.closest('details') ? coachHtml(list) : `<h3 class="coach-h">💡 Coach</h3>${coachHtml(list)}`;
 }
 $('stats-view').addEventListener('click', (e) => {
   const b = e.target.closest('[data-coach]');
@@ -1189,7 +1231,7 @@ function openSolve(i) {
   $('sd-date').textContent = `${new Date(s.date).toLocaleString(locale)}${s.device ? ' · ' + s.device : ''}`;
   const detail = hasDetail(s);
   const rows = (s.phases || []).map((p) => {
-    const name = phaseName(p) + (p.slot ? ' ' + [...p.slot].map(colorChip).join('') : '');
+    const name = phaseName(p) + (p.slot ? ' ' + pairIcon(p.slot, s.crossFace) : '');
     const exec = p.time - (p.recog || 0);
     const tps = exec > 0 && p.moves ? ((p.moves / exec) * 1000).toFixed(2) : '–';
     const tag = p.skip ? ' <span class="tag">Skip</span>' : '';
@@ -1520,11 +1562,14 @@ const PRESET_NAMES = {
   tiles: L('Fliesen', 'Tiles'),
   custom: L('Eigene', 'Custom'),
 };
-const SKIN_KEYS = ['style', 'body', 'scheme', 'finish', 'theme'];
+// Einstellbar sind nur noch Körper und Oberfläche; Stil und Design kommen aus den Karten, Farben immer Standard
+const SKIN_KEYS = ['body', 'finish'];
+const PRESET_KEYS = ['style', 'theme'];
 let skinPreview = null;
 const currentSkin = () => {
   const sk = { ...SKIN_PRESETS.gan, ...(settings.skin || {}) };
   if (sk.theme !== 'custom') sk.theme = 'colors'; // entfernte Designs (Kuh, Neon …)
+  sk.scheme = 'standard'; // Farben immer Standard
   return sk;
 };
 function applySkin(skin) {
@@ -1576,7 +1621,7 @@ function renderSkinUi() {
   const sk = currentSkin();
   $('skin-presets').innerHTML = Object.entries(SKIN_PRESETS)
     .map(([k, p]) => {
-      const on = k === 'custom' ? sk.theme === 'custom' : sk.theme !== 'custom' && SKIN_KEYS.every((f) => p[f] === sk[f]);
+      const on = k === 'custom' ? sk.theme === 'custom' : sk.theme !== 'custom' && PRESET_KEYS.every((f) => p[f] === sk[f]);
       return `<button type="button" data-preset="${k}" class="skin-card${on ? ' on' : ''}" aria-pressed="${on}">
         <img alt="" ${presetThumbs[k] ? `src="${presetThumbs[k]}"` : ''} />${k === 'custom' ? '<i class="skin-badge">📷</i>' : ''}<span>${PRESET_NAMES[k]}</span></button>`;
     })
@@ -1643,7 +1688,7 @@ $('skin-presets').addEventListener('click', (e) => {
   // Vorlage übernehmen, eigene Bilder und Logo behalten; „Eigene“ behält Stil und Farben
   if (!b) return;
   const k = b.dataset.preset;
-  applySkin(k === 'custom' ? { ...currentSkin(), theme: 'custom' } : { ...currentSkin(), ...SKIN_PRESETS[k] });
+  applySkin(k === 'custom' ? { ...currentSkin(), theme: 'custom' } : { ...currentSkin(), style: SKIN_PRESETS[k].style, theme: SKIN_PRESETS[k].theme });
   if (k === 'custom' && !Object.keys(currentSkin().images || {}).length) toast(L('Tippe unten auf eine Seite, um ein Bild dafür zu wählen.', 'Tap a face below to pick an image for it.'));
 });
 for (const f of SKIN_KEYS) {

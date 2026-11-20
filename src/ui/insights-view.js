@@ -1,12 +1,13 @@
 /**
  * Fenster „Analyse“: was bei einem Solve besser gegangen wäre (Daten aus solve-insights.js).
  */
+import { pairIcon } from './pair-icon.js';
 import { solveInsights } from '../solve-insights.js';
 import { formatTime, formatSolve } from '../stats.js';
 import { metricsOf } from '../metrics.js';
 import { L, dec } from '../i18n.js';
 import { colorChip } from './replay.js';
-import { caseDiagram } from './ll-diagram.js';
+import { caseDiagram, f2lDiagram, PHYS } from './ll-diagram.js';
 import { groupAlg } from '../cube/alg-format.js';
 import { COLOR_NAMES, SOLVED, applyAlg, isSolved, phaseStatus, solvedSlots, relativeState } from '../cube/facelets.js';
 import { ScrambleTracker } from '../cube/scramble-tracker.js';
@@ -46,6 +47,7 @@ function crossSection(r) {
       ${c.multi ? `<span class="in-tag good">🔥 ${L('Mehrere Paare direkt mit dem Kreuz', 'Several pairs right with the cross')}</span>` : verdict(c.saved)}
     </div>
     ${cmpAlgs(c.userMoves, ref.moves, r.xcross ? L('Optimal (X-Cross)', 'Optimal (X-cross)') : L('Optimal', 'Optimal'))}
+    ${frontPicker({ k: 'cross', frontOptions: c.frontOptions, holdK: r.xcross && c.xcross && c.source !== 'set' ? ['', 'y', 'y2', "y'"].indexOf(c.xcross.r) : c.holdK, source: c.source === 'set' ? 'set' : 'assumed' })}
     <div class="small">${L('Haltung', 'Hold')}: ${holdText(r.xcross && c.xcross ? c.xcross.hold : c.optimal.hold)}${r.xcross && c.xcross ? ` · ${L('Paar', 'Pair')} ${pairName(c.xcross.pair)} → ${L('hinten links', 'back left')}` : ''}</div>
     ${!r.xcross && c.xcross?.complete ? `<div class="in-tip">💡 ${L(`X-Cross wäre in ${mv(c.xcross.len)} gegangen: achte auf das Paar`, `An X-cross was possible in ${mv(c.xcross.len)}: look for the pair`)} <b>${pairName(c.xcross.pair)}</b> – ${L('es landet im Slot <b>hinten links</b>, vorne bleibt frei für die nächsten Paare.', 'it goes into the <b>back-left</b> slot, keeping the front free for the next pairs.')}${alg(c.xcross.moves)}<div class="small">${L('Haltung', 'Hold')}: ${holdText(c.xcross.hold)}</div></div>` : ''}
     <div class="in-actions">${practiceBtn(0)}</div>
@@ -73,15 +75,24 @@ function frontPicker(p) {
     .join('')}<span class="small">${src}</span></div>`;
 }
 
-function pairRow(p) {
-  const head = `<div class="in-head"><b>${L('Paar', 'Pair')} ${p.k}</b> ${chips(p.slot)}<span class="small">${mv(p.moves)} · ${formatTime(p.time)}</span></div>`;
+/** F2L-Bild in echten Farben aus der Haltung des Lösers, das Paar an seiner Stelle */
+function pairDiagram(p) {
+  const d = p.dia;
+  if (!d) return '';
+  const h = d.hold;
+  const palette = { U: PHYS[h.up], D: PHYS[h.down], F: PHYS[h.front], R: PHYS[h.right], L: PHYS[h.left], B: PHYS[h.back] };
+  return f2lDiagram(d.state, 52, { pair: d.pair, palette });
+}
+
+function pairRow(p, r) {
+  const head = `<div class="in-head"><b>${L('Paar', 'Pair')} ${p.k}</b> ${pairIcon(p.slot, r.crossFace)}<span class="small">${mv(p.moves)} · ${formatTime(p.time)}</span></div>`;
   if (p.free) return `<div class="in-item">${head}<div class="small">✓ ${L('Schon mit dem Kreuz bzw. einem anderen Paar gelöst', 'Already solved with the cross or another pair')}</div></div>`;
   const b = p.best;
   let body;
   if (!b) body = `<div class="small">${L('Fall nicht eindeutig erkennbar.', 'Case could not be identified.')}</div>`;
   else if (b.stuck) body = `<div class="small">⚠ ${L('Ecke oder Kante steckte in einem anderen Slot – dafür gibt es keinen Standard-Alg (erst herausholen).', 'Corner or edge was stuck in another slot – no standard alg for that (take it out first).')}</div><div class="in-lbl">${L('Du', 'You')}</div><div class="in-alg mine">${esc(groupAlg(p.userMoves))}</div>`;
   else
-    body = `<div class="in-case">${caseDiagram(b.id, 46)}<div class="in-case-tx">
+    body = `<div class="in-case">${pairDiagram(p) || caseDiagram(b.id, 46)}<div class="in-case-tx">
         <div class="in-row"><span class="small">${b.id} · ${L('Alg', 'Alg')}: <b>${mv(b.len)}</b></span>${verdict(p.saved)}</div>
         ${cmpAlgs(p.userMoves, b.alg, 'Alg')}
         <div class="small">${posNote(b, p.pos)}</div>
@@ -94,7 +105,7 @@ function pairRow(p) {
       : `<div class="small">↻ ${L('Drehung', 'Rotation')} ${p.rotation.name} – ${L('okay, der Slot lag hinten und ohne Drehung wäre es unhandlich gewesen', 'fine, the slot was in the back and awkward without rotating')}.</div>`;
   }
   const easier = p.easier
-    ? `<div class="in-tip">💡 ${L('Leichter wäre gewesen', 'Easier would have been')}: ${chips(p.easier.hold.front + p.easier.hold.right)} ${p.easier.id} · ${mv(p.easier.len)}${alg(p.easier.alg)}<div class="small">${colorChip(p.easier.hold.front)} ${L('vorne', 'front')}</div></div>`
+    ? `<div class="in-tip">💡 ${L('Leichter wäre gewesen', 'Easier would have been')}: ${pairIcon(p.easier.hold.front + p.easier.hold.right, r.crossFace)} ${p.easier.id} · ${mv(p.easier.len)}${alg(p.easier.alg)}<div class="small">${colorChip(p.easier.hold.front)} ${L('vorne', 'front')}</div></div>`
     : '';
   return `<div class="in-item">${head}${frontPicker(p)}${rot}${body}${easier}<div class="in-actions">${practiceBtn(p.k)}</div></div>`;
 }
@@ -131,7 +142,7 @@ export class InsightsView {
     dlg.addEventListener('click', (e) => {
       if (e.target === dlg || e.target.closest('[data-act=close]')) return dlg.close();
       const fb = e.target.closest('[data-front]');
-      if (fb) return this.setFront(Number(fb.dataset.pair), Number(fb.dataset.front));
+      if (fb) return this.setFront(fb.dataset.pair === 'cross' ? 'cross' : Number(fb.dataset.pair), Number(fb.dataset.front));
       const pb = e.target.closest('[data-practice]');
       if (pb) return this.startPractice(Number(pb.dataset.practice));
       if (e.target.closest('[data-act=practice-stop]')) return this.stopPractice();
@@ -305,7 +316,7 @@ export class InsightsView {
       ${summary}
       <section class="in-sec in-scr"><h3>Scramble</h3><div class="in-alg">${esc(r.scramble) || L('(eigenes Scramble)', '(own scramble)')}</div></section>
       ${crossSection(r)}
-      <section class="in-sec"><h3><i class="key ph-pair"></i>F2L</h3>${rotSummary(r)}${r.pairs.map(pairRow).join('')}</section>
+      <section class="in-sec"><h3><i class="key ph-pair"></i>F2L</h3>${rotSummary(r)}${r.pairs.map((p) => pairRow(p, r)).join('')}</section>
       <section class="in-sec"><h3><i class="key ph-oll"></i>${L('Letzte Schicht', 'Last layer')}</h3>${llRow('OLL', 'ph-oll', r.oll)}${llRow('PLL', 'ph-pll', r.pll)}</section>
       <section class="in-sec"><h3>${L('Deine Lösung', 'Your solution')}</h3>
         <div class="small">${L('Mit Kreuz unten', 'With cross down')} (${holdText(r.cross.optimal.hold)})</div>

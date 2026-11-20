@@ -29,6 +29,16 @@ export function phasesOf(solve, { mergeF2l = false } = {}) {
 }
 
 /** Ergebnis der Analyse → zu speichernder Solve */
+/** Züge in HTM (der Würfel meldet R2 als zwei Vierteldrehungen) */
+function htmOf(moves) {
+  let n = 0;
+  for (let i = 0; i < moves.length; i++) {
+    n++;
+    if (i + 1 < moves.length && moves[i + 1] === moves[i] && !moves[i].endsWith('2')) i++;
+  }
+  return n;
+}
+
 export function buildSolve(r, extra) {
   return {
     v: 2,
@@ -39,7 +49,8 @@ export function buildSolve(r, extra) {
     scramble: '',
     solution: r.solution,
     moveCount: r.moveCount,
-    tps: Math.round(r.tps * 100) / 100,
+    // TPS passend zur angezeigten Zugzahl (HTM): R2 zählt als ein Zug
+    tps: r.time > 0 ? Math.round((htmOf(r.moves) / r.time) * 100000) / 100 : 0,
     crossFace: r.crossFace,
     xcross: r.xcross,
     ll: r.ll,

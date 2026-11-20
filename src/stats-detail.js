@@ -97,11 +97,11 @@ export function detailStats(solves) {
   for (const s of det) {
     for (const p of s.phases.slice(1, 5)) {
       if (!p.slot || p.moves === 0) continue;
-      const k = [...p.slot].sort().join('');
+      const k = `${[...p.slot].sort().join('')}|${s.crossFace || 'D'}`;
       (slots[k] ??= []).push(p.time);
     }
   }
-  const slotStats = Object.entries(slots).map(([k, ts]) => ({ slot: k, n: ts.length, mean: avg(ts) }));
+  const slotStats = Object.entries(slots).map(([k, ts]) => ({ slot: k.split('|')[0], cross: k.split('|')[1], n: ts.length, mean: avg(ts) }));
 
   // Gyro: Würfeldrehungen und Griffwechsel, auch je Phase
   const gy = det.filter((s) => s.gyro);
