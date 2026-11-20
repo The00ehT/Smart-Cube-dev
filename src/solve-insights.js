@@ -5,7 +5,7 @@
  *   OLL/PLL – direkter Algorithmus gegen die tatsächlichen Züge (erkennt z. B. 2-Look)
  * Alles wird aus Startzustand und Zügen berechnet, funktioniert also für jeden gespeicherten Solve.
  */
-import { FACES, SOLVED, applyMove, applyAnyAlg, tokenizeAlg, parseAnyMove, phaseStatus, solvedSlots, F2L_SLOTS, CROSS_DOWN } from './cube/facelets.js';
+import { FACES, SOLVED, applyMove, applyAnyAlg, translateMoves, tokenizeAlg, parseAnyMove, phaseStatus, solvedSlots, F2L_SLOTS, CROSS_DOWN } from './cube/facelets.js';
 import { analyzeSolve } from './cube/analysis.js';
 import { solveCross, solveXCross } from './cube/cross-solver.js';
 import { f2lKey } from './cube/f2l-cases.js';
@@ -20,12 +20,23 @@ const AUF = ['', 'U', 'U2', "U'"];
 /** Züge ohne Würfeldrehungen (x, y, z zählen nicht) */
 export const moveCount = (alg) => tokenizeAlg(alg).filter((t) => !/^[xyz]/.test(t) && parseAnyMove(t)).length;
 
+/** Der Würfel meldet R2 als „R R“: gleichsinnige Doppelzüge zusammenfassen (Umwege wie „R R'“ bleiben sichtbar) */
+export function mergeDoubles(list) {
+  const out = [];
+  for (const m of list) {
+    const last = out.at(-1);
+    if (last && last === m && !m.includes('2')) out[out.length - 1] = m[0] + '2';
+    else out.push(m);
+  }
+  return out;
+}
+
 /** Zustand mit Kreuzfarbe unten (plus Drehung), Farben auf die Mitten bezogen */
 const view = (state, face, extra = '') => relabelToCenters(applyAnyAlg(state, `${CROSS_DOWN[face]} ${extra}`));
 /** Original-Farbe vorne/rechts in dieser Haltung */
 const holdColors = (state, face, extra = '') => {
   const s = applyAnyAlg(state, `${CROSS_DOWN[face]} ${extra}`);
-  return { down: s[31], front: s[22], right: s[13] };
+  return { down: s[31], front: s[22], right: s[13], left: s[40], back: s[49] };
 };
 
 /** Bester Datenbank-Algorithmus für den FR-Slot (mit AUF vorab), sonst null */
@@ -74,8 +85,12 @@ function bestLl(id, s, done, extraAlgs) {
 export function solveInsights(solve, opts = {}) {
   const extraAlgs = opts.extraAlgs || (() => []);
   const moves = solve.solution.split(' ').filter(Boolean);
+  // Eigene Züge einer Phase in der Haltung der Analyse (Kreuz unten, ggf. y-Drehung)
+  let face0 = null;
+  const userAlg = (p, r) => (p.moves ? mergeDoubles(translateMoves(moves.slice(p.start, p.end + 1), `${CROSS_DOWN[face0]} ${r}`.trim())).join(' ') : '');
   const a = analyzeSolve(solve.start, moves, solve.times);
   const face = a.crossFace;
+  face0 = face;
   const states = [solve.start];
   for (const m of moves) states.push(applyMove(states[states.length - 1], m));
   const ph = a.phases;
@@ -88,16 +103,22 @@ export function solveInsights(solve, opts = {}) {
     return { face: f, len: c.length, moves: c.moves.join(' '), hold: holdColors(start, f) };
   });
   const mine = colors.find((c) => c.face === face);
+  // X-Cross: Paar immer in den Slot hinten links (vorne bleibt frei für die nächsten Paare).
+  // Dafür die Haltung (y-Drehung) wählen, in der das günstigste Paar hinten links liegt.
   let x = null;
   try {
-    x = solveXCross(view(start, face));
+    for (const r of Y) {
+      const cand = solveXCross(view(start, face, r), { slots: ['BL'], maxDepth: x ? x.length - 1 : 11 });
+      if (cand && (!x || cand.length < x.length)) x = { ...cand, r, hold: holdColors(start, face, r) };
+    }
   } catch {
     x = null;
   }
   out.cross = {
     user: ph[0].moves,
     optimal: mine,
-    xcross: x && { len: x.length, moves: x.moves.join(' '), complete: x.complete },
+    xcross: x && { len: x.length, moves: x.moves.join(' '), complete: x.complete, hold: x.hold, pair: x.hold.left + x.hold.back, r: x.r },
+    userMoves: userAlg(ph[0], ''),
     colors,
     bestColor: colors.reduce((p, c) => (c.len < p.len ? c : p)),
   };
@@ -125,6 +146,7 @@ export function solveInsights(solve, opts = {}) {
     const mineEval = target && evals.find((o) => o.r === target.r);
     entry.best = mineEval?.best || null;
     entry.hold = mineEval?.hold;
+    entry.userMoves = userAlg(p, mineEval?.r ?? '');
     // Leichteres Paar zu diesem Zeitpunkt?
     const others = evals.filter((o) => o !== mineEval && o.best && !o.best.stuck);
     const easiest = others.reduce((b, o) => (!b || o.best.len < b.best.len ? o : b), null);
@@ -137,8 +159,8 @@ export function solveInsights(solve, opts = {}) {
   const llAt = (i) => view(states[i], face);
   const oll = ph[5];
   const pll = ph[6];
-  out.oll = { moves: oll.moves, time: oll.time, recog: oll.recog, skip: oll.skip };
-  out.pll = { moves: pll.moves, time: pll.time, recog: pll.recog, skip: pll.skip };
+  out.oll = { moves: oll.moves, time: oll.time, recog: oll.recog, skip: oll.skip, userMoves: userAlg(oll, '') };
+  out.pll = { moves: pll.moves, time: pll.time, recog: pll.recog, skip: pll.skip, userMoves: userAlg(pll, '') };
   if (!oll.skip) {
     const s = llAt(oll.start);
     const n = f2lSolved(s) ? identifyOll(s) : null;
@@ -154,6 +176,10 @@ export function solveInsights(solve, opts = {}) {
     l.twoLook = !!l.best && l.moves >= l.best.len + 4 && l.moves >= l.best.len * 1.35; // vermutlich 2-Look oder Umweg
   }
 
-  out.saved = out.cross.saved + out.pairs.reduce((s, p) => s + (p.saved || 0), 0) + out.oll.saved + out.pll.saved;
+  // OLL/PLL sind feste Algorithmen – zählen nicht zur möglichen Ersparnis
+  out.saved = out.cross.saved + out.pairs.reduce((s, p) => s + (p.saved || 0), 0);
+  // Ganze Lösung je Phase in der Haltung „Kreuz unten“
+  out.scramble = solve.scramble || '';
+  out.solution = ph.map((p) => ({ key: p.key, moves: userAlg(p, '') })).filter((p) => p.moves);
   return out;
 }

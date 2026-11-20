@@ -13,6 +13,13 @@ import { COLOR_NAMES } from '../cube/facelets.js';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const mv = (n) => `${n} ${n === 1 ? L('Zug', 'move') : L('Züge', 'moves')}`;
 const alg = (a) => `<div class="in-alg">${esc(groupAlg(a)) || '–'}</div>`;
+/** Zwei Zeilen zum Vergleichen: deine Züge und der Vorschlag */
+const cmpAlgs = (mine, best, bestLabel) => `<div class="in-pair">
+    <div class="in-lbl">${L('Du', 'You')}</div><div class="in-alg mine">${esc(groupAlg(mine)) || '–'}</div>
+    <div class="in-lbl">${bestLabel}</div><div class="in-alg">${esc(groupAlg(best)) || '–'}</div>
+  </div>`;
+const NAMES = { cross: 'Cross', p1: L('Paar 1', 'Pair 1'), p2: L('Paar 2', 'Pair 2'), p3: L('Paar 3', 'Pair 3'), p4: L('Paar 4', 'Pair 4'), oll: 'OLL', pll: 'PLL' };
+const pairName = (faces) => `${chips(faces)} ${[...faces].map((f) => COLOR_NAMES[f]).join('-')}`;
 const chips = (faces) => [...(faces || '')].map(colorChip).join('');
 const holdText = (h, withRight) =>
   h ? `${colorChip(h.down)} ${L('unten', 'down')} · ${colorChip(h.front)} ${L('vorne', 'front')}${withRight ? ` · ${colorChip(h.right)} ${L('rechts', 'right')}` : ''}` : '';
@@ -36,9 +43,9 @@ function crossSection(r) {
       <div class="in-cmp"><span>${L('Optimal', 'Optimal')}${r.xcross ? ' X-Cross' : ''}</span><b>${mv(ref.len)}</b></div>
       ${c.multi ? `<span class="in-tag good">🔥 ${L('Mehrere Paare direkt mit dem Kreuz', 'Several pairs right with the cross')}</span>` : verdict(c.saved)}
     </div>
-    ${alg(ref.moves)}
-    <div class="small">${holdText(c.optimal.hold)}</div>
-    ${!r.xcross && c.xcross?.complete ? `<div class="in-tip">💡 ${L(`X-Cross wäre in ${mv(c.xcross.len)} gegangen (Kreuz + ein Paar):`, `An X-cross was possible in ${mv(c.xcross.len)} (cross + one pair):`)}${alg(c.xcross.moves)}</div>` : ''}
+    ${cmpAlgs(c.userMoves, ref.moves, r.xcross ? L('Optimal (X-Cross)', 'Optimal (X-cross)') : L('Optimal', 'Optimal'))}
+    <div class="small">${L('Haltung', 'Hold')}: ${holdText(r.xcross && c.xcross ? c.xcross.hold : c.optimal.hold)}${r.xcross && c.xcross ? ` · ${L('Paar', 'Pair')} ${pairName(c.xcross.pair)} → ${L('hinten links', 'back left')}` : ''}</div>
+    ${!r.xcross && c.xcross?.complete ? `<div class="in-tip">💡 ${L(`X-Cross wäre in ${mv(c.xcross.len)} gegangen: achte auf das Paar`, `An X-cross was possible in ${mv(c.xcross.len)}: look for the pair`)} <b>${pairName(c.xcross.pair)}</b> – ${L('es landet im Slot <b>hinten links</b>, vorne bleibt frei für die nächsten Paare.', 'it goes into the <b>back-left</b> slot, keeping the front free for the next pairs.')}${alg(c.xcross.moves)}<div class="small">${L('Haltung', 'Hold')}: ${holdText(c.xcross.hold)}</div></div>` : ''}
     <div class="in-sub">${L('Optimales Kreuz je Farbe', 'Optimal cross per color')}</div>
     <div class="in-colors">${colors}</div>
     ${bestOther ? `<div class="small">${L(`Mit ${COLOR_NAMES[c.bestColor.face]} wäre das Kreuz ${mv(c.optimal.len - c.bestColor.len)} kürzer gewesen – gut für Color-Neutral-Training.`, `With ${COLOR_NAMES[c.bestColor.face]} the cross would have been ${mv(c.optimal.len - c.bestColor.len)} shorter – nice for color-neutral practice.`)}</div>` : ''}
@@ -51,11 +58,11 @@ function pairRow(p) {
   const b = p.best;
   let body;
   if (!b) body = `<div class="small">${L('Fall nicht eindeutig erkennbar.', 'Case could not be identified.')}</div>`;
-  else if (b.stuck) body = `<div class="small">⚠ ${L('Ecke oder Kante steckte in einem anderen Slot – dafür gibt es keinen Standard-Alg (erst herausholen).', 'Corner or edge was stuck in another slot – no standard alg for that (take it out first).')}</div>`;
+  else if (b.stuck) body = `<div class="small">⚠ ${L('Ecke oder Kante steckte in einem anderen Slot – dafür gibt es keinen Standard-Alg (erst herausholen).', 'Corner or edge was stuck in another slot – no standard alg for that (take it out first).')}</div><div class="in-lbl">${L('Du', 'You')}</div><div class="in-alg mine">${esc(groupAlg(p.userMoves))}</div>`;
   else
     body = `<div class="in-case">${caseDiagram(b.id, 46)}<div class="in-case-tx">
         <div class="in-row"><span class="small">${b.id} · ${L('Alg', 'Alg')}: <b>${mv(b.len)}</b></span>${verdict(p.saved)}</div>
-        ${alg(b.alg)}
+        ${cmpAlgs(p.userMoves, b.alg, 'Alg')}
         <div class="small">${holdText(p.hold, true)}</div>
       </div></div>`;
   const easier = p.easier
@@ -64,16 +71,15 @@ function pairRow(p) {
   return `<div class="in-item">${head}${body}${easier}</div>`;
 }
 
+/** OLL/PLL sind feste Algorithmen: nur Fall, Zeiten und eigene Züge – ohne Verbesserungsvorschlag */
 function llRow(name, cls, l) {
   const head = `<div class="in-head"><i class="key ${cls}"></i><b>${name}</b><span class="small">${mv(l.moves)} · ${formatTime(l.time)}${l.recog ? ` · Recog ${formatTime(l.recog)}` : ''}</span></div>`;
   if (l.skip) return `<div class="in-item">${head}<div class="small">🎉 Skip</div></div>`;
   const b = l.best;
-  if (!b) return `<div class="in-item">${head}<div class="small">${L('Fall nicht eindeutig erkennbar.', 'Case could not be identified.')}</div></div>`;
-  const tl = l.twoLook ? `<div class="in-tip">💡 ${L('Sieht nach 2-Look oder einem Umweg aus – der direkte Alg ist deutlich kürzer.', 'Looks like 2-look or a detour – the direct alg is much shorter.')}</div>` : '';
-  return `<div class="in-item">${head}<div class="in-case">${caseDiagram(b.id, 46)}<div class="in-case-tx">
-      <div class="in-row"><span class="small">${b.id} · ${L('direkt', 'direct')}: <b>${mv(b.len)}</b></span>${verdict(l.saved)}</div>
-      ${alg(b.alg)}
-    </div></div>${tl}</div>`;
+  return `<div class="in-item">${head}<div class="in-case">${b ? caseDiagram(b.id, 46) : ''}<div class="in-case-tx">
+      <div class="small">${b ? `<b>${esc(b.id.startsWith('PLL') ? `${b.id.slice(4)}-Perm` : b.id)}</b>` : L('Fall nicht eindeutig erkennbar', 'Case not identified')}</div>
+      <div class="in-alg mine">${esc(groupAlg(l.userMoves)) || '–'}</div>
+    </div></div></div>`;
 }
 
 export class InsightsView {
@@ -115,9 +121,14 @@ export class InsightsView {
     this.dlg.innerHTML = `<div class="rp-head"><div><h2>${L('Analyse', 'Analysis')}</h2><div class="small">${formatSolve(solve)} · ${mv(total)}</div></div>
       <button type="button" class="rp-close" data-act="close" aria-label="${L('Schließen', 'Close')}">✕</button></div>
       ${summary}
+      <section class="in-sec in-scr"><h3>Scramble</h3><div class="in-alg">${esc(r.scramble) || L('(eigenes Scramble)', '(own scramble)')}</div></section>
       ${crossSection(r)}
       <section class="in-sec"><h3><i class="key ph-pair"></i>F2L</h3>${r.pairs.map(pairRow).join('')}</section>
       <section class="in-sec"><h3><i class="key ph-oll"></i>${L('Letzte Schicht', 'Last layer')}</h3>${llRow('OLL', 'ph-oll', r.oll)}${llRow('PLL', 'ph-pll', r.pll)}</section>
-      <p class="small in-note">${L('Vergleich mit dem optimalen Kreuz und den kürzesten geprüften Algorithmen aus der Datenbank (und deinen eigenen). Algorithmen gelten mit Kreuz unten, gehalten wie angegeben.', 'Compared with the optimal cross and the shortest verified algorithms from the database (and your own). Algs apply with the cross down, held as shown.')}</p>`;
+      <section class="in-sec"><h3>${L('Deine Lösung', 'Your solution')}</h3>
+        <div class="small">${L('Mit Kreuz unten', 'With cross down')} (${holdText(r.cross.optimal.hold)})</div>
+        <div class="in-sol">${r.solution.map((p) => `<div class="in-lbl">${NAMES[p.key] || p.key}</div><div class="in-alg mine">${esc(groupAlg(p.moves))}</div>`).join('')}</div>
+      </section>
+      <p class="small in-note">${L('Vergleich mit dem optimalen Kreuz/X-Cross und den kürzesten geprüften F2L-Algorithmen (Datenbank und deine eigenen). OLL/PLL sind feste Algorithmen und zählen nicht zur Ersparnis. Alle Züge mit Kreuz unten, gehalten wie angegeben.', 'Compared with the optimal cross/X-cross and the shortest verified F2L algorithms (database and your own). OLL/PLL are fixed algorithms and don’t count towards savings. All moves with the cross down, held as shown.')}</p>`;
   }
 }

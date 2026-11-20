@@ -1173,3 +1173,20 @@ body.solving .room-minis:not([hidden]) { display: flex !important; }
 .topbar { min-width: 0; }
 .top-right { min-width: 0; }
 .device { min-width: 0; }
+
+/* Bestzeit antippbar, Sortierung der Solves */
+.quick .q-link { display: grid; justify-items: center; background: transparent; padding: 0; border: 0; color: inherit; font: inherit; cursor: pointer; }
+.quick .q-link .k { color: var(--accent); }
+.kpi-link { all: unset; display: block; cursor: pointer; border-radius: 14px; }
+.kpi-link .kpi-k { color: var(--accent); }
+.kpi-link:focus-visible { outline: 2px solid var(--accent); }
+.solves-sort { display: flex; align-items: center; justify-content: flex-end; gap: 8px; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.solves-sort select { font: inherit; color: var(--text); background: var(--chip); border: 1px solid var(--line); border-radius: 10px; padding: 5px 8px; }
+.solves li.pb .t::after { content: ' 🏆'; font-size: 12px; }
+
+/* Analyse: eigene Züge neben dem Vorschlag */
+.in-pair, .in-sol { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; align-items: center; }
+.in-lbl { font-size: 12px; font-weight: 650; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+.in-alg.mine { background: color-mix(in srgb, var(--accent) 7%, var(--panel-2)); }
+.in-item .in-alg.mine { background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+.in-scr .in-alg { margin: 0; }

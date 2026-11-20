@@ -58,6 +58,10 @@ export class StatsView {
     });
     this.tip = dialog.querySelector('.sv-tip');
     dialog.addEventListener('pointermove', (e) => this.hover(e));
+    // Bestzeit antippen → Details dieses Solves
+    dialog.addEventListener('click', (e) => {
+      if (e.target.closest('[data-act=best]')) this.hooks.openBest?.();
+    });
     dialog.addEventListener('pointerleave', () => (this.tip.hidden = true));
   }
 
@@ -96,7 +100,7 @@ export class StatsView {
   kpis(all, s) {
     const big = (label, cur, bestV) => `<div class="kpi"><div class="kpi-k">${label}</div><div class="kpi-v">${cur}</div>${bestV != null ? `<div class="kpi-b">${L('Bester', 'Best')} ${bestV}</div>` : ''}</div>`;
     return `<section class="sv-sec kpis">
-      ${big(L('Bestzeit', 'Best'), t(best(all)), null)}
+      <button type="button" class="kpi-link" data-act="best" title="${L('Details der Bestzeit', 'Details of your best')}">${big(L('Bestzeit', 'Best') + ' ›', t(best(all)), null)}</button>
       ${big('Ø 5', t(averageOf(all, 5)), t(bestAverage(all, 5)))}
       ${big('Ø 12', t(averageOf(all, 12)), t(bestAverage(all, 12)))}
       ${big('Ø 100', t(averageOf(all, 100)), t(bestAverage(all, 100)))}

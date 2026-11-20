@@ -146,12 +146,12 @@ export function solveCross(state) {
  * Optimales X-Cross (Kreuz + ein Paar) über alle vier Slots.
  * @param maxNodes Abbruchgrenze, damit die Seite nicht hängt (null = nicht gefunden)
  */
-export function solveXCross(state, { maxDepth = 11, maxNodes = 3e6 } = {}) {
+export function solveXCross(state, { maxDepth = 11, maxNodes = 3e6, slots = null } = {}) {
   const dist = crossTable();
   const pv = pieceValues(state);
   let best = null;
   let nodes = 0;
-  for (const slot of SLOTS) {
+  for (const slot of slots ? SLOTS.filter((s) => slots.includes(s.name)) : SLOTS) {
     const pt = pairTable(slot);
     const c0 = pv.corner(slot.corner);
     const e0 = pv.edge(slot.edge);

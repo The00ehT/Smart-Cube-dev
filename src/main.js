@@ -72,7 +72,7 @@ setDefaultSkin(settings.skin || {});
 const view = new CubeView($('cube'));
 view.setGyroEnabled(settings.gyro);
 const replay = new Replay($('replay-dialog'));
-const statsView = new StatsView($('stats-view'), { coach: (el) => renderCoach(el) });
+const statsView = new StatsView($('stats-view'), { coach: (el) => renderCoach(el), openBest: () => openBest() });
 // Trainer für OLL/PLL/F2L/eigene Algorithmen und „Endlos-PLL“ – ohne Setup-Scramble
 const trainer = new Trainer($('trainer-dialog'), {
   now: () => now(),
@@ -1034,11 +1034,31 @@ function renderQuick() {
   const items = [
     ['Ø 5', formatTime(averageOf(solves, 5))],
     ['Ø 12', formatTime(averageOf(solves, 12))],
-    [L('Bestzeit', 'Best'), formatTime(best(solves))],
+    [L('Bestzeit', 'Best'), formatTime(best(solves)), 'best'],
     ['Solves', String(solves.length)],
   ];
-  $('stats-quick').innerHTML = items.map(([k, v]) => `<div><span class="k">${k}</span><b>${v}</b></div>`).join('');
+  $('stats-quick').innerHTML = items
+    .map(([k, v, act]) => (act && pbIndex() >= 0 ? `<button type="button" class="q-link" data-act="${act}" title="${L('Details der Bestzeit', 'Details of your best')}"><span class="k">${k} ›</span><b>${v}</b></button>` : `<div><span class="k">${k}</span><b>${v}</b></div>`))
+    .join('');
 }
+
+/** Index des schnellsten gültigen Solves (−1 ohne) */
+function pbIndex() {
+  let bi = -1;
+  solves.forEach((s, i) => {
+    const t = effectiveTime(s);
+    if (Number.isFinite(t) && (bi < 0 || t < effectiveTime(solves[bi]))) bi = i;
+  });
+  return bi;
+}
+/** Bestzeit antippen → Solve-Details öffnen (statt in allen Solves zu suchen) */
+function openBest() {
+  const i = pbIndex();
+  if (i >= 0) openSolve(i);
+}
+$('stats-quick').addEventListener('click', (e) => {
+  if (e.target.closest('[data-act=best]')) openBest();
+});
 
 /** Kuchendiagramm der Phasen über die letzten 12 Solves mit Detaildaten */
 function renderMiniPie(det) {
@@ -1064,12 +1084,26 @@ function renderSolves() {
     list.innerHTML = `<li class="empty">${L('Noch keine Solves', 'No solves yet')}</li>`;
     return;
   }
+  // Reihenfolge: neueste/älteste zuerst oder nach Zeit (DNF ans Ende)
+  const sort = settings.solvesSort || 'new';
+  let order = solves.map((_, i) => i).reverse();
+  if (sort === 'old') order.reverse();
+  else if (sort === 'fast' || sort === 'slow') {
+    const t = (i) => effectiveTime(solves[i]);
+    order.sort((a, b) => {
+      const ta = t(a);
+      const tb = t(b);
+      if (!Number.isFinite(ta) || !Number.isFinite(tb)) return Number.isFinite(ta) ? -1 : Number.isFinite(tb) ? 1 : b - a;
+      return sort === 'fast' ? ta - tb : tb - ta;
+    });
+  }
+  const pb = pbIndex();
   const rows = [];
-  for (let i = solves.length - 1; i >= 0 && rows.length < 300; i--) {
+  for (const i of order.slice(0, 300)) {
     const s = solves[i];
     const ao5 = averageOf(solves.slice(0, i + 1), 5);
     rows.push(
-      `<li data-i="${i}"><span class="n">${i + 1}.</span><span class="t">${formatSolve(s)}</span>` +
+      `<li data-i="${i}"${i === pb ? ' class="pb"' : ''}><span class="n">${i + 1}.</span><span class="t">${formatSolve(s)}</span>` +
         `<span class="meta">${s.metrics?.htm ?? s.moveCount ?? '–'} ${MV}</span><span class="ao">${ao5 === null ? '' : 'Ø5 ' + formatTime(ao5)}</span></li>`,
     );
   }
@@ -1209,6 +1243,12 @@ $('solve-dialog').addEventListener('close', () => {
   renderTimer();
 });
 
+$('solves-sort').value = settings.solvesSort || 'new';
+$('solves-sort').addEventListener('change', (e) => {
+  settings.solvesSort = e.target.value;
+  save(SETTINGS_KEY, settings);
+  renderSolves();
+});
 $('solves').addEventListener('click', (e) => {
   const li = e.target.closest('li[data-i]');
   if (li) openSolve(Number(li.dataset.i));

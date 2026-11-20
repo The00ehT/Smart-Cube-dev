@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { SOLVED, applyAlg, invertAlg } from '../src/cube/facelets.js';
-import { solveInsights, moveCount } from '../src/solve-insights.js';
+import { solveInsights, moveCount, mergeDoubles } from '../src/solve-insights.js';
 
 // Solve aus Teilen: Kreuz (absichtlich umständlich), Paare, OLL (2-Look: Kreuz + Sune), PLL (T)
 const parts = {
@@ -20,4 +20,17 @@ assert.ok(r.oll.best && r.oll.best.len <= 10, 'direkter OLL-Alg gefunden');
 assert.ok(r.oll.twoLook, '2-Look erkannt');
 assert.ok(r.pll.best, 'PLL erkannt');
 assert.equal(moveCount("y R U R' x"), 3);
+assert.deepEqual(mergeDoubles(['R', 'R', 'U', "U'", "F'", "F'", 'D']), ['R2', 'U', "U'", 'F2', 'D']);
+// X-Cross landet immer im Slot hinten links
+import { applyAnyAlg, CROSS_DOWN, solvedSlots, F2L_SLOTS, phaseStatus } from '../src/cube/facelets.js';
+import { relabelToCenters } from '../src/cube/ll-cases.js';
+const BL = F2L_SLOTS.D.findIndex((x) => [...x.faces].sort().join('') === 'BL');
+for (const scr of ["R U' F2 D L' B R2 U2 F' L D2 R' B2 U F", "D2 F' R U L2 B' D R' F U2 L B2 R D' F2"]) {
+  const st = applyAlg(SOLVED, scr);
+  const q = solveInsights({ start: st, solution: invertAlg(scr), times: invertAlg(scr).split(' ').map((_, i) => i * 100) });
+  const x = q.cross.xcross;
+  const after = relabelToCenters(applyAnyAlg(st, `${CROSS_DOWN[q.crossFace]} ${x.r} ${x.moves}`));
+  assert.ok(phaseStatus(after).D.cross && solvedSlots(after, 'D') & (1 << BL), 'X-Cross-Paar hinten links');
+  console.log('X-Cross', x.len, 'Züge, Paar', x.pair, 'Haltung', x.r || '–', '| Lösung', q.solution.map((p) => p.key).join(','));
+}
 console.log('insights: alle Tests bestanden');

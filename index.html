@@ -143,6 +143,14 @@
           <button type="button" data-mode="archive">★ Archiv</button>
         </div>
         <div class="card list-card" id="solves-all">
+          <label class="solves-sort">Sortieren
+            <select id="solves-sort">
+              <option value="new">Neueste zuerst</option>
+              <option value="old">Älteste zuerst</option>
+              <option value="fast">Schnellste zuerst</option>
+              <option value="slow">Langsamste zuerst</option>
+            </select>
+          </label>
           <ol class="solves" id="solves" reversed></ol>
         </div>
         <div class="card" id="archive-view" hidden></div>
