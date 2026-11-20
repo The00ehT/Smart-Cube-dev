@@ -13,6 +13,7 @@
  *   round   { n, scramble }                          neue Runde
  *   live    { from, kind: 'status'|'move'|'state', … } Live-Daten zum Zuschauen
  *   result  { from, n, time, penalty, moveCount, tps } Ergebnis einer Runde
+ *   full    { max }                                  Gastgeber → Teilnehmer: Raum ist voll
  */
 import { L } from './i18n.js';
 const PREFIX = 'smartcube-raum-';
@@ -47,6 +48,7 @@ export class Room {
     this.myId = null;
     this.code = null;
     this.closed = false;
+    this.maxPlayers = 0; // 0 = unbegrenzt
   }
 
   async #newPeer(id) {
@@ -67,7 +69,9 @@ export class Room {
 
   // ---------------- Gastgeber ----------------
 
-  async create() {
+  /** @param opts { maxPlayers } – 0 = unbegrenzt */
+  async create(opts = {}) {
+    this.maxPlayers = Math.max(0, Math.min(50, Math.round(opts.maxPlayers || 0)));
     for (let attempt = 0; attempt < 4; attempt++) {
       const code = roomCode();
       try {
@@ -104,10 +108,16 @@ export class Room {
   #hostReceive(id, conn, msg) {
     if (!msg || typeof msg !== 'object') return;
     if (msg.type === 'hello') {
+      // Raum voll? (Gastgeber zählt mit)
+      if (this.maxPlayers && !this.conns.has(id) && this.roster.length >= this.maxPlayers) {
+        conn.send({ type: 'full', max: this.maxPlayers });
+        setTimeout(() => conn.close(), 400);
+        return;
+      }
       this.conns.set(id, conn);
       const p = { id, name: String(msg.name || L('Gast', 'Guest')).slice(0, 24), avatar: sanitizeAvatar(msg.avatar) };
       this.roster = [...this.roster.filter((x) => x.id !== id), p];
-      conn.send({ type: 'welcome', you: id, roster: this.roster, board: this.board });
+      conn.send({ type: 'welcome', you: id, roster: this.roster, board: this.board, max: this.maxPlayers });
       this.#publishRoster();
       return;
     }
@@ -176,23 +186,40 @@ export class Room {
         reject(err?.type === 'peer-unavailable' ? new Error(L('Raum nicht gefunden.', 'Room not found.')) : err);
       });
       conn.on('open', () => {
-        clearTimeout(timer);
         this.hostConn = conn;
         conn.send({ type: 'hello', name: this.me.name, avatar: this.me.avatar });
-        resolve();
       });
+      // Erst „drin“, wenn der Gastgeber uns angenommen hat (welcome) – oder abgelehnt (voll)
+      this.joinWait = {
+        resolve: () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        reject: (err) => {
+          clearTimeout(timer);
+          reject(err);
+        },
+      };
       conn.on('data', (msg) => this.#clientReceive(msg));
-      conn.on('close', () => this.#closedByHost());
-      conn.on('error', () => this.#closedByHost());
+      conn.on('close', () => (this.joinWait ? this.joinWait.reject(new Error(L('Verbindung zum Raum getrennt.', 'Connection to the room closed.'))) : this.#closedByHost()));
+      conn.on('error', () => (this.joinWait ? this.joinWait.reject(new Error(L('Verbindung zum Raum fehlgeschlagen.', 'Connection to the room failed.'))) : this.#closedByHost()));
     });
+    this.joinWait = null;
     this.emit({ type: 'open' });
   }
 
   #clientReceive(msg) {
     if (!msg || typeof msg !== 'object') return;
     switch (msg.type) {
+      case 'full':
+        this.closed = true;
+        this.joinWait?.reject(new Error(L(`Der Raum ist voll (max. ${Number(msg.max) || '?'} Spieler).`, `The room is full (max. ${Number(msg.max) || '?'} players).`)));
+        this.joinWait = null;
+        break;
       case 'welcome':
         this.myId = msg.you;
+        this.maxPlayers = Math.max(0, Math.min(50, Number(msg.max) || 0));
+        this.joinWait?.resolve();
         this.roster = msg.roster;
         this.board = msg.board;
         this.emit({ type: 'roster', roster: this.roster });

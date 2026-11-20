@@ -1,6 +1,6 @@
 import './styles.css';
 import { now } from 'gan-web-bluetooth';
-import { SOLVED, FACES, applyMove, applyAlg, isSolved, COLOR_NAMES, groupMoves, CROSS_DOWN, phaseStatus, solvedSlots, relativeState } from './cube/facelets.js';
+import { SOLVED, applyMove, applyAlg, isSolved, COLOR_NAMES, groupMoves, CROSS_DOWN, relativeState } from './cube/facelets.js';
 import { analyzeSolve } from './cube/analysis.js';
 import { analyzeGyro, fromGan } from './cube/gyro.js';
 import { ScrambleTracker } from './cube/scramble-tracker.js';
@@ -1979,16 +1979,17 @@ async function enterRoom(mode, code) {
   msg.textContent = mode === 'create' ? L('Raum wird erstellt …', 'Creating room …') : L('Verbinde …', 'Connecting …');
   try {
     roomView.show(room); // Karten brauchen room.myId – Liste wird nach dem Öffnen gezeichnet
-    if (mode === 'create') await room.create();
+    if (mode === 'create') await room.create({ maxPlayers: Number($('room-max').value) || 0 });
     else await room.join(code);
     lobbyWatch(false);
     // Öffentlicher Raum: bei allen in der Liste, Beitritt ohne Code
     if (mode === 'create' && $('room-public').checked) {
-      app.roomPublic = { code: room.code, name: $('room-name').value.trim(), host: profile.name, avatar: profile.avatar, created: Date.now() };
+      app.roomPublic = { code: room.code, name: $('room-name').value.trim(), host: profile.name, avatar: profile.avatar, created: Date.now(), max: room.maxPlayers };
       announceRoom();
-      roomView.message(L('🌍 Öffentlicher Raum – erscheint bei allen unter „Öffentliche Räume“, Beitritt ohne Code. Starte die erste Runde, sobald jemand da ist.', '🌍 Public room – shows up for everyone under “Public rooms”, join without a code. Start the first round once someone is here.'));
     }
     roomView.show(room);
+    if (app.roomPublic)
+      roomView.message(L('🌍 Öffentlicher Raum – erscheint bei allen unter „Öffentliche Räume“, Beitritt ohne Code. Starte die erste Runde, sobald jemand da ist.', '🌍 Public room – shows up for everyone under “Public rooms”, join without a code. Start the first round once someone is here.') + (room.maxPlayers ? L(` Plätze: ${room.maxPlayers}.`, ` Seats: ${room.maxPlayers}.`) : ''));
     roomView.renderRoster(room.roster);
     $('room-intro').hidden = true;
     document.querySelectorAll('.tab-dot').forEach((d) => (d.hidden = false));
@@ -2031,11 +2032,11 @@ function renderRoomList(rooms) {
   box.innerHTML = others.length
     ? others
         .map(
-          (r) => `<button type="button" class="pub-room" data-join="${r.code}">
+          (r) => `<button type="button" class="pub-room${r.max && r.players >= r.max ? ' full' : ''}" data-join="${r.code}" ${r.max && r.players >= r.max ? 'disabled' : ''}>
             <span class="pub-ic">${escapeHtml(r.emoji || '🧊')}</span>
             <span class="pub-tx"><b>${escapeHtml(r.name || L(`Raum von ${r.host}`, `${r.host}’s room`))}</b>
-              <span class="small">${escapeHtml(r.host)} · 👥 ${r.players}${r.round ? ` · ${L('Runde', 'Round')} ${r.round}` : ''}</span></span>
-            <span class="pub-go">${L('Beitreten', 'Join')} ›</span></button>`,
+              <span class="small">${escapeHtml(r.host)} · 👥 ${r.players}${r.max ? `/${r.max}` : ''}${r.round ? ` · ${L('Runde', 'Round')} ${r.round}` : ''}</span></span>
+            <span class="pub-go">${r.max && r.players >= r.max ? L('voll', 'full') : `${L('Beitreten', 'Join')} ›`}</span></button>`,
         )
         .join('')
     : `<p class="small">${L('Gerade ist kein öffentlicher Raum offen. Erstelle doch selbst einen – er erscheint dann hier bei allen.', 'No public room is open right now. Create one yourself – it then shows up here for everyone.')}</p>`;

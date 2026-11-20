@@ -122,7 +122,11 @@ export class Trainer {
   caseState(id) {
     if (CASE_STATE[id]) return CASE_STATE[id];
     const alg = mainAlg(id);
-    return alg ? stateForAlg(alg) : null;
+    try {
+      return alg ? stateForAlg(alg) : null;
+    } catch {
+      return null; // ungültiger eigener Algorithmus: Fall auslassen statt das Training abzubrechen
+    }
   }
 
   /** Gewichtete Auswahl: ungeübte und langsame Fälle öfter, nicht zweimal derselbe hintereinander */

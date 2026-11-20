@@ -22,7 +22,6 @@ const RANGES = [
 const pct = (x) => (x == null ? '–' : `${Math.round(x * 100)} %`);
 const num = (x, d = 1) => dec(x, d);
 const t = (x) => (x == null ? '–' : formatTime(x));
-const PHASE_CLASS = (key) => (/^p\d$/.test(key) ? 'pair' : key);
 
 export class StatsView {
   /** @param root Container im Statistik-Tab */

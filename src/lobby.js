@@ -30,6 +30,7 @@ export function cleanRoom(r) {
     host: String(r.host || '').slice(0, 24),
     emoji,
     players: Math.max(1, int(r.players, 50)),
+    max: int(r.max, 50), // 0 = unbegrenzt
     round: int(r.round, 9999),
     created: int(r.created, 4e12),
   };
@@ -191,7 +192,7 @@ export class Lobby {
     try {
       this.#drop();
       this.peer = await this.#newPeer(LOBBY_ID);
-    } catch (err) {
+    } catch {
       this.peer = null;
       return false;
     }

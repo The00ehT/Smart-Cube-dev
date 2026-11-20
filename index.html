@@ -168,6 +168,16 @@
           <div class="room-choose">
             <label class="toggle room-pub"><input type="checkbox" id="room-public" /> 🌍 Öffentlich – für alle sichtbar, Beitritt ohne Code</label>
             <input type="text" id="room-name" class="room-name" placeholder="Raumname (optional)" maxlength="40" hidden />
+            <label class="room-size">Plätze
+              <select id="room-max">
+                <option value="0">unbegrenzt</option>
+                <option value="2">2 (Duell)</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="6">6</option>
+                <option value="8">8</option>
+              </select>
+            </label>
             <button type="button" class="primary big" id="room-create">Raum erstellen</button>
             <div class="or small">oder mit Code beitreten</div>
             <div class="room-join-row">

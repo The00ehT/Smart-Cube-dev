@@ -5,7 +5,7 @@
  * Voraussetzung: Kreuz und die anderen drei Slots sind gelöst. Es gibt genau 41 Fälle (plus „gelöst“).
  */
 import { L } from '../i18n.js';
-import { applyAnyAlg, applyAnyMove, faceletsToPatternData, phaseStatus, solvedSlots, F2L_SLOTS, SOLVED, invertAnyAlg } from './facelets.js';
+import { applyAnyMove, faceletsToPatternData, phaseStatus, solvedSlots, F2L_SLOTS, SOLVED } from './facelets.js';
 import { stateForAlg } from './ll-cases.js';
 
 const CORNER = 4; // DRF in CORNER_NAMES

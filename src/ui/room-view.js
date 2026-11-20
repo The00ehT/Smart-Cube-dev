@@ -95,7 +95,8 @@ export class RoomView {
     this.panel.querySelector('.room-code').textContent = room.code;
     this.panel.querySelector('.room-next').hidden = !room.isHost;
     this.panel.querySelector('.room-auto').hidden = !room.isHost;
-    this.message(room.isHost ? L('Teile den Code oder Link. Starte die erste Runde, sobald alle da sind.', 'Share the code or link. Start the first round once everyone is here.') : L('Verbunden. Warte auf die nächste Runde des Gastgebers.', 'Connected. Waiting for the host’s next round.'));
+    const size = room.maxPlayers ? ` ${L(`Plätze: ${room.maxPlayers}.`, `Seats: ${room.maxPlayers}.`)}` : '';
+    this.message((room.isHost ? L('Teile den Code oder Link. Starte die erste Runde, sobald alle da sind.', 'Share the code or link. Start the first round once everyone is here.') : L('Verbunden. Warte auf die nächste Runde des Gastgebers.', 'Connected. Waiting for the host’s next round.')) + size);
   }
 
   hide() {

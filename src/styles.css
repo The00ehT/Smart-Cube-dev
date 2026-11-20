@@ -1218,3 +1218,7 @@ body.solving .room-minis:not([hidden]) { display: flex !important; }
 .pub-tx { display: grid; flex: 1; min-width: 0; }
 .pub-tx b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pub-go { color: var(--accent); font-weight: 650; white-space: nowrap; }
+.room-size { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px; color: var(--muted); }
+.room-size select { font: inherit; color: var(--text); background: var(--chip); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; }
+.pub-room.full { opacity: 0.6; }
+.pub-room.full .pub-go { color: var(--muted); }
