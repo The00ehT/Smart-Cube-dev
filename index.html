@@ -299,6 +299,7 @@
       <menu><button type="button" id="pv-edit">Profil bearbeiten</button></menu>
     </dialog>
     <dialog id="friend-dialog" class="settings-dialog profile-dialog"></dialog>
+    <dialog id="cross-dialog" class="settings-dialog cross-dialog"></dialog>
 
     <dialog id="settings-dialog" class="settings-dialog">
       <div class="rp-head">
@@ -390,17 +391,9 @@
 
       <section class="set-sec">
         <h3>Training</h3>
-        <label class="select-row">Deine Cross-Farbe (für Algorithmen, Training und leichte Scrambles)
-          <select id="opt-cross">
-            <option value="auto">Automatisch (häufigste aus deinen Solves)</option>
-            <option value="U">Weiß</option>
-            <option value="D">Gelb</option>
-            <option value="F">Grün</option>
-            <option value="B">Blau</option>
-            <option value="R">Rot</option>
-            <option value="L">Orange</option>
-          </select>
-        </label>
+        <div class="select-row">Deine Cross-Farben (für Algorithmen, Training, leichte Scrambles und Analyse)
+          <button type="button" class="ghost" id="opt-cross-btn"></button>
+        </div>
       </section>
 
       <section class="set-sec">

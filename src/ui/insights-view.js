@@ -34,46 +34,35 @@ function verdict(saved, extra = '') {
 
 function crossSection(r) {
   const c = r.cross;
-  const ref = r.xcross && c.xcross ? c.xcross : c.optimal;
+  const xc = r.xcross;
+  const ref = xc ? c.xcross : c.optimal; // eigenes X-Cross → mit dem besten X-Cross vergleichen
+  const bestOther = c.colors.length > 1 && c.bestColor.face !== r.crossFace && c.bestColor.len < c.optimal.len;
   const colors = c.colors
     .map((x) => `<div class="in-color${x.face === r.crossFace ? ' mine' : ''}${x.len === c.bestColor.len ? ' best' : ''}" title="${COLOR_NAMES[x.face]}">${colorChip(x.face)}<b>${x.len}</b></div>`)
     .join('');
-  const bestOther = c.bestColor.face !== r.crossFace && c.bestColor.len < c.optimal.len;
+  const tag = c.multi ? `<span class="in-tag good">🔥</span>` : ref ? verdict(c.saved) : '';
   return `<section class="in-sec">
-    <h3><i class="key ph-cross"></i>${r.xcross ? 'X-Cross' : 'Cross'} ${colorChip(r.crossFace)}</h3>
-    <div class="in-row">
-      <div class="in-cmp"><span>${L('Du', 'You')}</span><b>${mv(c.user)}</b></div>
-      <div class="in-cmp"><span>${L('Optimal', 'Optimal')}${r.xcross ? ' X-Cross' : ''}</span><b>${mv(ref.len)}</b></div>
-      ${c.multi ? `<span class="in-tag good">🔥 ${L('Mehrere Paare direkt mit dem Kreuz', 'Several pairs right with the cross')}</span>` : verdict(c.saved)}
-    </div>
-    ${cmpAlgs(c.userMoves, ref.moves, r.xcross ? L('Optimal (X-Cross)', 'Optimal (X-cross)') : L('Optimal', 'Optimal'))}
-    <div class="in-meta">${frontPicker({ k: 'cross', frontOptions: c.frontOptions, holdK: r.xcross && c.xcross && c.source !== 'set' ? ['', 'y', 'y2', "y'"].indexOf(c.xcross.r) : c.holdK, source: c.source === 'set' ? 'set' : 'assumed' })}${r.xcross && c.xcross ? `<span class="small">${L('Paar', 'Pair')} ${pairIcon(c.xcross.pair, r.crossFace)} → ${L('hinten links', 'back left')}</span>` : ''}${practiceBtn(0)}</div>
-    ${!r.xcross && c.xcross?.complete ? `<details class="in-tip in-fold"><summary>💡 ${L(`X-Cross wäre in ${mv(c.xcross.len)} gegangen`, `An X-cross was possible in ${mv(c.xcross.len)}`)}</summary>${L('Achte auf das Paar', 'Look for the pair')} ${pairIcon(c.xcross.pair, r.crossFace)} <b>${[...c.xcross.pair].map((f) => COLOR_NAMES[f]).join('-')}</b> – ${L('es landet im Slot <b>hinten links</b>, vorne bleibt frei für die nächsten Paare.', 'it goes into the <b>back-left</b> slot, keeping the front free for the next pairs.')}${alg(c.xcross.moves)}<div class="small">${L('Haltung', 'Hold')}: ${holdText(c.xcross.hold)}</div></details>` : ''}
-    <details class="in-fold in-colors-box"><summary>${L('Optimales Kreuz je Farbe', 'Optimal cross per color')}${bestOther ? ` · <b>${COLOR_NAMES[c.bestColor.face]} −${c.optimal.len - c.bestColor.len}</b>` : ''}</summary>
-      <div class="in-colors">${colors}</div>
-      ${bestOther ? `<div class="small">${L(`Mit ${COLOR_NAMES[c.bestColor.face]} wäre das Kreuz ${mv(c.optimal.len - c.bestColor.len)} kürzer gewesen – gut für Color-Neutral-Training.`, `With ${COLOR_NAMES[c.bestColor.face]} the cross would have been ${mv(c.optimal.len - c.bestColor.len)} shorter – nice for color-neutral practice.`)}</div>` : ''}
-    </details>
+    <h3><i class="key ph-cross"></i>${c.multi ? 'XX-Cross' : xc ? 'X-Cross' : 'Cross'} ${colorChip(r.crossFace)}<span class="small in-h-num">${mv(c.user)}${ref ? ` · ${L('optimal', 'optimal')} ${ref.len}` : ''}</span>${tag}</h3>
+    ${cmpAlgs(c.userMoves, ref?.moves ?? '', L('Optimal', 'Optimal'))}
+    <div class="in-meta">${frontPicker({ k: 'cross', frontOptions: c.frontOptions, holdK: xc && c.xcross && c.source !== 'set' ? ['', 'y', 'y2', "y'"].indexOf(c.xcross.r) : c.holdK, source: c.source === 'set' ? 'set' : 'assumed' })}${xc && c.xcross ? `<span class="small">${pairIcon(c.xcross.pair, r.crossFace)} → ${L('hinten links', 'back left')}</span>` : ''}${practiceBtn(0)}</div>
+    ${!xc && c.xcross?.complete ? `<details class="in-tip in-fold"><summary>💡 ${L(`X-Cross in ${mv(c.xcross.len)} möglich`, `X-cross possible in ${mv(c.xcross.len)}`)}</summary>${pairIcon(c.xcross.pair, r.crossFace)} <b>${[...c.xcross.pair].map((f) => COLOR_NAMES[f]).join('-')}</b> → ${L('hinten links', 'back left')} · ${holdText(c.xcross.hold)}${alg(c.xcross.moves)}</details>` : ''}
+    ${c.colors.length > 1 ? `<details class="in-fold in-colors-box"><summary>${L('Kreuz je Farbe', 'Cross per color')}${bestOther ? ` · <b>${COLOR_NAMES[c.bestColor.face]} −${c.optimal.len - c.bestColor.len}</b>` : ''}</summary><div class="in-colors">${colors}</div></details>` : ''}
   </section>`;
 }
 
-const POS_NAME = {
-  FR: L('Slot vorne rechts', 'front-right slot'),
-  FL: L('Slot vorne links – gespiegelter Alg, keine Drehung nötig', 'front-left slot – mirrored alg, no rotation needed'),
-  BR: L('Slot hinten rechts', 'back-right slot'),
-  BL: L('Slot hinten links', 'back-left slot'),
-};
-const posNote = (b, pos) => `${POS_NAME[pos] || ''}${pos === 'BR' || pos === 'BL' ? (b.rot ? ` – ${L('hier ist eine kurze Drehung', 'a quick rotation')} (${b.rot}) ${L('okay', 'is fine here')}` : ` – ${L('geht ohne Drehung', 'works without rotation')}`) : ''}`;
 const POS_SHORT = { FR: L('vorne rechts', 'front right'), FL: L('vorne links', 'front left'), BR: L('hinten rechts', 'back right'), BL: L('hinten links', 'back left') };
-const practiceBtn = (idx) => `<button type="button" class="ghost small-btn in-practice-btn" data-practice="${idx}">🎯 ${L('Üben ab hier', 'Practice from here')}</button>`;
+/** Wo lag der Slot, und wie wird der Alg ausgeführt? (kurz) */
+const posNote = (b, pos) => `${L('Slot', 'Slot')} ${POS_SHORT[pos] || ''}${b.mirrored && !b.rot ? ` · ${L('gespiegelt', 'mirrored')}` : ''}${b.rot ? ` · ${L('mit', 'with')} ${b.rot}` : pos === 'BR' || pos === 'BL' ? ` · ${L('ohne Drehung', 'no rotation')}` : ''}`;
+const practiceBtn = (idx) => `<button type="button" class="ghost small-btn in-practice-btn" data-practice="${idx}">🎯 ${L('Üben', 'Practice')}</button>`;
 
 /** Haltung: welche Farbe war vorne? antippbar (ohne Gyroskop selbst einstellen) */
 const EDIT = { on: false }; // Haltung bearbeiten (Farbwahl sichtbar) – sonst kompakt
 function frontPicker(p) {
-  if (!EDIT.on) return `<span class="in-front-compact">${colorChip(p.frontOptions[p.holdK])} ${L('vorne', 'front')}</span>`;
-  const src = p.source === 'set' ? L('von dir eingestellt', 'set by you') : p.source === 'gyro' ? L('aus dem Gyroskop', 'from the gyroscope') : L('angenommen – tippe an, welche Farbe vorne war', 'assumed – tap the color that was in front');
+  const src = p.source === 'set' ? '' : p.source === 'gyro' ? ' · Gyro' : ` · ${L('angenommen', 'assumed')}`;
+  if (!EDIT.on) return `<span class="in-front-compact">${colorChip(p.frontOptions[p.holdK])} ${L('vorne', 'front')}<span class="small">${src}</span></span>`;
   return `<div class="in-front"><span class="in-lbl">${L('Vorne', 'Front')}</span>${p.frontOptions
     .map((f, k) => `<button type="button" class="in-fc${k === p.holdK ? ' on' : ''}" data-pair="${p.k}" data-front="${k}" title="${COLOR_NAMES[f]}">${colorChip(f)}</button>`)
-    .join('')}<span class="small">${src}</span></div>`;
+    .join('')}</div>`;
 }
 
 /** F2L-Bild in echten Farben aus der Haltung des Lösers, das Paar an seiner Stelle */
@@ -85,76 +74,71 @@ function pairDiagram(p) {
   return f2lDiagram(d.state, 52, { pair: d.pair, palette });
 }
 
+/** Ein Tipp: Titel, Alg, eine kurze Zeile */
+const tip = (icon, title, a, line, warn) => `<div class="in-tip${warn ? ' warn' : ''}">${icon} <b>${title}</b>${a ? alg(a) : ''}${line ? `<div class="small">${line}</div>` : ''}</div>`;
+const sum = (a, b) => `${a} + ${b} = <b>${a + b}</b>`;
+
 function pairRow(p, r) {
-  const tag = p.free ? `<span class="in-tag good">✓ ${L('mit dem Kreuz', 'with the cross')}</span>` : p.best && !p.best.stuck ? verdict(p.saved) : p.best?.stuck ? '<span class="in-tag warn">⚠</span>' : '';
+  const tag = p.free ? `<span class="in-tag good">✓ ${L('mit Kreuz', 'with cross')}</span>` : p.best && !p.best.stuck ? verdict(p.saved) : p.best?.stuck ? '<span class="in-tag warn">⚠</span>' : '';
   const flag = p.rotation?.unnecessary ? `<span class="in-tag warn">↻</span>` : '';
   const look = p.lookahead || p.eo?.better || p.eo?.allEdges ? `<span class="in-tag">🔭</span>` : '';
-  const head = `<summary class="in-head"><b>${L('Paar', 'Pair')} ${p.k}</b> ${pairIcon(p.slot, r.crossFace)}<span class="small">${mv(p.moves)} · ${formatTime(p.time)}</span>${tag}${flag}${look}</summary>`;
-  if (p.free) return `<details class="in-item in-collapse">${head}<div class="small">✓ ${L('Schon mit dem Kreuz bzw. einem anderen Paar gelöst', 'Already solved with the cross or another pair')}</div></details>`;
+  const head = `<summary class="in-head"><b>${L('Paar', 'Pair')} ${p.k}</b> ${pairIcon(p.slot, r.crossFace)}${p.free ? '' : `<span class="small">${mv(p.moves)} · ${formatTime(p.time)}</span>`}${tag}${flag}${look}</summary>`;
+  if (p.free) return `<details class="in-item in-collapse">${head}<div class="small">✓ ${L('Mit dem Kreuz oder einem anderen Paar gelöst.', 'Solved with the cross or another pair.')}</div></details>`;
   const open = p.saved > 1 || p.rotation?.unnecessary || p.best?.stuck;
   const b = p.best;
   let body;
-  if (!b) body = `<div class="small">${L('Fall nicht eindeutig erkennbar.', 'Case could not be identified.')}</div>`;
-  else if (b.stuck) body = `<div class="small">⚠ ${L('Ecke oder Kante steckte in einem anderen Slot – dafür gibt es keinen Standard-Alg (erst herausholen).', 'Corner or edge was stuck in another slot – no standard alg for that (take it out first).')}</div><div class="in-lbl">${L('Du', 'You')}</div><div class="in-alg mine">${esc(groupAlg(p.userMoves))}</div>`;
+  if (!b) body = `<div class="small">${L('Fall nicht erkannt.', 'Case not recognized.')}</div>`;
+  else if (b.stuck) body = `<div class="small">⚠ ${L('Teil steckte in einem anderen Slot – kein Standard-Alg.', 'Piece was stuck in another slot – no standard alg.')}</div><div class="in-alg mine">${esc(groupAlg(p.userMoves))}</div>`;
   else
     body = `<div class="in-case">${pairDiagram(p) || caseDiagram(b.id, 46)}<div class="in-case-tx">
-        <div class="in-row"><span class="small">${b.id} · ${L('Alg', 'Alg')}: <b>${mv(b.len)}</b></span>${verdict(p.saved)}</div>
-        ${cmpAlgs(p.userMoves, b.alg, 'Alg')}
-        <div class="small">${posNote(b, p.pos)}</div>
+        ${cmpAlgs(p.userMoves, b.alg, `Alg · ${b.len}`)}
+        <div class="small">${b.id} · ${posNote(b, p.pos)}</div>
       </div></div>`;
   let rot = '';
   if (p.rotation) {
     const w = p.rotation.without;
     rot = p.rotation.unnecessary
-      ? `<div class="in-tip warn">↻ ${L('Drehung', 'Rotation')} <b>${p.rotation.name}</b> ${L('vor diesem Paar war unnötig', 'before this pair was unnecessary')}: ${L('mit', 'with')} ${colorChip(p.rotation.fromFront)} ${L('vorne lag der Slot', 'in front the slot was')} ${POS_SHORT[w.pos]} – ${L('ohne Drehung', 'without rotating')}:${alg(w.alg)}</div>`
-      : `<div class="small">↻ ${L('Drehung', 'Rotation')} ${p.rotation.name} – ${L('okay, der Slot lag hinten und ohne Drehung wäre es unhandlich gewesen', 'fine, the slot was in the back and awkward without rotating')}.</div>`;
+      ? tip('↻', `${p.rotation.name} ${L('unnötig', 'unnecessary')}`, w.alg, `${L('Ohne Drehung', 'Without rotating')} · ${colorChip(p.rotation.fromFront)} ${L('vorne', 'front')} · Slot ${POS_SHORT[w.pos]}`, true)
+      : `<div class="small">↻ ${p.rotation.name} – ${L('ok, Slot lag hinten', 'fine, slot was in the back')}</div>`;
   }
-  const easier = p.easier
-    ? `<div class="in-tip">💡 ${L('Leichter wäre gewesen', 'Easier would have been')}: ${pairIcon(p.easier.hold.front + p.easier.hold.right, r.crossFace)} ${p.easier.id} · ${mv(p.easier.len)}${alg(p.easier.alg)}<div class="small">${colorChip(p.easier.hold.front)} ${L('vorne', 'front')}</div></div>`
-    : '';
-  return `<details class="in-item in-collapse"${open ? ' open' : ''}>${head}<div class="in-meta">${frontPicker(p)}${practiceBtn(p.k)}</div>${rot}${body}${easier}${lookTip(p, r)}${eoTip(p)}</details>`;
+  // Vorschläge: höchstens einer zum Paar selbst (leichteres Paar ODER Vorausschau), dazu EO beim letzten Paar
+  const sug = p.lookahead ? lookTip(p, r) : p.easier ? tip('💡', `${L('Leichter', 'Easier')}: ${pairIcon(p.easier.hold.front + p.easier.hold.right, r.crossFace)} ${p.easier.id}`, p.easier.alg, `${mv(p.easier.len)} · ${colorChip(p.easier.hold.front)} ${L('vorne', 'front')}`) : '';
+  return `<details class="in-item in-collapse"${open ? ' open' : ''}>${head}<div class="in-meta">${frontPicker(p)}${practiceBtn(p.k)}</div>${rot}${body}${sug}${eoTip(p)}</details>`;
 }
 
-const handNote = (x) => `${colorChip(x.hold.front)} ${L('vorne', 'front')}${x.mirrored ? ` · ${L('linke Hand', 'left hand')}` : ''}`;
-const nextText = (n) => (n === 0 ? L('danach ist F2L fertig', 'then F2L is done') : L(`nächstes Paar nur ${mv(n)}`, `next pair only ${mv(n)}`));
+const handNote = (x) => `${colorChip(x.hold.front)} ${L('vorne', 'front')}${x.mirrored ? ` · ${L('links', 'left')}` : ''}`;
 
 /** Vorausschau: anderes Paar zuerst oder anderer Alg, damit das nächste Paar leichter wird */
 function lookTip(p, r) {
   const a = p.lookahead;
-  if (!a) return '';
   const title = a.sameSlot
-    ? L('Anderer Alg für dieses Paar macht das nächste leichter', 'A different alg for this pair makes the next one easier')
-    : `${L('Besser zuerst dieses Paar', 'Better do this pair first')} ${pairIcon(a.pairHold.front + a.pairHold.right, r.crossFace)}`;
-  return `<div class="in-tip">🔭 <b>${title}</b>${alg(a.alg)}
-    <div class="small">${a.id} · ${mv(a.len)} → ${nextText(a.next)} · ${L('zusammen', 'together')} <b>${a.total}</b> ${L('statt', 'instead of')} ${a.baseTotal} ${L('Züge', 'moves')} · ${handNote(a)}</div>
-    <div class="small">${L('Kürzester Alg', 'Shortest alg')} ${esc(groupAlg(a.baseAlg))} (${a.baseLen}) → ${L('nächstes Paar', 'next pair')} ${a.baseNext}</div></div>`;
+    ? L('Anderer Alg → nächstes Paar leichter', 'Other alg → next pair easier')
+    : `${L('Erst dieses Paar', 'Do this pair first')} ${pairIcon(a.pairHold.front + a.pairHold.right, r.crossFace)}`;
+  return tip('🔭', title, a.alg, `${L('Paar + nächstes', 'Pair + next')}: ${sum(a.len, a.next)} ${L('statt', 'vs')} ${a.baseLen} + ${a.baseNext} · ${handNote(a)}`);
 }
 
-const ollText = (o) => (!o ? '–' : o.skip ? L('OLL-Skip', 'OLL skip') : `OLL ${o.n ?? '?'} (${mv(o.len)})`);
+const ollText = (o) => (!o ? '–' : o.skip ? 'OLL-Skip' : `OLL ${o.n ?? '?'} · ${mv(o.len)}`);
 /** Letztes Paar: Kanten der letzten Schicht (EO) und OLL gleich mitdenken */
 function eoTip(p) {
   const e = p.eo;
   if (!e) return '';
   const m = e.mine;
-  let html = m ? `<div class="small in-eo">🧭 ${L('Nach deinem letzten Paar', 'After your last pair')}: ${L('Kanten oben', 'Top edges')} <b>${m.eo}/4</b> ${L('richtig', 'oriented')} · ${ollText(m)}</div>` : '';
-  if (e.better)
-    html += `<div class="in-tip">🔭 <b>${L('Letztes Paar mit Blick auf OLL', 'Last pair with OLL in mind')}</b>${alg(e.better.alg)}
-      <div class="small">${mv(e.better.len)} → ${L('Kanten oben', 'top edges')} ${e.better.oll.eo}/4 · ${ollText(e.better.oll)} · ${L('zusammen', 'together')} <b>${e.better.total}</b> ${L('statt', 'instead of')} ${e.better.baseTotal} ${L('Züge', 'moves')} · ${handNote(e.better)}</div></div>`;
-  if (e.allEdges)
-    html += `<div class="in-tip">🧭 <b>${L('Alle Kanten oben richtig (EO)', 'All top edges oriented (EO)')}</b>${alg(e.allEdges.alg)}
-      <div class="small">${mv(e.allEdges.len)} → ${ollText(e.allEdges.oll)} · ${L('zusammen', 'together')} ${e.allEdges.total} ${L('statt', 'instead of')} ${e.allEdges.baseTotal} ${L('Züge', 'moves')} · ${L('Kreuz oben – leichtere OLL-Fälle', 'cross on top – easier OLL cases')} · ${handNote(e.allEdges)}</div></div>`;
+  let html = m ? `<div class="small in-eo">🧭 ${L('Danach', 'After')}: ${L('Kanten oben', 'top edges')} <b>${m.eo}/4</b> · ${ollText(m)}</div>` : '';
+  if (e.better) html += tip('🔭', L('Mit Blick auf OLL', 'With OLL in mind'), e.better.alg, `${L('Paar + OLL', 'Pair + OLL')}: ${sum(e.better.len, e.better.oll.len)} ${L('statt', 'vs')} ${e.better.baseTotal} · ${ollText(e.better.oll)} · ${handNote(e.better)}`);
+  if (e.allEdges) html += tip('🧭', L('Alle Kanten oben richtig', 'All top edges oriented'), e.allEdges.alg, `${L('Paar + OLL', 'Pair + OLL')}: ${sum(e.allEdges.len, e.allEdges.oll.len)} ${L('statt', 'vs')} ${e.allEdges.baseTotal} · ${ollText(e.allEdges.oll)} · ${handNote(e.allEdges)}`);
   return html;
 }
 
-/** OLL/PLL sind feste Algorithmen: nur Fall, Zeiten und eigene Züge – ohne Verbesserungsvorschlag */
+/** OLL/PLL: Fall, Zeiten und eigene Züge (feste Algorithmen, keine Ersparnis) */
 function llRow(name, cls, l) {
   const b = l.best;
   const caseName = b ? (b.id.startsWith('PLL') ? `${b.id.slice(4)}-Perm` : b.id) : '';
-  const head = `<summary class="in-head"><i class="key ${cls}"></i><b>${name}</b>${l.skip ? '<span class="in-tag good">Skip</span>' : caseName ? `<span class="small">${esc(caseName)}</span>` : ''}<span class="small">${mv(l.moves)} · ${formatTime(l.time)}</span></summary>`;
+  const twoLook = l.twoLook ? `<span class="in-tag warn" title="${L(`Direkter Alg: ${b.len} Züge`, `Direct alg: ${b.len} moves`)}">2-Look?</span>` : '';
+  const head = `<summary class="in-head"><i class="key ${cls}"></i><b>${name}</b>${l.skip ? '<span class="in-tag good">Skip</span>' : caseName ? `<span class="small">${esc(caseName)}</span>` : ''}<span class="small">${mv(l.moves)} · ${formatTime(l.time)}</span>${twoLook}</summary>`;
   if (l.skip) return `<details class="in-item in-collapse">${head}<div class="small">🎉 Skip</div></details>`;
   return `<details class="in-item in-collapse">${head}<div class="in-case">${b ? caseDiagram(b.id, 46) : ''}<div class="in-case-tx">
-      <div class="small">${b ? `<b>${esc(caseName)}</b>` : L('Fall nicht eindeutig erkennbar', 'Case not identified')}${l.recog ? ` · Recog ${formatTime(l.recog)} · Exec ${formatTime(Math.max(0, l.time - l.recog))}` : ''}</div>
       <div class="in-alg mine">${esc(groupAlg(l.userMoves)) || '–'}</div>
+      <div class="small">${b ? '' : L('Fall nicht erkannt · ', 'Case not recognized · ')}${l.recog ? `Recog ${formatTime(l.recog)} · Exec ${formatTime(Math.max(0, l.time - l.recog))}` : ''}${l.twoLook ? ` · ${L(`direkt: ${mv(b.len)}`, `direct: ${mv(b.len)}`)}` : ''}</div>
     </div></div><div class="in-actions">${practiceBtn(name === 'OLL' ? 5 : 6)}</div></details>`;
 }
 
@@ -162,9 +146,9 @@ function llRow(name, cls, l) {
 function rotSummary(r) {
   const anyAssumed = r.pairs.some((p) => !p.free && p.source === 'assumed');
   const ro = r.rotations;
-  if (ro.count) return `<div class="in-rot${ro.unnecessary ? ' warn' : ''}">↻ ${ro.count} ${ro.count === 1 ? L('Rotation', 'rotation') : L('Rotations', 'rotations')}${ro.unnecessary ? ` · <b>${ro.unnecessary} ${L('davon unnötig', 'unnecessary')}</b>` : ''}</div>`;
-  if (anyAssumed) return `<div class="small in-rot-hint">${L('Ohne Gyroskop: Über „✎ Haltung einstellen“ angeben, welche Farbe vorne war – dann bewertet die Analyse deine Rotations.', 'Without gyroscope: use “✎ Set hold” to say which color was in front – then the analysis rates your rotations.')}</div>`;
-  return `<div class="small">✓ ${L('Keine Rotations im F2L', 'No rotations during F2L')}</div>`;
+  if (ro.count) return `<div class="in-rot${ro.unnecessary ? ' warn' : ''}">↻ ${ro.count} Rotation${ro.count === 1 ? '' : 's'}${ro.unnecessary ? ` · <b>${ro.unnecessary} ${L('unnötig', 'unnecessary')}</b>` : ''}</div>`;
+  if (anyAssumed) return `<div class="small in-rot-hint">${L('Rotations bewerten: „✎ Haltung“ einstellen.', 'Rate rotations: set “✎ Hold”.')}</div>`;
+  return `<div class="small">✓ ${L('Keine Rotations', 'No rotations')}</div>`;
 }
 
 const PHASE_TITLE = (i) => (i === 0 ? 'Cross' : i <= 4 ? `${L('Paar', 'Pair')} ${i}` : i === 5 ? 'OLL' : 'PLL');
@@ -348,7 +332,7 @@ export class InsightsView {
   render(solve) {
     let r;
     try {
-      r = solveInsights(solve, { extraAlgs: this.deps.extraAlgs, fronts: this.fronts });
+      r = solveInsights(solve, { extraAlgs: this.deps.extraAlgs, crossColors: this.deps.crossColors?.() || [], fronts: this.fronts });
       this.result = r;
     } catch (err) {
       console.error(err);
@@ -361,22 +345,20 @@ export class InsightsView {
     const total = solve.moveCount ?? solve.solution.split(' ').length;
     const summary =
       r.saved > 1
-        ? `<div class="in-summary"><b>${L('Mögliche Ersparnis', 'Possible savings')}: ~${mv(r.saved)}</b>${secs ? ` <span>≈ ${dec(secs / 1000, 1)} s ${L('bei deinem Tempo', 'at your pace')}</span>` : ''}
-            <div class="small">${L(`${total} → ${total - r.saved} Züge, wenn jede Phase den kürzesten bekannten Weg nimmt.`, `${total} → ${total - r.saved} moves if every phase takes the shortest known way.`)}</div></div>`
-        : `<div class="in-summary good"><b>✓ ${L('Sehr effizient gelöst', 'Very efficient solve')}</b><div class="small">${L('Kaum Einsparpotenzial bei den Zügen.', 'Hardly any moves to save.')}</div></div>`;
+        ? `<div class="in-summary"><b>~${mv(r.saved)} ${L('sparbar', 'to save')}</b>${secs ? ` <span>≈ ${dec(secs / 1000, 1)} s</span>` : ''}<div class="small">${total} → ${total - r.saved} ${L('Züge mit den kürzesten Wegen (Cross + F2L)', 'moves with the shortest ways (cross + F2L)')}</div></div>`
+        : `<div class="in-summary good"><b>✓ ${L('Sehr effizient', 'Very efficient')}</b></div>`;
     this.dlg.innerHTML = `<div class="rp-head"><div><h2>${L('Analyse', 'Analysis')}</h2><div class="small">${formatSolve(solve)} · ${mv(total)}</div></div>
       <button type="button" class="rp-close" data-act="close" aria-label="${L('Schließen', 'Close')}">✕</button></div>
       <div class="in-practice" hidden></div>
       ${summary}
-      <div class="in-toolbar"><button type="button" class="ghost small-btn${EDIT.on ? ' on' : ''}" data-act="edit-hold">${EDIT.on ? `✓ ${L('Haltung fertig', 'Hold done')}` : `✎ ${L('Haltung (vorne) einstellen', 'Set hold (front)')}`}</button></div>
-      <section class="in-sec in-scr"><h3>Scramble</h3><div class="in-alg">${esc(r.scramble) || L('(eigenes Scramble)', '(own scramble)')}</div></section>
+      <div class="in-toolbar"><button type="button" class="ghost small-btn${EDIT.on ? ' on' : ''}" data-act="edit-hold">${EDIT.on ? `✓ ${L('Fertig', 'Done')}` : `✎ ${L('Haltung', 'Hold')}`}</button></div>
+      <details class="in-sec in-scr in-fold"><summary><b>Scramble</b></summary><div class="in-alg">${esc(r.scramble) || L('(eigenes Scramble)', '(own scramble)')}</div></details>
       ${crossSection(r)}
       <section class="in-sec"><h3><i class="key ph-pair"></i>F2L</h3>${rotSummary(r)}${r.pairs.map((p) => pairRow(p, r)).join('')}</section>
       <section class="in-sec"><h3><i class="key ph-oll"></i>${L('Letzte Schicht', 'Last layer')}</h3>${llRow('OLL', 'ph-oll', r.oll)}${llRow('PLL', 'ph-pll', r.pll)}</section>
-      <section class="in-sec"><h3>${L('Deine Lösung', 'Your solution')}</h3>
-        <div class="small">${L('Mit Kreuz unten', 'With cross down')} (${holdText(r.cross.optimal.hold)})</div>
+      <details class="in-sec in-fold"><summary><b>${L('Ganze Lösung', 'Full solution')}</b> <span class="small">${holdText(r.cross.optimal.hold)}</span></summary>
         <div class="in-sol">${r.solution.map((p) => `<div class="in-lbl">${NAMES[p.key] || p.key}</div><div class="in-alg mine">${esc(groupAlg(p.moves))}</div>`).join('')}</div>
-      </section>
-      <p class="small in-note">${L('Vergleich mit dem optimalen Kreuz/X-Cross und den kürzesten geprüften F2L-Algorithmen (Datenbank und deine eigenen). OLL/PLL sind feste Algorithmen und zählen nicht zur Ersparnis. Alle Züge mit Kreuz unten, gehalten wie angegeben.', 'Compared with the optimal cross/X-cross and the shortest verified F2L algorithms (database and your own). OLL/PLL are fixed algorithms and don’t count towards savings. All moves with the cross down, held as shown.')}</p>`;
+      </details>
+      <p class="small in-note emoji-help">${L('Legende: ✓ effizient · −n möglich = Züge sparbar · ↻ Rotation · 🔭 Vorausschau · 🧭 Kanten oben (EO) · Vergleich mit optimalem Kreuz und kürzesten F2L-Algs (Datenbank + eigene).', 'Legend: ✓ efficient · −n possible = moves to save · ↻ rotation · 🔭 lookahead · 🧭 top edges (EO) · compared with optimal cross and shortest F2L algs (database + own).')}</p>`;
   }
 }

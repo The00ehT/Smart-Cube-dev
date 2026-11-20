@@ -175,8 +175,10 @@ export function solveInsights(solve, opts = {}) {
   // Dafür die Haltung (y-Drehung) wählen, in der das günstigste Paar hinten links liegt –
   // oder die eingestellte Haltung nehmen.
   let x = null;
+  // Hat der Nutzer selbst ein X-Cross gemacht, zählt jeder Slot (alle Haltungen) – sonst wäre „optimal“ evtl. länger als seins
+  const xHolds = ck != null && !a.xcross ? [Y[ck]] : Y;
   try {
-    for (const r of ck != null ? [Y[ck]] : Y) {
+    for (const r of xHolds) {
       const cand = solveXCross(view(start, face, r), { slots: ['BL'], maxDepth: x ? x.length - 1 : 11 });
       if (cand && (!x || cand.length < x.length)) x = { ...cand, r, hold: holdColors(start, face, r) };
     }
@@ -194,11 +196,19 @@ export function solveInsights(solve, opts = {}) {
     colors,
     bestColor: colors.reduce((p, c) => (c.len < p.len ? c : p)),
   };
+  // Eingestellte Kreuzfarben: nur diese vergleichen (eine Farbe → kein Farbvergleich, er wäre nur Rauschen)
+  const mineSet = (opts.crossColors || []).filter((f) => FACES.includes(f));
+  if (mineSet.length) {
+    const own = colors.filter((c) => mineSet.includes(c.face) || c.face === face);
+    out.cross.colors = own.length > 1 ? own : [];
+    out.cross.bestColor = own.reduce((p, c) => (c.len < p.len ? c : p));
+  }
   // Bei X-Cross mit X-Cross vergleichen, sonst mit dem Kreuz.
   // Wurden mit dem Kreuz gleich mehrere Paare fertig (XX-Cross …), gibt es keinen fairen Vergleich.
   out.cross.multi = ph[1].moves === 0 && ph[2].moves === 0;
-  const crossRef = a.xcross && x ? x.length : mine.len;
-  out.cross.saved = out.cross.multi ? 0 : Math.max(0, ph[0].moves - crossRef);
+  // X-Cross ohne gefundene Referenz (Suche abgebrochen): keine Ersparnis behaupten
+  const crossRef = a.xcross ? x?.length : mine.len;
+  out.cross.saved = out.cross.multi || crossRef == null ? 0 : Math.max(0, ph[0].moves - crossRef);
 
   // ---------- F2L ----------
   // Haltung je Paar (welche Farbe vorne): selbst eingestellt, sonst aus dem Gyroskop (gemessene y-Drehungen),

@@ -51,7 +51,7 @@ translateStatic(); // feste Texte der Seite (bei Englisch)
 const SOLVES_KEY = 'smartcube.solves.v1';
 const SETTINGS_KEY = 'smartcube.settings.v1';
 
-const settings = { keepAwake: true, inspection: false, autoScramble: true, hideTime: false, gyro: true, viewDown: 'auto', theme: 'auto', replayGyro: true, showResult: true, emojiHelp: true, crossColor: 'auto', scrambleType: 'wca', ...load(SETTINGS_KEY, {}) };
+const settings = { crossColors: null, keepAwake: true, inspection: false, autoScramble: true, hideTime: false, gyro: true, viewDown: 'auto', theme: 'auto', replayGyro: true, showResult: true, emojiHelp: true, crossColor: 'auto', scrambleType: 'wca', ...load(SETTINGS_KEY, {}) };
 let solves = load(SOLVES_KEY, []);
 // Früher zählte TPS jede Vierteldrehung (R2 = 2): einmalig auf HTM umrechnen, passend zur Zugzahl
 {
@@ -300,16 +300,26 @@ function maybeResync() {
 
 /** Leichtes Scramble: Kreuzkanten (und ggf. ein Paar) der eigenen Kreuzfarbe schon gelöst */
 async function easyScramble(type) {
-  const target = easyState(applyAlg(SOLVED, await randomScramble()), crossFace(), type);
+  const target = easyState(applyAlg(SOLVED, await randomScramble()), crossFaceForScramble(), type);
   return setupAlgFor(target);
 }
 
-/** Kreuzfarbe des Nutzers: Einstellung oder häufigste der letzten 50 Solves (Standard Weiß) */
+/** Eingestellte Kreuzfarben (leer = automatisch); alte Einstellung (eine Farbe) übernehmen */
+if (!Array.isArray(settings.crossColors)) settings.crossColors = settings.crossColor && settings.crossColor !== 'auto' ? [settings.crossColor] : [];
+const crossColors = () => settings.crossColors.filter((f) => 'URFDLB'.includes(f));
+
+/** Kreuzfarbe des Nutzers: unter den eingestellten (bzw. allen) die häufigste der letzten 50 Solves (Standard Weiß) */
 function crossFace() {
-  if (settings.crossColor && settings.crossColor !== 'auto') return settings.crossColor;
+  const set = crossColors();
+  if (set.length === 1) return set[0];
   const count = {};
-  for (const s of solves.slice(-50)) if (s.crossFace) count[s.crossFace] = (count[s.crossFace] || 0) + 1;
-  return Object.entries(count).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'U';
+  for (const s of solves.slice(-50)) if (s.crossFace && (!set.length || set.includes(s.crossFace))) count[s.crossFace] = (count[s.crossFace] || 0) + 1;
+  return Object.entries(count).sort((a, b) => b[1] - a[1])[0]?.[0] ?? set[0] ?? 'U';
+}
+/** Für leichte Scrambles: bei mehreren Farben jedes Mal zufällig eine davon (Color-Neutral üben) */
+function crossFaceForScramble() {
+  const set = crossColors();
+  return set.length > 1 ? set[Math.floor(Math.random() * set.length)] : crossFace();
 }
 
 async function randomScramble() {
@@ -534,6 +544,7 @@ $('result-overlay').addEventListener('click', (e) => {
 const insights = new InsightsView($('insights-dialog'), {
   // eigene Algorithmen des Nutzers zusätzlich prüfen
   extraAlgs: (id) => (algsOf(id).own ? algsOf(id).algs : []),
+  crossColors: () => crossColors(),
   state: () => app.state,
   now: () => now(),
   persist: () => persistSolves(), // eingestellte Haltungen („vorne“) am Solve speichern
@@ -1854,11 +1865,42 @@ $('opt-lang').addEventListener('change', (e) => {
   location.reload(); // alle Texte neu aufbauen
 });
 
-$('opt-cross').value = settings.crossColor;
-$('opt-cross').addEventListener('change', (e) => {
-  settings.crossColor = e.target.value;
+// Kreuzfarben: Auswahlfenster mit Checkboxen (keine = automatisch)
+const CROSS_ORDER = ['U', 'D', 'F', 'B', 'R', 'L'];
+function renderCrossBtn() {
+  const set = crossColors();
+  $('opt-cross-btn').innerHTML = set.length
+    ? `${set.map((f) => colorChip(f)).join('')} ${set.map((f) => COLOR_NAMES[f]).join(', ')} ▾`
+    : `${L('Automatisch', 'Automatic')} (${COLOR_NAMES[crossFace()]}) ▾`;
+}
+function openCrossDialog() {
+  const set = crossColors();
+  const d = $('cross-dialog');
+  d.innerHTML = `<div class="rp-head"><div><h2>${L('Cross-Farben', 'Cross colors')}</h2>
+      <div class="small">${L('Mehrere wählen = Color-Neutral. Keine = automatisch.', 'Pick several = color neutral. None = automatic.')}</div></div>
+      <button type="button" class="rp-close" data-act="close" aria-label="${L('Schließen', 'Close')}">✕</button></div>
+    <div class="cross-checks">${CROSS_ORDER.map((f) => `<label class="cross-check"><input type="checkbox" value="${f}"${set.includes(f) ? ' checked' : ''} />${colorChip(f)} ${COLOR_NAMES[f]}</label>`).join('')}</div>
+    <menu><button type="button" class="ghost" data-act="none">${L('Automatisch', 'Automatic')}</button><button type="button" data-act="close">${L('Fertig', 'Done')}</button></menu>`;
+  d.showModal();
+}
+$('opt-cross-btn').addEventListener('click', openCrossDialog);
+$('cross-dialog').addEventListener('change', () => {
+  settings.crossColors = [...$('cross-dialog').querySelectorAll('input:checked')].map((x) => x.value);
   save(SETTINGS_KEY, settings);
+  renderCrossBtn();
 });
+$('cross-dialog').addEventListener('click', (e) => {
+  const d = $('cross-dialog');
+  if (e.target.closest('[data-act=none]')) {
+    d.querySelectorAll('input').forEach((x) => (x.checked = false));
+    settings.crossColors = [];
+    save(SETTINGS_KEY, settings);
+    renderCrossBtn();
+  }
+  if (e.target === d || e.target.closest('[data-act=close]')) d.close();
+});
+$('cross-dialog').addEventListener('close', () => algsView.render?.());
+renderCrossBtn();
 
 // ---------------- Tabs ----------------
 

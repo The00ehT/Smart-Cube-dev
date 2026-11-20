@@ -1312,3 +1312,17 @@ body.solving .room-minis:not([hidden]) { display: flex !important; }
 .rp-hold .in-fc .chip-color { width: 15px; height: 15px; }
 
 body.no-emoji-help .emoji-help { display: none; }
+
+/* Cross-Farben (Mehrfachauswahl) */
+#opt-cross-btn { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; text-align: left; }
+.cross-checks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+.cross-check { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); font-weight: 600; }
+.cross-check:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.cross-check input { width: 18px; height: 18px; margin: 0; }
+/* Analyse: Zahlen in der Überschrift */
+.in-sec h3 .in-h-num { font-weight: 500; margin-left: 4px; }
+.in-sec h3 .in-tag { margin-left: auto; }
+details.in-sec > summary { cursor: pointer; list-style: none; }
+details.in-sec > summary::before { content: '▸ '; color: var(--muted); }
+details.in-sec[open] > summary::before { content: '▾ '; }
+details.in-sec[open] > summary { margin-bottom: 8px; }
