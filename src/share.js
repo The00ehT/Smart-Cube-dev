@@ -36,7 +36,11 @@ export function encodeShare(solve) {
   else if (solve.penalty) q.set('p', '2');
   if (solve.date) q.set('d', new Date(solve.date).getTime().toString(36));
   if (solve.name) q.set('n', solve.name.slice(0, 24));
-  if (solve.front) q.set('o', String(solve.front)); // Haltung: welche Farbe vorne (0–3)
+  // Haltung je Phase (Kreuz, Paar 1–4): welche Farbe vorne (0–3, „-“ = wie davor); alt: eine Ziffer fürs Kreuz
+  const fr = { ...(solve.fronts || {}) };
+  if (fr.cross == null && solve.front) fr.cross = solve.front;
+  const o = ['cross', 1, 2, 3, 4].map((k) => (fr[k] == null ? '-' : String(((Number(fr[k]) % 4) + 4) % 4))).join('').replace(/-+$/, '');
+  if (o) q.set('o', o);
   if (solve.gyro) {
     q.set('g', solve.gyro.rotations.map((r) => `${r.t.toString(36)}~${ROT24.findIndex((x) => x.name === r.name).toString(36)}`).join('.'));
     if (solve.gyro.regrips.length) q.set('h', solve.gyro.regrips.map((t) => t.toString(36)).join('.'));
@@ -65,7 +69,7 @@ export function decodeShare(str) {
     penalty: p === 'd' ? 'DNF' : p === '2' ? 2000 : 0,
     date: d ? new Date(parseInt(d, 36)).toISOString() : null,
     name: (q.get('n') || '').slice(0, 24),
-    front: Math.max(0, Math.min(3, Number(q.get('o')) || 0)),
+    ...decodeFronts(q.get('o') || ''),
     gyro: q.has('g')
       ? {
           v0: '',
@@ -88,4 +92,13 @@ export function decodeShare(str) {
 export function shareUrl(solve) {
   const base = location.href.split('#')[0];
   return `${base}#${encodeShare(solve)}`;
+}
+
+/** „o“ aus dem Link: Haltung je Phase (Kreuz, Paar 1–4) */
+function decodeFronts(o) {
+  const fronts = {};
+  ['cross', 1, 2, 3, 4].forEach((k, i) => {
+    if (/[0-3]/.test(o[i] || '')) fronts[k] = Number(o[i]);
+  });
+  return { fronts, front: fronts.cross || 0 };
 }

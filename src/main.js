@@ -1418,6 +1418,14 @@ bindToggle('opt-gyro', 'gyro', (on) => {
 });
 replay.useGyro = settings.replayGyro;
 replay.onRace = (sol) => raceAgainst(sol, sol.name ? `${sol.name} (${formatTime(analyzeSolve(sol.start, sol.moves, sol.times).time)})` : L('Geteilter Solve', 'Shared solve'));
+// Haltung je Paar aus der Rekonstruktion am eigenen Solve speichern (gleiche Werte wie in der Analyse)
+replay.onFronts = (sol, fronts) => {
+  const own = sol.date && solves.find((x) => x.date === sol.date && x.time === sol.time);
+  if (!own) return;
+  own.fronts = fronts;
+  own.front = fronts.cross || 0;
+  persistSolves();
+};
 replay.onGyroToggle = (on) => {
   settings.replayGyro = on;
   save(SETTINGS_KEY, settings);

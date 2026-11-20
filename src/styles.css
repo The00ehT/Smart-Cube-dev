@@ -1305,3 +1305,8 @@ body.solving .room-minis:not([hidden]) { display: flex !important; }
 .fr-name { display: grid; flex: 1; min-width: 0; }
 .fr-name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fr-pb { white-space: nowrap; }
+
+/* Rekonstruktion: Haltung je Phase */
+.rp-hold { display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; }
+.rp-hold .in-fc { padding: 2px; }
+.rp-hold .in-fc .chip-color { width: 15px; height: 15px; }

@@ -10,6 +10,7 @@ import { moveCounts } from '../metrics.js';
 import { TwistyPlayer } from 'cubing/twisty';
 import { SOLVED, applyAlg, applyAnyAlg, CROSS_DOWN, COLOR_NAMES } from '../cube/facelets.js';
 const YR = ['', 'y', 'y2', "y'"];
+const mod4 = (n) => ((n % 4) + 4) % 4;
 import { viewerEvents } from '../cube/gyro.js';
 import { analyzeSolve, PHASE_NAMES } from '../cube/analysis.js';
 import { setupAlgFor } from './cube-view.js';
@@ -56,8 +57,8 @@ export class Replay {
           </div>
         </div>
         <div class="rp-side">
-          <div class="rp-phases"></div>
           <div class="rp-front"></div>
+          <div class="rp-phases"></div>
           <label class="toggle rp-gyro-toggle" hidden><input type="checkbox" class="rp-gyro" checked /> ${L('Rotations &amp; Regrips zeigen (Gyro)', 'Show rotations &amp; regrips (gyro)')}</label>
           <div class="rp-actions">
             <button class="rp-share primary">${L('Teilen', 'Share')}</button>
@@ -95,13 +96,30 @@ export class Replay {
       }
     });
     $('.rp-share', dialog).addEventListener('click', () => this.share());
-    // Haltung: welche Farbe vorne (gilt für Ansicht, Notation und den Teilen-Link)
+    // Haltung je Phase (Kreuz und jedes Paar): welche Farbe vorne – gilt für Ansicht, Notation und den Teilen-Link.
+    // Gleiche Werte wie in der Analyse (solve.fronts: { cross, 1, 2, 3, 4 }).
     $('.rp-front', dialog).addEventListener('click', (e) => {
+      if (!e.target.closest('[data-act=edit-hold]')) return;
+      this.editHold = !this.editHold;
+      this.renderFront();
+      this.renderPhases();
+    });
+    $('.rp-phases', dialog).addEventListener('click', (e) => {
       const b = e.target.closest('[data-rfront]');
       if (!b || !this.solve) return;
-      this.solve.front = Number(b.dataset.rfront);
+      e.stopPropagation();
+      const [key, k] = b.dataset.rfront.split('|');
+      const f = { ...this.fronts() };
+      f[key] = Number(k);
+      // Paare, die noch nicht eingestellt sind, behalten die Haltung davor (keine Drehung)
+      this.solve.fronts = f;
+      this.solve.front = f.cross || 0;
+      this.pause();
+      const mi = this.events?.[Math.max(0, (this.k || 0) - 1)]?.i; // gleichen Zug wieder anzeigen
       this.build();
-      this.renderFront();
+      const at = mi == null ? 0 : this.events.findIndex((ev) => ev.kind === 'move' && ev.i === mi) + 1;
+      this.seekMove(Math.max(0, at));
+      this.onFronts?.(this.solve, f);
     });
     $('.rp-race', dialog).addEventListener('click', () => {
       dialog.close();
@@ -110,6 +128,7 @@ export class Replay {
     $('.rp-gyro', dialog).addEventListener('change', (e) => {
       this.useGyro = e.target.checked;
       this.pause();
+      this.renderFront();
       this.build();
       this.seekMove(0);
       this.onGyroToggle?.(this.useGyro);
@@ -170,23 +189,58 @@ export class Replay {
     this.seekMove(0);
   }
 
-  /** Farbwahl „vorne“ (4 Seitenfarben bei Kreuz unten) */
+  /** Haltungen je Phase: { cross, 1..4 } (alte Links/Solves: nur „front“ fürs Kreuz) */
+  fronts() {
+    const f = { ...(this.solve.fronts || {}) };
+    if (f.cross == null && this.solve.front) f.cross = this.solve.front;
+    return f;
+  }
+
+  /** Farbe vorne bei Haltung k (Kreuz unten) */
+  frontColor(k) {
+    return applyAnyAlg(SOLVED, `${CROSS_DOWN[this.analysis.crossFace]} ${YR[k]}`)[22];
+  }
+
+  /** Haltung je Phase gilt nur ohne Gyro-Drehungen (mit Gyro sind die echten Drehungen bekannt) */
+  get holdByPhase() {
+    return !(this.hasGyro && this.useGyro);
+  }
+
+  /** Knopf „Haltung einstellen“ (Auswahl je Phase ein-/ausblenden) */
   renderFront() {
-    const face = this.analysis.crossFace;
-    const k = this.solve.front || 0;
-    $('.rp-front', this.dlg).innerHTML = `<span class="small">${L('Vorne', 'Front')}</span>${YR.map((r, i) => {
-      const f = applyAnyAlg(SOLVED, `${CROSS_DOWN[face]} ${r}`)[22];
-      return `<button type="button" class="in-fc${i === k ? ' on' : ''}" data-rfront="${i}" title="${COLOR_NAMES[f]}">${colorChip(f)}</button>`;
-    }).join('')}`;
+    const box = $('.rp-front', this.dlg);
+    box.hidden = !this.holdByPhase;
+    box.innerHTML = `<button type="button" class="ghost small-btn" data-act="edit-hold">${this.editHold ? `✓ ${L('Haltung fertig', 'Hold done')}` : `✎ ${L('Haltung (vorne) je Paar einstellen', 'Set hold (front) per pair')}`}</button>`;
+  }
+
+  /** Haltungen der Phasen als Liste [Kreuz, Paar 1..4] – nicht eingestellte Paare übernehmen die vorige */
+  holds() {
+    const f = this.fronts();
+    const out = [mod4(f.cross || 0)];
+    for (let k = 1; k <= 4; k++) out.push(f[k] != null ? mod4(f[k]) : out[k - 1]);
+    return out;
   }
 
   /** Ereignisliste (Züge aus Sicht des Lösers, ggf. Drehungen und Griffwechsel) neu aufbauen */
   build() {
     const s = this.solve;
-    const v0 = `${CROSS_DOWN[this.analysis.crossFace]} ${YR[this.solve.front || 0]}`.trim();
+    const holds = this.holds();
+    const v0 = `${CROSS_DOWN[this.analysis.crossFace]} ${YR[holds[0]]}`.trim();
     const gyro = this.hasGyro && this.useGyro ? s.gyro : null;
+    // Ohne Gyro: eingestellte Haltung je Paar als y-Drehung vor dem ersten Zug des Paares
+    const rotations = gyro?.rotations ? [...gyro.rotations] : [];
+    if (!gyro) {
+      let cur = holds[0];
+      for (let k = 1; k <= 4; k++) {
+        const p = this.analysis.phases[k];
+        if (!p?.moves) continue;
+        const steps = mod4(holds[k] - cur);
+        if (steps) rotations.push({ t: s.times[p.start] ?? 0, name: YR[steps] });
+        cur = holds[k];
+      }
+    }
     // Kreuz unten; mit Gyro zusätzlich die gemessenen Drehungen
-    const ev = viewerEvents(s.moves, s.times, { v0, rotations: gyro?.rotations || [] });
+    const ev = viewerEvents(s.moves, s.times, { v0, rotations });
     for (const t of gyro?.regrips || []) {
       const at = ev.findIndex((e) => e.t > t);
       ev.splice(at < 0 ? ev.length : at, 0, { kind: 'grip', text: '✋', t });
@@ -244,6 +298,7 @@ export class Replay {
 
   renderPhases() {
     const a = this.analysis;
+    const holdsNow = this.holds();
     const rows = a.phases.map((p, pi) => {
       const r = this.phaseRange(pi);
       const mv = r
@@ -253,11 +308,20 @@ export class Replay {
         : '';
       const rots = r ? this.events.slice(r[0], r[1] + 1).filter((e) => e.kind === 'rot').length : 0;
       const slot = p.slot ? ` ${pairIcon(p.slot, this.analysis?.crossFace)}` : '';
+      // Haltung (vorne) fürs Kreuz und jedes Paar mit Zügen
+      let hold = '';
+      if (this.holdByPhase && pi <= 4 && (pi === 0 || p.moves)) {
+        const key = pi === 0 ? 'cross' : String(pi);
+        const cur = holdsNow[pi];
+        hold = this.editHold
+          ? `<span class="rp-hold">${YR.map((_, i) => `<button type="button" class="in-fc${i === cur ? ' on' : ''}" data-rfront="${key}|${i}" title="${COLOR_NAMES[this.frontColor(i)]}">${colorChip(this.frontColor(i))}</button>`).join('')}</span>`
+          : `<span class="rp-hold small" title="${L('vorne', 'front')}">${colorChip(this.frontColor(cur))}</span>`;
+      }
       const skip = p.skip ? ' <span class="tag">Skip</span>' : '';
       const recog = p.recog > 0 ? `<span class="small">Recog ${formatTime(p.recog)}</span>` : '';
       const rotTag = rots ? `<span class="small">${rots} Rot.</span>` : '';
       return `<div class="rp-ph ph-${/^p\d$/.test(p.key) ? 'pair' : p.key}">
-        <div class="rp-ph-head"><b>${PHASE_NAMES[p.key]}</b>${slot}${skip}
+        <div class="rp-ph-head"><b>${PHASE_NAMES[p.key]}</b>${slot}${skip}${hold}
           <span class="rp-ph-num">${formatTime(p.time)} · ${p.moves} Z.</span>${recog}${rotTag}</div>
         <div class="rp-ph-moves">${mv || '<span class="small">–</span>'}</div>
       </div>`;
