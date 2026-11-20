@@ -1288,3 +1288,20 @@ body.solving .room-minis:not([hidden]) { display: flex !important; }
 .in-toolbar { display: flex; justify-content: flex-end; margin: -4px 0 8px; }
 .in-toolbar .on { background: var(--accent-soft); color: var(--accent); }
 .rp-front { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+
+/* OLL/PLL-Karten: Zeit und Häufigkeit je in einer Zeile */
+.cc-stats, .case-card .cc-freq { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.case-card .cc-freq { font-size: 12px; color: var(--muted); }
+
+/* ---------- Freunde ---------- */
+.pv-friends { display: grid; gap: 10px; margin-top: 6px; }
+.fr-code { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fr-code b { font-family: var(--mono); letter-spacing: 0.06em; }
+.fr-add { display: flex; gap: 8px; }
+.fr-add input { flex: 1; min-width: 0; text-transform: uppercase; font-family: var(--mono); }
+.fr-list { display: grid; gap: 6px; }
+.fr-row { display: flex; align-items: center; gap: 10px; text-align: left; padding: 8px 10px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); width: 100%; color: inherit; }
+.fr-row .avatar { width: 36px; height: 36px; flex: none; }
+.fr-name { display: grid; flex: 1; min-width: 0; }
+.fr-name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fr-pb { white-space: nowrap; }

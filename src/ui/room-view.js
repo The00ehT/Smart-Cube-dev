@@ -11,6 +11,7 @@ import { liveStage, barHtml, liveCrossFace } from './live-bar.js';
 import { cfopTable } from './cfop-table.js';
 import { colorChip } from './replay.js';
 import { groupAlg } from '../cube/alg-format.js';
+import { SKIN_PRESETS } from './cube3d.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const STATUS = {
@@ -28,6 +29,7 @@ export class RoomView {
     this.strip = strip;
     this.h = handlers;
     this.cards = new Map(); // id → { el, cube, phase, startedAt, state }
+    this.skins = new Map(); // id → Würfel-Aussehen der anderen
     panel.innerHTML = `
       <div class="room-head">
         <div>
@@ -73,6 +75,12 @@ export class RoomView {
       if (e.target === this.info || e.target.closest('[data-act=close]')) return this.info.close();
       const r = e.target.closest('[data-round]');
       if (r) return this.openRound(Number(r.dataset.round));
+      const fr = e.target.closest('[data-friend]');
+      if (fr) {
+        fr.disabled = true;
+        fr.textContent = L('✓ Anfrage gesendet', '✓ Request sent');
+        return this.h.onAddFriend?.(fr.dataset.friend);
+      }
       const pp = e.target.closest('[data-person]');
       if (pp) return this.openHistory(pp.dataset.person);
       const rp = e.target.closest('[data-replay]');
@@ -137,9 +145,25 @@ export class RoomView {
       c.miniEl?.remove();
     }
     this.cards.clear();
+    this.skins.clear();
     const minis = document.getElementById('room-minis');
     if (minis) minis.hidden = true;
     this.room = null;
+  }
+
+  /** Aussehen des Würfels einer Person (kommt per Nachricht „skin“) */
+  setSkin(id, skin) {
+    this.skins.set(id, skin);
+    const c = this.cards.get(id);
+    if (!c || c.me) return;
+    c.skin = skin;
+    for (const v of [c.cube, c.mini]) v?.setSkin(skin);
+    if (this.watchId === id && this.watch.open) this.watchCube?.setSkin(skin);
+  }
+
+  /** Eigenes Aussehen (Einstellungen geändert) – nur die eigene Karte */
+  setOwnSkin(skin) {
+    for (const c of this.cards.values()) if (c.me) c.cube?.setSkin(skin);
   }
 
   message(text) {
@@ -178,6 +202,8 @@ export class RoomView {
         c = { el, cube: null, phase: 'idle', startedAt: 0, last: null, state: SOLVED, moves: [], times: [], start: null, recent: [], me };
         // Live-Würfel für alle – auch für dich selbst
         c.cube = new CubeView(el.querySelector('.person-cube'));
+        c.skin = me ? null : this.skins.get(p.id) || SKIN_PRESETS.gan; // die anderen mit ihrem eigenen Würfel
+        if (c.skin) c.cube.setSkin(c.skin);
         // Im Timer-Tab: kleine Live-Würfel der anderen unter dem eigenen großen Würfel
         const minis = document.getElementById('room-minis');
         if (!me && minis) {
@@ -189,6 +215,7 @@ export class RoomView {
           minis.append(c.miniEl);
           minis.hidden = false;
           c.mini = new CubeView(c.miniEl.querySelector('.rm-cube'));
+          c.mini.setSkin(c.skin);
         }
         this.cards.set(p.id, c);
       }
@@ -310,7 +337,7 @@ export class RoomView {
       .join('');
     const valid = rounds.map((b) => eff(b.results[id])).filter(Number.isFinite);
     const tile = (v, k) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`;
-    this.info.innerHTML = `<div class="rp-head"><div class="wv-who"><span class="avatar">${avatarHtml({ name: p.name, avatar: p.avatar })}</span><div><h2>${esc(p.name)}${me ? ` (${L('du', 'you')})` : ''}</h2><div class="small">${L('Verlauf in diesem Raum', 'History in this room')} · ${rounds.length} ${L('Runden', 'rounds')}</div></div></div>
+    this.info.innerHTML = `<div class="rp-head"><div class="wv-who"><span class="avatar">${avatarHtml({ name: p.name, avatar: p.avatar })}</span><div><h2>${esc(p.name)}${me ? ` (${L('du', 'you')})` : ''}</h2><div class="small">${L('Verlauf in diesem Raum', 'History in this room')} · ${rounds.length} ${L('Runden', 'rounds')}</div>${!me && p.fc && !this.h.isFriend?.(p.fc) ? `<button type="button" class="ghost small-btn" data-friend="${esc(p.fc)}">＋ ${L('Als Freund hinzufügen', 'Add as friend')}</button>` : !me && p.fc ? `<span class="tag">👥 ${L('Freund', 'Friend')}</span>` : ''}</div></div>
         <button type="button" class="rp-close" data-act="close" aria-label="${L('Schließen', 'Close')}">✕</button></div>
       ${rounds.length
         ? `<div class="stats">
@@ -363,6 +390,7 @@ export class RoomView {
     if (!w.open) w.showModal();
     this.watchCube?.cube.dispose();
     this.watchCube = new CubeView(w.querySelector('.wv-cube'));
+    if (c.skin) this.watchCube.setSkin(c.skin);
     this.watchCube.setState(c.state);
     if (c.view) this.watchCube.target = c.view;
     this.#watchStatus(c);

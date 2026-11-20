@@ -16,6 +16,7 @@ export function modeGroups() {
         { id: 'cross2', kind: 'scramble', icon: '✚', tone: 'green', title: L('Leichtes Cross', 'Easy cross'), desc: L('2 Cross-Kanten sind schon gelöst', '2 cross edges already solved') },
         { id: 'xcross', kind: 'scramble', icon: '✖', tone: 'teal', title: 'X-Cross', desc: L('Cross-Kanten + 1 Paar gelöst – X-Cross planen', 'Cross edges + 1 pair solved – plan an X-cross') },
         { id: 'pll-endless', kind: 'link', icon: '∞', tone: 'purple', title: L('Endlos-PLL', 'Endless PLL'), desc: L('Eine PLL nach der anderen – einfach ausführen, egal wie du hältst', 'One PLL after another – just perform it, any grip') },
+        { id: 'oll-endless', kind: 'link', icon: '∞', tone: 'orange', title: L('Endlos-OLL', 'Endless OLL'), desc: L('Eine OLL nach der anderen – einfach ausführen, egal wie du hältst', 'One OLL after another – just perform it, any grip') },
         { id: 'own', kind: 'scramble', icon: '✋', tone: 'gray', title: L('Eigenes Scramble', 'Own scramble'), desc: L('Selbst verdrehen, der nächste Zug startet die Zeit', 'Scramble yourself, the next move starts the timer') },
       ],
     },

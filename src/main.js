@@ -23,7 +23,7 @@ import { Lobby } from './lobby.js';
 import { RoomView, compareHtml } from './ui/room-view.js';
 import { AlgsView } from './ui/algs-view.js';
 import { Trainer } from './ui/trainer.js';
-import { PLL_ALGS } from './cube/ll-cases.js';
+import { PLL_ALGS, OLL_ALGS } from './cube/ll-cases.js';
 import { ArchiveView } from './ui/archive-view.js';
 import { isArchived, addToArchive, removeFromArchive } from './archive.js';
 import { easyState } from './cube/easy-scramble.js';
@@ -44,6 +44,7 @@ import { radarSvg } from './ui/radar.js';
 import { cfopTable, splitTone } from './ui/cfop-table.js';
 import { splitBaseline } from './split-compare.js';
 import { caseDiagram } from './ui/ll-diagram.js';
+import { friends, myFriendCode, formatFriendCode, normalizeFriendCode, startFriends, fetchFriend, removeFriend, isFriend, friendOf } from './friends.js';
 
 const $ = (id) => document.getElementById(id);
 translateStatic(); // feste Texte der Seite (bei Englisch)
@@ -738,6 +739,11 @@ function setMode(id) {
       if (app.phase === 'running') return;
       showTab('timer');
       trainer.start(Object.keys(PLL_ALGS).map((n) => `PLL ${n}`), `∞ ${L('Endlos-PLL', 'Endless PLL')}`);
+    }
+    if (id === 'oll-endless') {
+      if (app.phase === 'running') return;
+      showTab('timer');
+      trainer.start(Object.keys(OLL_ALGS).map((n) => `OLL ${n}`), `∞ ${L('Endlos-OLL', 'Endless OLL')}`);
     }
     return;
   }
@@ -1574,7 +1580,8 @@ function applySkin(skin) {
   view.setSkin(skin);
   ghostView?.setSkin(skin);
   skinPreview?.setSkin(skin);
-  for (const c of roomView.cards.values()) for (const v of [c.cube, c.mini]) v?.setSkin(skin);
+  roomView.setOwnSkin(skin);
+  app.room?.setSkin(skin);
   renderSkinUi();
   if ($('settings-dialog').open) renderPresetThumbs();
 }
@@ -1916,6 +1923,7 @@ function openProfile() {
     $('pv-skills').innerHTML = `<div class="skill-list">${ranked.map((k, i) => row(k, i < 2 ? L('Stärke', 'strength') : i >= ranked.length - 2 ? L('ausbaufähig', 'to improve') : '')).join('')}</div>
       <p class="small">${L('Skalen grob von „Einsteiger“ (0) bis „sehr schnell“ (100).', 'Scales roughly from “beginner” (0) to “very fast” (100).')} ${prev ? L('▲▼ = Veränderung gegenüber den Solves davor.', '▲▼ = change vs. the solves before.') : ''}</p>`;
   }
+  renderFriends();
   $('profile-dialog').showModal();
   persistSolves(); // nachträglich berechnete Kennzahlen sichern
 }
@@ -2051,6 +2059,8 @@ const roomView = new RoomView($('room-panel'), $('room-strip'), {
   onLeave: () => leaveRoom(),
   onAutoChange: (on) => (app.roomAuto = on),
   onReplay: (data, title) => replay.open(data, { title }),
+  onAddFriend: (fc) => addFriend(fc),
+  isFriend: (fc) => isFriend(fc),
 });
 app.roomAuto = true;
 
@@ -2090,6 +2100,9 @@ function onRoomEvent(ev) {
   const room = app.room;
   if (!room) return;
   switch (ev.type) {
+    case 'skin':
+      roomView.setSkin(ev.from, ev.skin);
+      break;
     case 'roster':
       roomView.renderRoster(ev.roster);
       announceRoom();
@@ -2154,7 +2167,8 @@ async function enterRoom(mode, code) {
     msg.textContent = L('Gib dir zuerst einen Namen (Einstellungen → Profil), damit die anderen dich erkennen.', 'Set a name first (Settings → Profile) so others recognize you.');
     return;
   }
-  const room = new Room({ name: profile.name, avatar: profile.avatar }, (ev) => onRoomEvent(ev));
+  const room = new Room({ name: profile.name, avatar: profile.avatar, fc: myFriendCode }, (ev) => onRoomEvent(ev));
+  room.setSkin(currentSkin()); // die anderen sehen deinen Würfel so, wie du ihn eingestellt hast
   app.room = room; // schon setzen, damit frühe Ereignisse ankommen
   renderModeChip();
   $('room-intro').querySelectorAll('button').forEach((b) => (b.disabled = true));
@@ -2324,3 +2338,162 @@ openRoomFromHash();
 // Testzugang: mit ?debug in der URL lassen sich Würfel-Ereignisse simulieren (z. B. Gyro-Daten)
 if (new URLSearchParams(location.search).has('debug')) window.__smartcube = { emit: onCubeEvent, app, settings, trainer, roomView, lobby };
 window.addEventListener('hashchange', openSharedFromHash);
+
+// ---------------- Freunde ----------------
+
+const esc = (x) => String(x ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+/** Eigene Profilkarte für Freunde: Name, Avatar, PB, Ø5/Ø12, letzte 10 Solves (Standard-Bereich) */
+function myCard() {
+  const main = solves.filter((x) => scopeOf(x) === 'main');
+  const valid = main.filter((x) => x.penalty !== 'DNF');
+  const pbSolve = valid.reduce((b, x) => (!b || effectiveTime(x) < effectiveTime(b) ? x : b), null);
+  return {
+    code: myFriendCode,
+    name: profile.name || L('Ohne Namen', 'No name'),
+    avatar: profile.avatar,
+    pb: pbSolve && { time: pbSolve.time, penalty: pbSolve.penalty || 0, date: pbSolve.date },
+    ao5: averageOf(main, 5),
+    ao12: averageOf(main, 12),
+    count: main.length,
+    last: main.slice(-10).reverse().map((x) => ({ time: x.time, penalty: x.penalty || 0, date: x.date, moves: x.moveCount ?? null, tps: x.tps ?? null })),
+  };
+}
+
+const agoText = (t) => {
+  if (!t) return '–';
+  const m = Math.round((Date.now() - t) / 60000);
+  if (m < 2) return L('gerade eben', 'just now');
+  if (m < 60) return L(`vor ${m} Min.`, `${m} min ago`);
+  const h = Math.round(m / 60);
+  if (h < 36) return L(`vor ${h} Std.`, `${h} h ago`);
+  return L(`vor ${Math.round(h / 24)} Tagen`, `${Math.round(h / 24)} days ago`);
+};
+const fmtPen = (x) => (x ? formatSolve({ time: x.time, penalty: x.penalty }) : '–');
+
+function friendError(e) {
+  const m = e?.message;
+  if (m === 'code') return L('Der Freundescode hat 8 Zeichen.', 'The friend code has 8 characters.');
+  if (m === 'self') return L('Das ist dein eigener Code 🙂', 'That’s your own code 🙂');
+  if (m === 'offline') return L('Nicht erreichbar – die App muss beim Freund gerade offen sein.', 'Not reachable – the app must be open on your friend’s device.');
+  return L('Verbindung fehlgeschlagen.', 'Connection failed.');
+}
+
+async function addFriend(c) {
+  const code = normalizeFriendCode(c);
+  try {
+    const f = await fetchFriend(code);
+    toast(L(`👥 ${f.name} ist jetzt dein Freund`, `👥 ${f.name} is now your friend`));
+  } catch (e) {
+    toast(friendError(e));
+  }
+  if ($('profile-dialog').open) renderFriends();
+}
+
+function renderFriends() {
+  const box = $('pv-friends');
+  const list = [...friends].sort((a, b) => (a.card?.pb?.time ?? Infinity) - (b.card?.pb?.time ?? Infinity));
+  box.innerHTML = `<h3 class="sub-h">👥 ${L('Freunde', 'Friends')}</h3>
+    <div class="fr-code small">${L('Dein Code', 'Your code')}: <b>${formatFriendCode(myFriendCode)}</b>
+      <button type="button" class="ghost small-btn" data-fr="share">🔗 ${L('Teilen', 'Share')}</button></div>
+    <form class="fr-add"><input type="text" id="fr-input" maxlength="9" placeholder="${L('Code des Freundes', 'Friend’s code')}" autocomplete="off" autocapitalize="characters" />
+      <button type="submit">＋ ${L('Hinzufügen', 'Add')}</button></form>
+    <div class="fr-list">${list.length
+      ? list.map((f) => `<button type="button" class="fr-row" data-friend="${f.code}"><span class="avatar">${avatarHtml(f)}</span>
+          <span class="fr-name"><b>${esc(f.name || '?')}</b><span class="small">${f.card?.count ?? 0} Solves · ${agoText(f.at)}</span></span>
+          <span class="fr-pb"><span class="small">PB</span> <b>${fmtPen(f.card?.pb)}</b></span></button>`).join('')
+      : `<p class="small">${L('Noch keine Freunde. Tausche Codes aus oder tippe im Online-Raum auf eine Person → „Als Freund hinzufügen“. Profile werden direkt zwischen den Geräten geholt, solange die App beim Freund offen ist.', 'No friends yet. Swap codes or tap a person in an online room → “Add as friend”. Profiles are fetched directly between devices while the app is open on your friend’s side.')}</p>`}</div>`;
+}
+
+$('pv-friends').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const v = $('fr-input').value;
+  if (v.trim()) addFriend(v);
+});
+$('pv-friends').addEventListener('click', async (e) => {
+  const row = e.target.closest('[data-friend]');
+  if (row) return openFriend(row.dataset.friend);
+  if (e.target.closest('[data-fr=share]')) {
+    const url = `${location.href.split('#')[0]}#freund=${myFriendCode}`;
+    const text = L(`Füg mich in der Smartcube-App als Freund hinzu: ${formatFriendCode(myFriendCode)}`, `Add me as a friend in the Smartcube app: ${formatFriendCode(myFriendCode)}`);
+    try {
+      if (navigator.share) return await navigator.share({ title: 'Smartcube', text, url });
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      toast(L('Link kopiert.', 'Link copied.'));
+    } catch {
+      prompt(L('Dein Freundeslink:', 'Your friend link:'), url);
+    }
+  }
+});
+
+function openFriend(code, status = '') {
+  const f = friendOf(code);
+  const dlg = $('friend-dialog');
+  if (!f) return dlg.close();
+  const c = f.card || {};
+  const tile = (v, k) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`;
+  const rows = (c.last || [])
+    .map((x, i) => `<tr><td>${i + 1}</td><td><b>${fmtPen(x)}</b></td><td>${x.moves ?? '–'}</td><td>${x.tps ? dec(x.tps, 2) : '–'}</td><td class="small">${x.date ? new Date(x.date).toLocaleDateString(locale) : '–'}</td></tr>`)
+    .join('');
+  dlg.innerHTML = `<div class="rp-head"><div class="pv-head"><span class="avatar big">${avatarHtml(f)}</span>
+      <div><h2>${esc(f.name || '?')}</h2><div class="small">${formatFriendCode(f.code)} · ${L('Stand', 'Updated')}: ${agoText(f.at)}${status ? ` · ${status}` : ''}</div></div></div>
+      <button type="button" class="rp-close" data-fr="close" aria-label="${L('Schließen', 'Close')}">✕</button></div>
+    <div class="stats pv-tiles">${tile(fmtPen(c.pb), L('Bestzeit', 'Best'))}${tile(formatTime(c.ao5), 'Ø 5')}${tile(formatTime(c.ao12), 'Ø 12')}</div>
+    ${c.pb?.date ? `<p class="small">🏆 PB ${L('vom', 'from')} ${new Date(c.pb.date).toLocaleDateString(locale)} · ${c.count || 0} Solves ${L('gesamt', 'total')}</p>` : ''}
+    <h3 class="sub-h">${L('Letzte 10 Solves', 'Last 10 solves')}</h3>
+    ${rows ? `<div class="table-wrap"><table class="phase-table"><tr><th>#</th><th>${L('Zeit', 'Time')}</th><th>${L('Züge', 'Moves')}</th><th>TPS</th><th>${L('Datum', 'Date')}</th></tr>${rows}</table></div>` : `<p class="small">${L('Noch keine Solves.', 'No solves yet.')}</p>`}
+    <menu><button type="button" class="ghost" data-fr="remove">🗑 ${L('Entfernen', 'Remove')}</button><button type="button" data-fr="refresh">↻ ${L('Aktualisieren', 'Refresh')}</button></menu>`;
+  dlg.dataset.code = code;
+  if (!dlg.open) dlg.showModal();
+}
+
+$('friend-dialog').addEventListener('click', async (e) => {
+  const dlg = $('friend-dialog');
+  if (e.target === dlg || e.target.closest('[data-fr=close]')) return dlg.close();
+  const code = dlg.dataset.code;
+  if (e.target.closest('[data-fr=remove]')) {
+    const f = friendOf(code);
+    if (!confirm(L(`${f?.name || 'Freund'} entfernen?`, `Remove ${f?.name || 'friend'}?`))) return;
+    removeFriend(code);
+    dlg.close();
+    return renderFriends();
+  }
+  const b = e.target.closest('[data-fr=refresh]');
+  if (b) {
+    b.disabled = true;
+    b.textContent = L('Verbinde …', 'Connecting …');
+    let status = '';
+    try {
+      await fetchFriend(code);
+      status = '✓ ' + L('aktuell', 'up to date');
+    } catch (err) {
+      status = '⚠ ' + friendError(err);
+    }
+    openFriend(code, status);
+    renderFriends();
+  }
+});
+
+/** Freundeslink #freund=CODE: hinzufügen */
+function addFriendFromHash() {
+  const m = /[#&]freund=([A-Za-z0-9]{8})/.exec(location.hash);
+  if (!m) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  setTimeout(() => addFriend(m[1]), 1500);
+}
+window.addEventListener('hashchange', addFriendFromHash);
+addFriendFromHash();
+
+// Erreichbar für Freunde, solange die App offen ist (nach dem Start, damit nichts bremst)
+setTimeout(
+  () =>
+    startFriends(myCard, (kind, f) => {
+      if (kind === 'added' && f) toast(L(`👥 ${f.name} hat dich als Freund hinzugefügt`, `👥 ${f.name} added you as a friend`));
+      if ($('profile-dialog').open) renderFriends();
+    }),
+  2500,
+);

@@ -14,6 +14,7 @@
  *   live    { from, kind: 'status'|'move'|'state', … } Live-Daten zum Zuschauen
  *   result  { from, n, time, penalty, moveCount, tps } Ergebnis einer Runde
  *   full    { max }                                  Gastgeber → Teilnehmer: Raum ist voll
+ *   skin    { from, skin }                           Aussehen des eigenen Würfels (einzeln, damit die Liste klein bleibt)
  */
 import { L } from './i18n.js';
 const PREFIX = 'smartcube-raum-';
@@ -49,6 +50,18 @@ export class Room {
     this.code = null;
     this.closed = false;
     this.maxPlayers = 0; // 0 = unbegrenzt
+    this.skins = {}; // Teilnehmer-ID → Würfel-Aussehen
+  }
+
+  /** Eigenes Würfel-Aussehen an alle (auch später erneut, wenn es sich ändert) */
+  setSkin(skin) {
+    this.mySkin = sanitizeSkin(skin);
+    if (!this.myId || !this.mySkin) return;
+    const msg = { type: 'skin', from: this.myId, skin: this.mySkin };
+    if (this.isHost) {
+      this.skins[HOST] = this.mySkin;
+      this.#broadcast(msg);
+    } else if (this.hostConn?.open) this.hostConn.send(msg);
   }
 
   async #newPeer(id) {
@@ -85,7 +98,8 @@ export class Room {
     if (!this.peer) throw new Error(L('Kein freier Raum-Code gefunden', 'No free room code found'));
     this.isHost = true;
     this.myId = HOST;
-    this.roster = [{ id: HOST, name: this.me.name, avatar: this.me.avatar, host: true }];
+    this.roster = [{ id: HOST, name: this.me.name, avatar: this.me.avatar, fc: this.me.fc, host: true }];
+    if (this.mySkin) this.skins[HOST] = this.mySkin;
     this.peer.on('connection', (conn) => this.#accept(conn));
     this.peer.on('error', (err) => this.emit({ type: 'error', error: err }));
     this.peer.on('disconnected', () => !this.closed && this.peer.reconnect());
@@ -115,13 +129,23 @@ export class Room {
         return;
       }
       this.conns.set(id, conn);
-      const p = { id, name: String(msg.name || L('Gast', 'Guest')).slice(0, 24), avatar: sanitizeAvatar(msg.avatar) };
+      const p = { id, name: String(msg.name || L('Gast', 'Guest')).slice(0, 24), avatar: sanitizeAvatar(msg.avatar), fc: sanitizeCode(msg.fc) };
       this.roster = [...this.roster.filter((x) => x.id !== id), p];
       conn.send({ type: 'welcome', you: id, roster: this.roster, board: this.board, max: this.maxPlayers });
+      for (const [from, skin] of Object.entries(this.skins)) if (from !== id) conn.send({ type: 'skin', from, skin });
       this.#publishRoster();
       return;
     }
     if (!this.conns.has(id)) return;
+    if (msg.type === 'skin') {
+      const skin = sanitizeSkin(msg.skin);
+      if (!skin) return;
+      this.skins[id] = skin;
+      const out = { type: 'skin', from: id, skin };
+      this.#broadcast(out, id);
+      this.emit(out);
+      return;
+    }
     if (msg.type === 'live') {
       const out = { ...msg, from: id };
       this.#broadcast(out, id);
@@ -187,7 +211,7 @@ export class Room {
       });
       conn.on('open', () => {
         this.hostConn = conn;
-        conn.send({ type: 'hello', name: this.me.name, avatar: this.me.avatar });
+        conn.send({ type: 'hello', name: this.me.name, avatar: this.me.avatar, fc: this.me.fc });
       });
       // Erst „drin“, wenn der Gastgeber uns angenommen hat (welcome) – oder abgelehnt (voll)
       this.joinWait = {
@@ -225,7 +249,16 @@ export class Room {
         this.emit({ type: 'roster', roster: this.roster });
         this.emit({ type: 'board', board: this.board });
         if (this.board.length) this.emit({ type: 'round', ...this.board.at(-1), late: true });
+        if (this.mySkin) this.hostConn?.send({ type: 'skin', from: this.myId, skin: this.mySkin });
         break;
+      case 'skin': {
+        const skin = sanitizeSkin(msg.skin);
+        if (skin && typeof msg.from === 'string') {
+          this.skins[msg.from] = skin;
+          this.emit({ type: 'skin', from: msg.from, skin });
+        }
+        break;
+      }
       case 'roster':
         this.roster = msg.roster;
         this.emit(msg);
@@ -282,6 +315,29 @@ export function sanitizeAvatar(a) {
   if (a.type === 'image' && typeof a.value === 'string' && a.value.startsWith('data:image/') && a.value.length < 60000) return a;
   return null;
 }
+
+const SKIN_OPT = { style: ['gan', 'classic', 'tiles', 'stickerless'], body: ['black', 'gray', 'white'], finish: ['gloss', 'matte'], theme: ['colors', 'custom'] };
+const okImg = (v, max) => typeof v === 'string' && v.startsWith('data:image/') && v.length < max;
+/** Würfel-Aussehen prüfen: nur bekannte Werte, Bilder nur als Daten-URL und begrenzt groß */
+export function sanitizeSkin(sk) {
+  if (!sk || typeof sk !== 'object') return null;
+  const out = {};
+  for (const [k, list] of Object.entries(SKIN_OPT)) if (list.includes(sk[k])) out[k] = sk[k];
+  if (out.theme === 'custom' && sk.images && typeof sk.images === 'object') {
+    const imgs = {};
+    let total = 0;
+    for (const f of 'URFDLB') {
+      const v = sk.images[f];
+      if (okImg(v, 150000) && (total += v.length) < 700000) imgs[f] = v;
+    }
+    out.images = imgs;
+  }
+  if (okImg(sk.logo, 150000)) out.logo = sk.logo;
+  return out;
+}
+
+/** Freundescode (8 Zeichen) prüfen */
+export const sanitizeCode = (c) => (typeof c === 'string' && /^[A-Z0-9]{8}$/.test(c) ? c : null);
 
 /** Phasen eines Solves für den Vergleich im Raum: Cross · F2L · OLL · PLL (Zeit und Züge) */
 function splitsOf(solve) {
