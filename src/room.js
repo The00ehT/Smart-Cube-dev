@@ -23,7 +23,7 @@ export const roomCode = () => Array.from({ length: 5 }, () => CODE_CHARS[Math.fl
 export const normalizeCode = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
 
 /** Optional eigener PeerJS-Server per URL, z. B. ?peer=localhost:9000 (für Tests) */
-function peerOptions() {
+export function peerOptions() {
   const o = new URLSearchParams(location.search).get('peer');
   if (!o) return { debug: 1 };
   const [host, port] = o.split(':');
@@ -249,7 +249,7 @@ export class Room {
 }
 
 /** Nur Emojis oder kleine Bilder (Daten-URL) annehmen */
-function sanitizeAvatar(a) {
+export function sanitizeAvatar(a) {
   if (!a || typeof a !== 'object') return null;
   if (a.type === 'emoji' && typeof a.value === 'string' && a.value.length <= 16) return a;
   if (a.type === 'image' && typeof a.value === 'string' && a.value.startsWith('data:image/') && a.value.length < 60000) return a;

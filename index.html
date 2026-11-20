@@ -166,6 +166,8 @@
           <p>Alle im Raum bekommen <b>dasselbe Scramble</b>, ihr seht euch <b>live beim Lösen</b> zu und die Zeiten landen in
             einer gemeinsamen Tabelle. Die Verbindung läuft direkt zwischen den Geräten.</p>
           <div class="room-choose">
+            <label class="toggle room-pub"><input type="checkbox" id="room-public" /> 🌍 Öffentlich – für alle sichtbar, Beitritt ohne Code</label>
+            <input type="text" id="room-name" class="room-name" placeholder="Raumname (optional)" maxlength="40" hidden />
             <button type="button" class="primary big" id="room-create">Raum erstellen</button>
             <div class="or small">oder mit Code beitreten</div>
             <div class="room-join-row">
@@ -174,6 +176,10 @@
             </div>
           </div>
           <div class="error" id="room-error"></div>
+          <div class="room-public-list">
+            <h3 class="sub-h">🌍 Öffentliche Räume</h3>
+            <div id="room-list"><p class="small">Suche …</p></div>
+          </div>
         </div>
         <section class="card room-panel" id="room-panel" hidden></section>
       </section>

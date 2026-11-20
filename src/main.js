@@ -18,6 +18,7 @@ import { StatsView } from './ui/stats-view.js';
 import { donut, phaseSegments } from './ui/donut.js';
 import { profile, saveProfile, avatarHtml, resizeImage, EMOJIS } from './profile.js';
 import { Room, normalizeCode } from './room.js';
+import { Lobby } from './lobby.js';
 import { RoomView, compareHtml } from './ui/room-view.js';
 import { AlgsView } from './ui/algs-view.js';
 import { Trainer } from './ui/trainer.js';
@@ -1651,6 +1652,8 @@ function showTab(name) {
   for (const t of TABS) document.body.classList.toggle(`tab-${t}`, t === name);
   for (const b of document.querySelectorAll('[role=tab][data-tab]')) b.setAttribute('aria-selected', String(b.dataset.tab === name));
   if (name === 'stats') statsView.open(solves);
+  // Öffentliche Räume nur suchen, solange der Raum-Tab ohne eigenen Raum offen ist (nach dem Start-Code)
+  queueMicrotask(() => lobbyWatch(name === 'room' && !app.room));
   if (name === 'algs') {
     const before = solves.filter((x) => x.ll === undefined).length;
     algsView.render();
@@ -1907,11 +1910,13 @@ function onRoomEvent(ev) {
   switch (ev.type) {
     case 'roster':
       roomView.renderRoster(ev.roster);
+      announceRoom();
       sendRoomStatus(); // Neue im Raum sehen sofort den aktuellen Würfel
       app.sentView = null;
       break;
     case 'board':
       roomView.renderBoard(ev.board);
+      announceRoom();
       if (!$('result-overlay').hidden) renderResultCompare();
       if (room.isHost && app.roomAuto && room.roundComplete() && !app.nextRoundTimer) {
         roomView.message(L('Alle fertig – nächste Runde in 5 s …', 'Everyone done – next round in 5 s …'));
@@ -1976,6 +1981,13 @@ async function enterRoom(mode, code) {
     roomView.show(room); // Karten brauchen room.myId – Liste wird nach dem Öffnen gezeichnet
     if (mode === 'create') await room.create();
     else await room.join(code);
+    lobbyWatch(false);
+    // Öffentlicher Raum: bei allen in der Liste, Beitritt ohne Code
+    if (mode === 'create' && $('room-public').checked) {
+      app.roomPublic = { code: room.code, name: $('room-name').value.trim(), host: profile.name, avatar: profile.avatar, created: Date.now() };
+      announceRoom();
+      roomView.message(L('🌍 Öffentlicher Raum – erscheint bei allen unter „Öffentliche Räume“, Beitritt ohne Code. Starte die erste Runde, sobald jemand da ist.', '🌍 Public room – shows up for everyone under “Public rooms”, join without a code. Start the first round once someone is here.'));
+    }
     roomView.show(room);
     roomView.renderRoster(room.roster);
     $('room-intro').hidden = true;
@@ -1986,6 +1998,7 @@ async function enterRoom(mode, code) {
       app.phase = 'idle';
       renderTimer();
     }
+    if (!app.roomPublic) lobbyWatch(false);
     setStatus(mode === 'create' ? L(`Raum ${room.code} erstellt.`, `Room ${room.code} created.`) : L(`Raum ${room.code} beigetreten.`, `Joined room ${room.code}.`));
     history.replaceState(null, '', location.pathname + location.search);
   } catch (err) {
@@ -2000,14 +2013,59 @@ async function enterRoom(mode, code) {
   }
 }
 
+// ---------------- Öffentliche Räume ----------------
+
+const lobby = new Lobby();
+let stopLobbyWatch = null;
+/** Liste öffentlicher Räume beobachten, solange der Raum-Tab ohne Raum offen ist */
+function lobbyWatch(on) {
+  if (on && !stopLobbyWatch) stopLobbyWatch = lobby.watch(renderRoomList);
+  else if (!on && stopLobbyWatch) {
+    stopLobbyWatch();
+    stopLobbyWatch = null;
+  }
+}
+function renderRoomList(rooms) {
+  const box = $('room-list');
+  const others = rooms.filter((r) => r.code !== app.room?.code);
+  box.innerHTML = others.length
+    ? others
+        .map(
+          (r) => `<button type="button" class="pub-room" data-join="${r.code}">
+            <span class="pub-ic">${escapeHtml(r.emoji || '🧊')}</span>
+            <span class="pub-tx"><b>${escapeHtml(r.name || L(`Raum von ${r.host}`, `${r.host}’s room`))}</b>
+              <span class="small">${escapeHtml(r.host)} · 👥 ${r.players}${r.round ? ` · ${L('Runde', 'Round')} ${r.round}` : ''}</span></span>
+            <span class="pub-go">${L('Beitreten', 'Join')} ›</span></button>`,
+        )
+        .join('')
+    : `<p class="small">${L('Gerade ist kein öffentlicher Raum offen. Erstelle doch selbst einen – er erscheint dann hier bei allen.', 'No public room is open right now. Create one yourself – it then shows up here for everyone.')}</p>`;
+}
+$('room-list').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-join]');
+  if (b) enterRoom('join', b.dataset.join);
+});
+$('room-public').addEventListener('change', (e) => {
+  $('room-name').hidden = !e.target.checked;
+  if (e.target.checked && !$('room-name').value) $('room-name').placeholder = L(`Raum von ${profile.name || '…'}`, `${profile.name || '…'}’s room`);
+});
+/** Angaben des eigenen öffentlichen Raums an die Lobby (Spielerzahl, Runde) */
+function announceRoom() {
+  const room = app.room;
+  if (!room?.isHost || !app.roomPublic) return;
+  lobby.announce({ ...app.roomPublic, players: room.roster.length, round: room.board.at(-1)?.n || 0 });
+}
+
 function leaveRoom(silent) {
   if (!app.room) return;
   if (!silent && !confirm(app.room.isHost ? L('Raum schließen? Alle anderen fliegen dann raus.', 'Close the room? Everyone else will be removed.') : L('Raum verlassen?', 'Leave the room?'))) return;
   clearTimeout(app.nextRoundTimer);
   app.nextRoundTimer = null;
   app.room.leave();
+  if (app.roomPublic) lobby.withdraw();
+  app.roomPublic = null;
   app.room = null;
   app.roomRound = null;
+  if (app.tab === 'room') lobbyWatch(true);
   renderModeChip();
   roomView.hide();
   $('room-intro').hidden = false;
@@ -2034,7 +2092,10 @@ function openRoomFromHash() {
   showTab('room');
 }
 window.addEventListener('hashchange', openRoomFromHash);
-window.addEventListener('beforeunload', () => app.room?.leave());
+window.addEventListener('beforeunload', () => {
+  if (app.roomPublic) lobby.withdraw();
+  app.room?.leave();
+});
 
 // ---------------- Start ----------------
 
@@ -2066,5 +2127,5 @@ openSharedFromHash();
 openRoomFromHash();
 
 // Testzugang: mit ?debug in der URL lassen sich Würfel-Ereignisse simulieren (z. B. Gyro-Daten)
-if (new URLSearchParams(location.search).has('debug')) window.__smartcube = { emit: onCubeEvent, app, settings, trainer, roomView };
+if (new URLSearchParams(location.search).has('debug')) window.__smartcube = { emit: onCubeEvent, app, settings, trainer, roomView, lobby };
 window.addEventListener('hashchange', openSharedFromHash);

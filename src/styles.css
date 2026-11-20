@@ -1206,3 +1206,15 @@ body.solving .room-minis:not([hidden]) { display: flex !important; }
 .in-pr-go { font-size: 15px; }
 .in-pr-time { font: 800 40px/1 var(--num-font); }
 @media (max-width: 700px) { .in-practice { top: calc(-12px - var(--safe-top)); } }
+
+/* Öffentliche Räume */
+.room-pub { justify-content: center; }
+.room-name { font: inherit; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); width: min(320px, 100%); }
+.room-public-list { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 6px; display: grid; gap: 8px; }
+#room-list { display: grid; gap: 8px; }
+.pub-room { display: flex; align-items: center; gap: 12px; text-align: left; padding: 10px 12px; border-radius: 14px; background: var(--panel-2); border: 1.5px solid transparent; color: var(--text); width: 100%; white-space: normal; }
+.pub-room:hover { border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+.pub-ic { font-size: 26px; width: 40px; text-align: center; flex: none; }
+.pub-tx { display: grid; flex: 1; min-width: 0; }
+.pub-tx b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pub-go { color: var(--accent); font-weight: 650; white-space: nowrap; }

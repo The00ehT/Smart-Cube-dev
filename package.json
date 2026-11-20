@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "gen:f2l": "node scripts/gen-f2l.mjs",
-    "test": "node tests/metrics.test.mjs && node tests/algdb.test.mjs && node tests/mirror.test.mjs && node tests/easy.test.mjs && node tests/ll.test.mjs && node tests/gyro.test.mjs && node tests/analysis.test.mjs && node tests/facelets.test.mjs && node tests/tracker.test.mjs && node tests/recorder.test.mjs && node tests/algformat.test.mjs && node tests/cross.test.mjs && node tests/insights.test.mjs && node tests/detect.test.mjs"
+    "test": "node tests/metrics.test.mjs && node tests/algdb.test.mjs && node tests/mirror.test.mjs && node tests/easy.test.mjs && node tests/ll.test.mjs && node tests/gyro.test.mjs && node tests/analysis.test.mjs && node tests/facelets.test.mjs && node tests/tracker.test.mjs && node tests/recorder.test.mjs && node tests/algformat.test.mjs && node tests/cross.test.mjs && node tests/insights.test.mjs && node tests/detect.test.mjs && node tests/lobby.test.mjs"
   },
   "dependencies": {
     "cubing": "^0.66.1",
