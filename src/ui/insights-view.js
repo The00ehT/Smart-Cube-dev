@@ -9,7 +9,7 @@ import { L, dec } from '../i18n.js';
 import { colorChip } from './replay.js';
 import { caseDiagram, f2lDiagram, PHYS } from './ll-diagram.js';
 import { groupAlg } from '../cube/alg-format.js';
-import { COLOR_NAMES, SOLVED, applyAlg, isSolved, phaseStatus, solvedSlots, relativeState, HtmCounter } from '../cube/facelets.js';
+import { COLOR_NAMES, SOLVED, applyAlg, isSolved, phaseStatus, solvedSlots, relativeState, HtmCounter, translateMoves, tokenizeAlg, CROSS_DOWN } from '../cube/facelets.js';
 import { ScrambleTracker } from '../cube/scramble-tracker.js';
 import { setupAlgFor } from './cube-view.js';
 
@@ -44,7 +44,7 @@ function crossSection(r) {
   return `<section class="in-sec">
     <h3><i class="key ph-cross"></i>${c.multi ? 'XX-Cross' : xc ? 'X-Cross' : 'Cross'} ${colorChip(r.crossFace)}<span class="small in-h-num">${mv(c.user)}${ref ? ` · ${L('optimal', 'optimal')} ${ref.len}` : ''}</span>${tag}</h3>
     ${cmpAlgs(c.userMoves, ref?.moves ?? '', L('Optimal', 'Optimal'))}
-    <div class="in-meta">${frontPicker({ k: 'cross', frontOptions: c.frontOptions, holdK: xc && c.xcross && c.source !== 'set' ? ['', 'y', 'y2', "y'"].indexOf(c.xcross.r) : c.holdK, source: c.source === 'set' ? 'set' : 'assumed' })}${xc && c.xcross ? `<span class="small">${pairIcon(c.xcross.pair, r.crossFace)} → ${L('hinten links', 'back left')}</span>` : ''}${practiceBtn(0)}</div>
+    <div class="in-meta">${frontPicker({ k: 'cross', frontOptions: c.frontOptions, holdK: crossHoldK(r), source: c.source === 'set' ? 'set' : 'assumed' })}${xc && c.xcross ? `<span class="small">${pairIcon(c.xcross.pair, r.crossFace)} → ${L('hinten links', 'back left')}</span>` : ''}${practiceBtn(0)}</div>
     ${!xc && c.xcross?.complete ? `<details class="in-tip in-fold"><summary>💡 ${L(`X-Cross in ${mv(c.xcross.len)} möglich`, `X-cross possible in ${mv(c.xcross.len)}`)}</summary>${pairIcon(c.xcross.pair, r.crossFace)} <b>${[...c.xcross.pair].map((f) => COLOR_NAMES[f]).join('-')}</b> → ${L('hinten links', 'back left')} · ${holdText(c.xcross.hold)}${alg(c.xcross.moves)}</details>` : ''}
     ${c.colors.length > 1 ? `<details class="in-fold in-colors-box"><summary>${L('Kreuz je Farbe', 'Cross per color')}${bestOther ? ` · <b>${COLOR_NAMES[c.bestColor.face]} −${c.optimal.len - c.bestColor.len}</b>` : ''}</summary><div class="in-colors">${colors}</div></details>` : ''}
   </section>`;
@@ -57,6 +57,26 @@ const practiceBtn = (idx) => `<button type="button" class="ghost small-btn in-pr
 
 /** Haltung: welche Farbe war vorne? antippbar (ohne Gyroskop selbst einstellen) */
 const EDIT = { on: false }; // Haltung bearbeiten (Farbwahl sichtbar) – sonst kompakt
+const SCR = { down: false }; // Scramble mit Kreuzfarbe unten (statt Weiß oben, Grün vorne)
+
+/** Haltung beim Kreuz (welche Farbe vorne, 0–3) – dieselbe wie in der Cross-Zeile angezeigt */
+function crossHoldK(r) {
+  const c = r.cross;
+  return r.xcross && c.xcross && c.source !== 'set' ? Math.max(0, ['', 'y', 'y2', "y'"].indexOf(c.xcross.r)) : c.holdK || 0;
+}
+
+/** Scramble – wahlweise umgeschrieben für die Haltung „Kreuz unten“ (wie beim Lösen gehalten) */
+function scrambleSection(r) {
+  if (!r.scramble) return `<details class="in-sec in-scr in-fold"><summary><b>Scramble</b></summary><div class="in-alg">${L('(eigenes Scramble)', '(own scramble)')}</div></details>`;
+  const k = crossHoldK(r);
+  const rot = `${CROSS_DOWN[r.crossFace]} ${['', 'y', 'y2', "y'"][k]}`.trim();
+  const shown = SCR.down && rot ? translateMoves(tokenizeAlg(r.scramble), rot).join(' ') : r.scramble;
+  const hold = SCR.down ? `${colorChip(r.crossFace)} ${L('unten', 'down')} · ${colorChip(r.cross.frontOptions[k])} ${L('vorne', 'front')}` : `${colorChip('U')} ${L('oben', 'up')} · ${colorChip('F')} ${L('vorne', 'front')}`;
+  return `<details class="in-sec in-scr in-fold"${SCR.down ? ' open' : ''}><summary><b>Scramble</b> <span class="small">${hold}</span></summary>
+    <div class="in-alg">${esc(shown)}</div>
+    <div class="in-scr-opts"><button type="button" class="ghost small-btn${SCR.down ? ' on' : ''}" data-act="scr-down">${SCR.down ? `↺ ${L('Standard (Weiß oben)', 'Standard (white up)')}` : `⬇ ${L('Mit Kreuzfarbe unten', 'With cross color down')}`}</button></div>
+  </details>`;
+}
 function frontPicker(p) {
   const src = p.source === 'set' ? '' : p.source === 'gyro' ? ' · Gyro' : ` · ${L('angenommen', 'assumed')}`;
   if (!EDIT.on) return `<span class="in-front-compact">${colorChip(p.frontOptions[p.holdK])} ${L('vorne', 'front')}<span class="small">${src}</span></span>`;
@@ -167,6 +187,18 @@ export class InsightsView {
       const pb = e.target.closest('[data-practice]');
       if (pb) return this.startPractice(Number(pb.dataset.practice));
       if (e.target.closest('[data-act=practice-stop]')) return this.stopPractice();
+      if (e.target.closest('[data-act=scr-down]')) {
+        SCR.down = !SCR.down;
+        try {
+          localStorage.setItem('smartcube.scrCrossDown', SCR.down ? '1' : '');
+        } catch {
+          /* egal */
+        }
+        const top = this.dlg.scrollTop;
+        this.render(this.solve);
+        this.dlg.scrollTop = top;
+        return;
+      }
       if (e.target.closest('[data-act=edit-hold]')) {
         EDIT.on = !EDIT.on;
         try {
@@ -333,6 +365,7 @@ export class InsightsView {
     this.solve = solve;
     try {
       EDIT.on = localStorage.getItem('smartcube.editHold') === '1';
+      SCR.down = localStorage.getItem('smartcube.scrCrossDown') === '1';
     } catch {
       EDIT.on = false;
     }
@@ -369,7 +402,7 @@ export class InsightsView {
       <div class="in-practice" hidden></div>
       ${summary}
       <div class="in-toolbar"><button type="button" class="ghost small-btn${EDIT.on ? ' on' : ''}" data-act="edit-hold">${EDIT.on ? `✓ ${L('Fertig', 'Done')}` : `✎ ${L('Haltung', 'Hold')}`}</button></div>
-      <details class="in-sec in-scr in-fold"><summary><b>Scramble</b></summary><div class="in-alg">${esc(r.scramble) || L('(eigenes Scramble)', '(own scramble)')}</div></details>
+      ${scrambleSection(r)}
       ${crossSection(r)}
       <section class="in-sec"><h3><i class="key ph-pair"></i>F2L</h3>${rotSummary(r)}${r.pairs.map((p) => pairRow(p, r)).join('')}</section>
       <section class="in-sec"><h3><i class="key ph-oll"></i>${L('Letzte Schicht', 'Last layer')}</h3>${llRow('OLL', 'ph-oll', r.oll)}${llRow('PLL', 'ph-pll', r.pll)}</section>

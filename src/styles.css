@@ -1333,3 +1333,6 @@ details.in-sec[open] > summary { margin-bottom: 8px; }
 .orient-opt { display: grid; justify-items: center; gap: 4px; padding: 8px 4px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--panel-2); color: inherit; }
 .orient-opt.on { border-color: var(--accent); background: var(--accent-soft); }
 .orient-opt .ll-dia { width: 56px; height: 56px; }
+
+.in-scr-opts { display: flex; justify-content: flex-end; }
+.small-btn.on { border-color: var(--accent); color: var(--accent); }

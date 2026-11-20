@@ -34,6 +34,9 @@ function qFromEuler(xd, yd, zd) {
 }
 
 const HOME = qFromEuler(24, -32, 0); // schräger Blick von oben rechts
+// Mit Gyroskop: Grundstellung gerade – Weiß oben, Grün direkt zum Spieler, parallel zum Boden.
+// So sieht der Würfel auf dem Bildschirm genauso aus, wie man ihn beim Ausrichten in der Hand hält.
+const GYRO_HOME = { x: 0, y: 0, z: 0, w: 1 };
 
 // Drehung der Ansicht, damit die Kreuzseite unten liegt (three.js: x → R, y → U, z → F)
 const H = Math.SQRT1_2;
@@ -94,13 +97,13 @@ export class CubeView {
     // GAN → three.js: y und z tauschen (Vorzeichen wie in gan-cube-sample)
     const quat = qnorm({ x: q.x, y: q.z, z: -q.y, w: q.w });
     if (!this.basis) this.basis = qconj(quat);
-    this.target = qmul(HOME, qmul(this.basis, quat));
+    this.target = qmul(GYRO_HOME, qmul(this.basis, quat));
   }
 
   /** Aktuelle Lage gilt ab jetzt als Grundstellung (weiß oben, grün vorne) */
   resetGyro() {
     this.basis = null;
-    this.target = this.base;
+    this.target = this.gyroSeen ? GYRO_HOME : this.base;
   }
 
   setGyroEnabled(on) {
