@@ -2281,6 +2281,15 @@ async function enterRoom(mode, code) {
   renderModeChip();
   $('room-intro').querySelectorAll('button').forEach((b) => (b.disabled = true));
   msg.textContent = mode === 'create' ? L('Raum wird erstellt …', 'Creating room …') : L('Verbinde …', 'Connecting …');
+  // Eigenes (Solo-)Scramble verwerfen – VOR dem Beitreten: läuft im Raum schon eine Runde, kommt deren
+  // Scramble noch während des Beitretens an und darf danach nicht wieder verworfen werden
+  if (app.phase === 'scrambling' || app.phase === 'done') {
+    app.phase = 'idle';
+    app.tracker = null;
+    app.scramble = '';
+    $('scramble').innerHTML = '';
+    renderTimer();
+  }
   try {
     roomView.show(room); // Karten brauchen room.myId – Liste wird nach dem Öffnen gezeichnet
     if (mode === 'create') await room.create({ maxPlayers: Number($('room-max').value) || 0 });
@@ -2299,10 +2308,6 @@ async function enterRoom(mode, code) {
     document.querySelectorAll('.tab-dot').forEach((d) => (d.hidden = false));
     app.sentPhase = null;
     roomSend('state', { facelets: app.state });
-    if (app.phase === 'scrambling' || app.phase === 'done') {
-      app.phase = 'idle';
-      renderTimer();
-    }
     if (!app.roomPublic) lobbyWatch(false);
     setStatus(mode === 'create' ? L(`Raum ${room.code} erstellt.`, `Room ${room.code} created.`) : L(`Raum ${room.code} beigetreten.`, `Joined room ${room.code}.`));
     history.replaceState(null, '', location.pathname + location.search);
