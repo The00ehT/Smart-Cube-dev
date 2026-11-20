@@ -5,7 +5,7 @@ import { L } from '../i18n.js';
 import { CubeView } from './cube-view.js';
 import { formatTime, formatSolve } from '../stats.js';
 import { avatarHtml } from '../profile.js';
-import { SOLVED, applyMove, isSolved, parseMove, formatMove } from '../cube/facelets.js';
+import { SOLVED, applyMove, isSolved, parseMove, formatMove, countHtm } from '../cube/facelets.js';
 import { analyzeSolve } from '../cube/analysis.js';
 import { liveStage, barHtml, liveCrossFace } from './live-bar.js';
 import { cfopTable } from './cfop-table.js';
@@ -377,7 +377,7 @@ export class RoomView {
 
   #watchMoves(c) {
     const w = this.watch;
-    const n = c.moves.length;
+    const n = countHtm(c.moves); // R2 = 1 Zug
     const t = c.times.at(-1) || 0;
     // Vierteldrehungen derselben Seite zusammenfassen (R R → R2), wie man sie liest
     const merged = [];
@@ -416,7 +416,7 @@ export class RoomView {
           { cls: 'ph-oll', name: 'OLL', extra: ph[5].skip ? ' <span class="tag">Skip</span>' : a.ll?.oll ? ` <span class="small">${a.ll.oll}</span>` : '', time: ph[5].time, moves: ph[5].moves, recog: ph[5].recog },
           { cls: 'ph-pll', name: 'PLL', extra: ph[6].skip ? ' <span class="tag">Skip</span>' : a.ll?.pll ? ` <span class="small">${esc(a.ll.pll)}</span>` : '', time: ph[6].time, moves: ph[6].moves, recog: ph[6].recog },
         ]);
-        html += `<details class="wv-sol"><summary>${L('Lösung', 'Solution')} (${c.moves.length} ${L('Züge', 'moves')})</summary><div class="in-alg">${esc(groupAlg(c.moves.join(' ')))}</div></details>`;
+        html += `<details class="wv-sol"><summary>${L('Lösung', 'Solution')} (${countHtm(c.moves)} ${L('Züge', 'moves')})</summary><div class="in-alg">${esc(groupAlg(c.moves.join(' ')))}</div></details>`;
       } catch (err) {
         console.warn(err);
       }

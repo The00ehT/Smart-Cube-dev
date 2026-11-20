@@ -434,3 +434,34 @@ export function mirrorState(state) {
   });
   return out.join('');
 }
+
+/**
+ * Züge in HTM: Der Smartcube meldet R2 als zwei Vierteldrehungen (R R bzw. R' R') –
+ * die zählen als ein Zug. Überall in der App wird so gezählt.
+ */
+export function countHtm(moves) {
+  let n = 0;
+  for (let i = 0; i < moves.length; i++) {
+    n++;
+    if (i + 1 < moves.length && moves[i + 1] === moves[i] && !moves[i].endsWith('2')) i++;
+  }
+  return n;
+}
+
+/** Laufender Zähler in HTM (für Züge, die einzeln ankommen) */
+export class HtmCounter {
+  constructor() {
+    this.n = 0;
+    this.last = null;
+    this.merged = false;
+  }
+  push(move) {
+    if (move === this.last && !this.merged && !move.endsWith('2')) this.merged = true; // R R = R2
+    else {
+      this.n++;
+      this.merged = false;
+    }
+    this.last = move;
+    return this.n;
+  }
+}

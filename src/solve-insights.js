@@ -264,6 +264,32 @@ export function solveInsights(solve, opts = {}) {
     const n = f2lSolved(s) && llOriented(s) ? identifyPll(s) : null;
     if (n && n !== 'Skip') out.pll.best = bestLl(`PLL ${n}`, s, (t) => f2lSolved(t) && llOriented(t) && identifyPll(t) === 'Skip', extraAlgs);
   }
+  // Plausibel ausrichten: Von welcher Seite wurde OLL/PLL gemacht? Ohne Gyro unbekannt – nimm den Blickwinkel,
+  // in dem deine Züge am besten zu deinen Algorithmen (Algorithmen-Tab) bzw. der Datenbank passen.
+  // (Sonst stünde z. B. B … da, obwohl dein Alg mit R anfängt.)
+  const plainToks = (a) => tokenizeAlg(a).filter((t) => !/^[xyz]/.test(t));
+  const lcs = (a, b) => {
+    const dp = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+    for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] + 1 : Math.max(dp[i - 1][j], dp[i][j - 1]);
+    return dp[a.length][b.length];
+  };
+  for (const [l, p] of [[out.oll, oll], [out.pll, pll]]) {
+    if (l.skip || !l.best?.id || !p.moves) continue;
+    const refs = [...extraAlgs(l.best.id), ...dbAlgs(l.best.id)].map(plainToks);
+    let bestScore = -Infinity;
+    for (const r of Y) {
+      const mine = userAlg(p, r);
+      const toks = mine.split(' ').filter(Boolean);
+      const match = Math.max(0, ...refs.map((ref) => lcs(toks, ref)));
+      const awkward = toks.filter((t) => t[0] === 'B' || t[0] === 'D').length; // B/D sind unüblich am Anfang/in LL-Algs
+      const score = match * 10 - awkward;
+      if (score > bestScore) {
+        bestScore = score;
+        l.userMoves = mine;
+        l.view = r;
+      }
+    }
+  }
   for (const l of [out.oll, out.pll]) {
     l.saved = l.best ? Math.max(0, l.moves - l.best.len) : 0;
     l.twoLook = !!l.best && l.moves >= l.best.len + 4 && l.moves >= l.best.len * 1.35; // vermutlich 2-Look oder Umweg

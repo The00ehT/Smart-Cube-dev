@@ -8,7 +8,7 @@
  * Langsame und neue Fälle kommen öfter dran.
  */
 import { L } from '../i18n.js';
-import { applyAnyAlg, rotationFaceMap, CROSS_DOWN } from '../cube/facelets.js';
+import { applyAnyAlg, rotationFaceMap, CROSS_DOWN, HtmCounter } from '../cube/facelets.js';
 import { CASE_STATE, stateForAlg, solvedUpToAuf, f2lSolved, llOriented } from '../cube/ll-cases.js';
 import { displayState } from '../cube/f2l-cases.js';
 import { AlgDetector } from '../cube/alg-detect.js';
@@ -155,6 +155,7 @@ export class Trainer {
     if (set === 'OLL' || set === 'PLL') shown = applyAnyAlg(shown, pickOne(VIEW));
     if (set === 'F2L') shown = displayState(shown);
     this.detector = new AlgDetector(base, DONE[set] || solvedUpToAuf);
+    this.htm = new HtmCounter(); // angezeigte Züge: R2 = 1 Zug
     this.shownAt = this.h.now();
     this.firstAt = null;
     this.done = false;
@@ -189,6 +190,7 @@ export class Trainer {
     if (this.done) return true; // Nachdreh-AUF nach dem Erkennen ignorieren
     const t = e.localTimestamp ?? this.h.now();
     if (this.firstAt == null) this.firstAt = t;
+    this.htm.push(e.move);
     if (this.detector.push(e.move)) this.finish(t);
     else if (this.detector.moves === 40) this.dlg.querySelector('.pd-msg').textContent = L('Verdreht? „Überspringen“ holt den nächsten Fall.', 'Messed up? “Skip” gets the next case.');
     return true;
@@ -199,11 +201,11 @@ export class Trainer {
     const exec = Math.max(0, t - this.firstAt);
     const recog = Math.max(0, this.firstAt - this.shownAt);
     const pb = recordTraining(this.id, exec, recog);
-    this.session.push({ id: this.id, exec, recog, pb, moves: this.detector.moves });
+    this.session.push({ id: this.id, exec, recog, pb, moves: this.htm.n });
     const q = (s) => this.dlg.querySelector(s);
     q('.pd-time').textContent = formatTime(exec);
     q('.pd-time').className = 'pd-time done';
-    q('.pd-msg').innerHTML = `✓ <b>${esc(caseName(this.id))}</b> · Recog ${formatTime(recog)} · ${this.detector.moves} ${L('Züge', 'moves')}${pb ? ` · <span class="tag pb-tag">🏆 PB</span>` : ''}`;
+    q('.pd-msg').innerHTML = `✓ <b>${esc(caseName(this.id))}</b> · Recog ${formatTime(recog)} · ${this.htm.n} ${L('Züge', 'moves')}${pb ? ` · <span class="tag pb-tag">🏆 PB</span>` : ''}`;
     this.renderName();
     this.renderStats();
     this.nextTimer = setTimeout(() => this.active && this.next(), 1000);

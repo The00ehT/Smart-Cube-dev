@@ -9,7 +9,7 @@ import { L, dec } from '../i18n.js';
 import { colorChip } from './replay.js';
 import { caseDiagram, f2lDiagram, PHYS } from './ll-diagram.js';
 import { groupAlg } from '../cube/alg-format.js';
-import { COLOR_NAMES, SOLVED, applyAlg, isSolved, phaseStatus, solvedSlots, relativeState } from '../cube/facelets.js';
+import { COLOR_NAMES, SOLVED, applyAlg, isSolved, phaseStatus, solvedSlots, relativeState, HtmCounter } from '../cube/facelets.js';
 import { ScrambleTracker } from '../cube/scramble-tracker.js';
 import { setupAlgFor } from './cube-view.js';
 
@@ -47,13 +47,12 @@ function crossSection(r) {
       ${c.multi ? `<span class="in-tag good">🔥 ${L('Mehrere Paare direkt mit dem Kreuz', 'Several pairs right with the cross')}</span>` : verdict(c.saved)}
     </div>
     ${cmpAlgs(c.userMoves, ref.moves, r.xcross ? L('Optimal (X-Cross)', 'Optimal (X-cross)') : L('Optimal', 'Optimal'))}
-    ${frontPicker({ k: 'cross', frontOptions: c.frontOptions, holdK: r.xcross && c.xcross && c.source !== 'set' ? ['', 'y', 'y2', "y'"].indexOf(c.xcross.r) : c.holdK, source: c.source === 'set' ? 'set' : 'assumed' })}
-    <div class="small">${L('Haltung', 'Hold')}: ${holdText(r.xcross && c.xcross ? c.xcross.hold : c.optimal.hold)}${r.xcross && c.xcross ? ` · ${L('Paar', 'Pair')} ${pairName(c.xcross.pair)} → ${L('hinten links', 'back left')}` : ''}</div>
-    ${!r.xcross && c.xcross?.complete ? `<div class="in-tip">💡 ${L(`X-Cross wäre in ${mv(c.xcross.len)} gegangen: achte auf das Paar`, `An X-cross was possible in ${mv(c.xcross.len)}: look for the pair`)} <b>${pairName(c.xcross.pair)}</b> – ${L('es landet im Slot <b>hinten links</b>, vorne bleibt frei für die nächsten Paare.', 'it goes into the <b>back-left</b> slot, keeping the front free for the next pairs.')}${alg(c.xcross.moves)}<div class="small">${L('Haltung', 'Hold')}: ${holdText(c.xcross.hold)}</div></div>` : ''}
-    <div class="in-actions">${practiceBtn(0)}</div>
-    <div class="in-sub">${L('Optimales Kreuz je Farbe', 'Optimal cross per color')}</div>
-    <div class="in-colors">${colors}</div>
-    ${bestOther ? `<div class="small">${L(`Mit ${COLOR_NAMES[c.bestColor.face]} wäre das Kreuz ${mv(c.optimal.len - c.bestColor.len)} kürzer gewesen – gut für Color-Neutral-Training.`, `With ${COLOR_NAMES[c.bestColor.face]} the cross would have been ${mv(c.optimal.len - c.bestColor.len)} shorter – nice for color-neutral practice.`)}</div>` : ''}
+    <div class="in-meta">${frontPicker({ k: 'cross', frontOptions: c.frontOptions, holdK: r.xcross && c.xcross && c.source !== 'set' ? ['', 'y', 'y2', "y'"].indexOf(c.xcross.r) : c.holdK, source: c.source === 'set' ? 'set' : 'assumed' })}${r.xcross && c.xcross ? `<span class="small">${L('Paar', 'Pair')} ${pairIcon(c.xcross.pair, r.crossFace)} → ${L('hinten links', 'back left')}</span>` : ''}${practiceBtn(0)}</div>
+    ${!r.xcross && c.xcross?.complete ? `<details class="in-tip in-fold"><summary>💡 ${L(`X-Cross wäre in ${mv(c.xcross.len)} gegangen`, `An X-cross was possible in ${mv(c.xcross.len)}`)}</summary>${L('Achte auf das Paar', 'Look for the pair')} ${pairIcon(c.xcross.pair, r.crossFace)} <b>${[...c.xcross.pair].map((f) => COLOR_NAMES[f]).join('-')}</b> – ${L('es landet im Slot <b>hinten links</b>, vorne bleibt frei für die nächsten Paare.', 'it goes into the <b>back-left</b> slot, keeping the front free for the next pairs.')}${alg(c.xcross.moves)}<div class="small">${L('Haltung', 'Hold')}: ${holdText(c.xcross.hold)}</div></details>` : ''}
+    <details class="in-fold in-colors-box"><summary>${L('Optimales Kreuz je Farbe', 'Optimal cross per color')}${bestOther ? ` · <b>${COLOR_NAMES[c.bestColor.face]} −${c.optimal.len - c.bestColor.len}</b>` : ''}</summary>
+      <div class="in-colors">${colors}</div>
+      ${bestOther ? `<div class="small">${L(`Mit ${COLOR_NAMES[c.bestColor.face]} wäre das Kreuz ${mv(c.optimal.len - c.bestColor.len)} kürzer gewesen – gut für Color-Neutral-Training.`, `With ${COLOR_NAMES[c.bestColor.face]} the cross would have been ${mv(c.optimal.len - c.bestColor.len)} shorter – nice for color-neutral practice.`)}</div>` : ''}
+    </details>
   </section>`;
 }
 
@@ -68,7 +67,9 @@ const POS_SHORT = { FR: L('vorne rechts', 'front right'), FL: L('vorne links', '
 const practiceBtn = (idx) => `<button type="button" class="ghost small-btn in-practice-btn" data-practice="${idx}">🎯 ${L('Üben ab hier', 'Practice from here')}</button>`;
 
 /** Haltung: welche Farbe war vorne? antippbar (ohne Gyroskop selbst einstellen) */
+const EDIT = { on: false }; // Haltung bearbeiten (Farbwahl sichtbar) – sonst kompakt
 function frontPicker(p) {
+  if (!EDIT.on) return `<span class="in-front-compact">${colorChip(p.frontOptions[p.holdK])} ${L('vorne', 'front')}</span>`;
   const src = p.source === 'set' ? L('von dir eingestellt', 'set by you') : p.source === 'gyro' ? L('aus dem Gyroskop', 'from the gyroscope') : L('angenommen – tippe an, welche Farbe vorne war', 'assumed – tap the color that was in front');
   return `<div class="in-front"><span class="in-lbl">${L('Vorne', 'Front')}</span>${p.frontOptions
     .map((f, k) => `<button type="button" class="in-fc${k === p.holdK ? ' on' : ''}" data-pair="${p.k}" data-front="${k}" title="${COLOR_NAMES[f]}">${colorChip(f)}</button>`)
@@ -85,8 +86,11 @@ function pairDiagram(p) {
 }
 
 function pairRow(p, r) {
-  const head = `<div class="in-head"><b>${L('Paar', 'Pair')} ${p.k}</b> ${pairIcon(p.slot, r.crossFace)}<span class="small">${mv(p.moves)} · ${formatTime(p.time)}</span></div>`;
-  if (p.free) return `<div class="in-item">${head}<div class="small">✓ ${L('Schon mit dem Kreuz bzw. einem anderen Paar gelöst', 'Already solved with the cross or another pair')}</div></div>`;
+  const tag = p.free ? `<span class="in-tag good">✓ ${L('mit dem Kreuz', 'with the cross')}</span>` : p.best && !p.best.stuck ? verdict(p.saved) : p.best?.stuck ? '<span class="in-tag warn">⚠</span>' : '';
+  const flag = p.rotation?.unnecessary ? `<span class="in-tag warn">↻</span>` : '';
+  const head = `<summary class="in-head"><b>${L('Paar', 'Pair')} ${p.k}</b> ${pairIcon(p.slot, r.crossFace)}<span class="small">${mv(p.moves)} · ${formatTime(p.time)}</span>${tag}${flag}</summary>`;
+  if (p.free) return `<details class="in-item in-collapse">${head}<div class="small">✓ ${L('Schon mit dem Kreuz bzw. einem anderen Paar gelöst', 'Already solved with the cross or another pair')}</div></details>`;
+  const open = p.saved > 1 || p.rotation?.unnecessary || p.best?.stuck;
   const b = p.best;
   let body;
   if (!b) body = `<div class="small">${L('Fall nicht eindeutig erkennbar.', 'Case could not be identified.')}</div>`;
@@ -107,18 +111,19 @@ function pairRow(p, r) {
   const easier = p.easier
     ? `<div class="in-tip">💡 ${L('Leichter wäre gewesen', 'Easier would have been')}: ${pairIcon(p.easier.hold.front + p.easier.hold.right, r.crossFace)} ${p.easier.id} · ${mv(p.easier.len)}${alg(p.easier.alg)}<div class="small">${colorChip(p.easier.hold.front)} ${L('vorne', 'front')}</div></div>`
     : '';
-  return `<div class="in-item">${head}${frontPicker(p)}${rot}${body}${easier}<div class="in-actions">${practiceBtn(p.k)}</div></div>`;
+  return `<details class="in-item in-collapse"${open ? ' open' : ''}>${head}<div class="in-meta">${frontPicker(p)}${practiceBtn(p.k)}</div>${rot}${body}${easier}</details>`;
 }
 
 /** OLL/PLL sind feste Algorithmen: nur Fall, Zeiten und eigene Züge – ohne Verbesserungsvorschlag */
 function llRow(name, cls, l) {
-  const head = `<div class="in-head"><i class="key ${cls}"></i><b>${name}</b><span class="small">${mv(l.moves)} · ${formatTime(l.time)}${l.recog ? ` · Recog ${formatTime(l.recog)}` : ''}</span></div>`;
-  if (l.skip) return `<div class="in-item">${head}<div class="small">🎉 Skip</div></div>`;
   const b = l.best;
-  return `<div class="in-item">${head}<div class="in-case">${b ? caseDiagram(b.id, 46) : ''}<div class="in-case-tx">
-      <div class="small">${b ? `<b>${esc(b.id.startsWith('PLL') ? `${b.id.slice(4)}-Perm` : b.id)}</b>` : L('Fall nicht eindeutig erkennbar', 'Case not identified')}</div>
+  const caseName = b ? (b.id.startsWith('PLL') ? `${b.id.slice(4)}-Perm` : b.id) : '';
+  const head = `<summary class="in-head"><i class="key ${cls}"></i><b>${name}</b>${l.skip ? '<span class="in-tag good">Skip</span>' : caseName ? `<span class="small">${esc(caseName)}</span>` : ''}<span class="small">${mv(l.moves)} · ${formatTime(l.time)}</span></summary>`;
+  if (l.skip) return `<details class="in-item in-collapse">${head}<div class="small">🎉 Skip</div></details>`;
+  return `<details class="in-item in-collapse">${head}<div class="in-case">${b ? caseDiagram(b.id, 46) : ''}<div class="in-case-tx">
+      <div class="small">${b ? `<b>${esc(caseName)}</b>` : L('Fall nicht eindeutig erkennbar', 'Case not identified')}${l.recog ? ` · Recog ${formatTime(l.recog)} · Exec ${formatTime(Math.max(0, l.time - l.recog))}` : ''}</div>
       <div class="in-alg mine">${esc(groupAlg(l.userMoves)) || '–'}</div>
-    </div></div><div class="in-actions">${practiceBtn(name === 'OLL' ? 5 : 6)}</div></div>`;
+    </div></div><div class="in-actions">${practiceBtn(name === 'OLL' ? 5 : 6)}</div></details>`;
 }
 
 /** Rotations im F2L: Anzahl, davon unnötig – bzw. Hinweis, „vorne“ einzustellen */
@@ -126,7 +131,7 @@ function rotSummary(r) {
   const anyAssumed = r.pairs.some((p) => !p.free && p.source === 'assumed');
   const ro = r.rotations;
   if (ro.count) return `<div class="in-rot${ro.unnecessary ? ' warn' : ''}">↻ ${ro.count} ${ro.count === 1 ? L('Rotation', 'rotation') : L('Rotations', 'rotations')}${ro.unnecessary ? ` · <b>${ro.unnecessary} ${L('davon unnötig', 'unnecessary')}</b>` : ''}</div>`;
-  if (anyAssumed) return `<div class="small in-rot-hint">${L('Ohne Gyroskop: Tippe bei jedem Paar an, welche Farbe vorne war – dann erkennt die Analyse deine Rotations und sagt, welche unnötig waren.', 'Without gyroscope: tap which color was in front for each pair – then the analysis detects your rotations and tells you which were unnecessary.')}</div>`;
+  if (anyAssumed) return `<div class="small in-rot-hint">${L('Ohne Gyroskop: Über „✎ Haltung einstellen“ angeben, welche Farbe vorne war – dann bewertet die Analyse deine Rotations.', 'Without gyroscope: use “✎ Set hold” to say which color was in front – then the analysis rates your rotations.')}</div>`;
   return `<div class="small">✓ ${L('Keine Rotations im F2L', 'No rotations during F2L')}</div>`;
 }
 
@@ -146,6 +151,18 @@ export class InsightsView {
       const pb = e.target.closest('[data-practice]');
       if (pb) return this.startPractice(Number(pb.dataset.practice));
       if (e.target.closest('[data-act=practice-stop]')) return this.stopPractice();
+      if (e.target.closest('[data-act=edit-hold]')) {
+        EDIT.on = !EDIT.on;
+        try {
+          localStorage.setItem('smartcube.editHold', EDIT.on ? '1' : '');
+        } catch {
+          /* egal */
+        }
+        const top = this.dlg.scrollTop;
+        this.render(this.solve);
+        this.dlg.scrollTop = top;
+        return;
+      }
       if (e.target.closest('[data-act=practice-again]')) return this.startPractice(this.practice?.idx ?? 0);
     });
     dlg.addEventListener('close', () => {
@@ -186,7 +203,7 @@ export class InsightsView {
     // Cross: das Original-Scramble, wenn der Würfel gelöst ist
     if (idx === 0 && this.solve.scramble && isSolved(cur) && applyAlg(SOLVED, this.solve.scramble) === target) setup = this.solve.scramble;
     else setup = await setupAlgFor(relativeState(cur, target));
-    this.practice = { idx, target, tracker: new ScrambleTracker(setup), phase: 'setup', moves: 0, original: idx === 0 ? r.cross.user : idx <= 4 ? r.pairs[idx - 1].moves : idx === 5 ? r.oll.moves : r.pll.moves };
+    this.practice = { idx, target, tracker: new ScrambleTracker(setup), phase: 'setup', moves: 0, htm: new HtmCounter(), original: idx === 0 ? r.cross.user : idx <= 4 ? r.pairs[idx - 1].moves : idx === 5 ? r.oll.moves : r.pll.moves };
     if (this.practice.tracker.done) this.practice.phase = 'go';
     this.renderPractice();
   }
@@ -243,7 +260,7 @@ export class InsightsView {
       } else if (pr.tracker.corrections > 0) this.scheduleRescramble();
     } else if (pr.phase === 'go') {
       if (pr.startAt == null) pr.startAt = t;
-      pr.moves++;
+      pr.moves = pr.htm.push(e.move); // R2 = 1 Zug
       if (this.phaseDone(state)) {
         pr.phase = 'done';
         pr.time = t - pr.startAt;
@@ -281,6 +298,11 @@ export class InsightsView {
 
   open(solve) {
     this.solve = solve;
+    try {
+      EDIT.on = localStorage.getItem('smartcube.editHold') === '1';
+    } catch {
+      EDIT.on = false;
+    }
     this.fronts = { ...(solve.fronts || {}) };
     this.stopPractice();
     this.dlg.innerHTML = `<div class="rp-head"><div><h2>${L('Analyse', 'Analysis')}</h2><div class="small">${formatSolve(solve)}</div></div>
@@ -314,6 +336,7 @@ export class InsightsView {
       <button type="button" class="rp-close" data-act="close" aria-label="${L('Schließen', 'Close')}">✕</button></div>
       <div class="in-practice" hidden></div>
       ${summary}
+      <div class="in-toolbar"><button type="button" class="ghost small-btn${EDIT.on ? ' on' : ''}" data-act="edit-hold">${EDIT.on ? `✓ ${L('Haltung fertig', 'Hold done')}` : `✎ ${L('Haltung (vorne) einstellen', 'Set hold (front)')}`}</button></div>
       <section class="in-sec in-scr"><h3>Scramble</h3><div class="in-alg">${esc(r.scramble) || L('(eigenes Scramble)', '(own scramble)')}</div></section>
       ${crossSection(r)}
       <section class="in-sec"><h3><i class="key ph-pair"></i>F2L</h3>${rotSummary(r)}${r.pairs.map((p) => pairRow(p, r)).join('')}</section>

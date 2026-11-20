@@ -8,7 +8,8 @@ import { pairIcon } from './pair-icon.js';
 import { L, locale, dec } from '../i18n.js';
 import { moveCounts } from '../metrics.js';
 import { TwistyPlayer } from 'cubing/twisty';
-import { SOLVED, applyAlg, CROSS_DOWN, COLOR_NAMES } from '../cube/facelets.js';
+import { SOLVED, applyAlg, applyAnyAlg, CROSS_DOWN, COLOR_NAMES } from '../cube/facelets.js';
+const YR = ['', 'y', 'y2', "y'"];
 import { viewerEvents } from '../cube/gyro.js';
 import { analyzeSolve, PHASE_NAMES } from '../cube/analysis.js';
 import { setupAlgFor } from './cube-view.js';
@@ -56,6 +57,7 @@ export class Replay {
         </div>
         <div class="rp-side">
           <div class="rp-phases"></div>
+          <div class="rp-front"></div>
           <label class="toggle rp-gyro-toggle" hidden><input type="checkbox" class="rp-gyro" checked /> ${L('Rotations &amp; Regrips zeigen (Gyro)', 'Show rotations &amp; regrips (gyro)')}</label>
           <div class="rp-actions">
             <button class="rp-share primary">${L('Teilen', 'Share')}</button>
@@ -93,6 +95,14 @@ export class Replay {
       }
     });
     $('.rp-share', dialog).addEventListener('click', () => this.share());
+    // Haltung: welche Farbe vorne (gilt für Ansicht, Notation und den Teilen-Link)
+    $('.rp-front', dialog).addEventListener('click', (e) => {
+      const b = e.target.closest('[data-rfront]');
+      if (!b || !this.solve) return;
+      this.solve.front = Number(b.dataset.rfront);
+      this.build();
+      this.renderFront();
+    });
     $('.rp-race', dialog).addEventListener('click', () => {
       dialog.close();
       this.onRace?.(this.solve);
@@ -156,13 +166,24 @@ export class Replay {
       $('.rp-cube', d).append(this.player);
     }
     this.build();
+    this.renderFront();
     this.seekMove(0);
+  }
+
+  /** Farbwahl „vorne“ (4 Seitenfarben bei Kreuz unten) */
+  renderFront() {
+    const face = this.analysis.crossFace;
+    const k = this.solve.front || 0;
+    $('.rp-front', this.dlg).innerHTML = `<span class="small">${L('Vorne', 'Front')}</span>${YR.map((r, i) => {
+      const f = applyAnyAlg(SOLVED, `${CROSS_DOWN[face]} ${r}`)[22];
+      return `<button type="button" class="in-fc${i === k ? ' on' : ''}" data-rfront="${i}" title="${COLOR_NAMES[f]}">${colorChip(f)}</button>`;
+    }).join('')}`;
   }
 
   /** Ereignisliste (Züge aus Sicht des Lösers, ggf. Drehungen und Griffwechsel) neu aufbauen */
   build() {
     const s = this.solve;
-    const v0 = CROSS_DOWN[this.analysis.crossFace];
+    const v0 = `${CROSS_DOWN[this.analysis.crossFace]} ${YR[this.solve.front || 0]}`.trim();
     const gyro = this.hasGyro && this.useGyro ? s.gyro : null;
     // Kreuz unten; mit Gyro zusätzlich die gemessenen Drehungen
     const ev = viewerEvents(s.moves, s.times, { v0, rotations: gyro?.rotations || [] });

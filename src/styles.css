@@ -300,7 +300,8 @@ i.key { width: 10px; height: 10px; border-radius: 3px; display: inline-block; ba
 .chart .ln.s2 { stroke: var(--ph-oll); }
 .chart .bar { fill: var(--ph-cross); }
 .chart .hit { fill: transparent; }
-.chart .hit:hover { fill: rgb(127 127 127 / 0.08); }
+.chart .hit { -webkit-tap-highlight-color: transparent; outline: none; }
+@media (hover: hover) { .chart .hit:hover { fill: rgb(127 127 127 / 0.08); } }
 .chart .cross { stroke: var(--chart-ink); stroke-width: 1; stroke-dasharray: 3 3; }
 .sv-tip {
   position: absolute; z-index: 10; pointer-events: none; background: var(--panel); color: var(--text);
@@ -1259,3 +1260,31 @@ body.solving .room-minis:not([hidden]) { display: flex !important; }
 .res-head { display: flex; align-items: center; gap: 8px; }
 .res-del { margin-left: auto; padding: 5px 9px; }
 .pair-ic { vertical-align: middle; flex: none; margin: 0 2px; }
+
+/* Werte der Grafiken fest unter der Grafik (statt am Finger) */
+.stats-full svg, .stats-full svg * { -webkit-tap-highlight-color: transparent; }
+.stats-full svg :focus { outline: none; }
+.chart-readout { min-height: 22px; font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; padding: 2px 4px; }
+.chart-readout b { color: var(--text); font-variant-numeric: tabular-nums; }
+.sv-tip { display: none !important; }
+
+/* Analyse übersichtlich: einklappbare Zeilen, kompakte Haltung */
+.in-collapse > summary { list-style: none; cursor: pointer; }
+.in-collapse > summary::-webkit-details-marker { display: none; }
+.in-collapse > summary::after { content: '▸'; margin-left: auto; color: var(--muted); transition: transform 0.15s; }
+.in-collapse[open] > summary::after { transform: rotate(90deg); }
+.in-collapse > summary .small { margin-left: 0; }
+.in-collapse[open] > summary { margin-bottom: 4px; }
+.in-head .in-tag { margin-left: 4px; }
+.in-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.in-meta .in-practice-btn { margin-left: auto; }
+.in-front-compact { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--muted); }
+.in-fold > summary { cursor: pointer; font-size: 14px; list-style: none; }
+.in-fold > summary::-webkit-details-marker { display: none; }
+.in-fold > summary::before { content: '▸ '; color: var(--muted); }
+.in-fold[open] > summary::before { content: '▾ '; }
+.in-fold[open] > summary { margin-bottom: 6px; }
+.in-colors-box > summary { color: var(--muted); }
+.in-toolbar { display: flex; justify-content: flex-end; margin: -4px 0 8px; }
+.in-toolbar .on { background: var(--accent-soft); color: var(--accent); }
+.rp-front { display: flex; align-items: center; gap: 6px; margin: 4px 0; }

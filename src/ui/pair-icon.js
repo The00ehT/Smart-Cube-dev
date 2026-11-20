@@ -19,17 +19,27 @@ function frontRight(slot, cross) {
   return [a, b];
 }
 
-export function pairIcon(slot, cross, size = 24) {
+/**
+ * Liegender 2×1-Block: links die Kante, rechts die Ecke. Vorne und oben die beiden Paarfarben,
+ * rechts an der Ecke die Kreuzfarbe – so sieht man keine schwarzen (stickerlosen) Flächen.
+ */
+export function pairIcon(slot, cross, size = 26) {
   if (!slot || slot.length !== 2) return '';
   const [f, r] = frontRight(slot, cross || 'D');
-  const c = (x) => PHYS[x] || '#888';
-  // Isometrische Ansicht: Breite 1, Höhe 2 (Kante oben, Ecke unten)
-  const front = (y0) => `<polygon points="4,${y0} 13,${y0 + 5} 13,${y0 + 14} 4,${y0 + 9}" fill="${c(f)}"/>`;
-  const right = (y0) => `<polygon points="13,${y0 + 5} 22,${y0} 22,${y0 + 9} 13,${y0 + 14}" fill="${c(r)}"/>`;
-  return `<svg class="pair-ic" viewBox="0 0 26 34" width="${size}" height="${Math.round(size * 1.3)}" aria-hidden="true">
-    <polygon points="4,4 13,-1 22,4 13,9" fill="#1a1d23"/>
-    ${front(4)}${right(4)}${front(14)}${right(14)}
-    <polygon points="4,23 13,28 22,23 22,26 13,31 4,26" fill="${c(cross || 'D')}"/>
-    <path d="M4 4 L13 9 L22 4 M13 9 L13 28 M4 14 L13 19 L22 14" stroke="#1a1d23" stroke-width="1" fill="none"/>
-  </svg>`;
+  const col = (x) => PHYS[x] || '#888';
+  const S = 7;
+  const P = ([x, y, z]) => [((x - z) * 0.866 * S + 9).toFixed(1), ((-y + (x + z) * 0.5) * S + 10).toFixed(1)];
+  const quad = (pts, fill) => {
+    // leicht nach innen versetzt: Fugen zwischen den Feldern
+    const m = pts.reduce((a, p) => a.map((v, k) => v + p[k] / 4), [0, 0, 0]);
+    const q = pts.map((p) => p.map((v, k) => m[k] + (v - m[k]) * 0.88));
+    return `<polygon points="${q.map((p) => P(p).join(',')).join(' ')}" fill="${fill}" stroke="rgb(0 0 0 / 0.35)" stroke-width="0.5"/>`;
+  };
+  const cells = [];
+  for (const x0 of [0, 1]) {
+    cells.push(quad([[x0, 1, 0], [x0 + 1, 1, 0], [x0 + 1, 1, 1], [x0, 1, 1]], col(r))); // oben
+    cells.push(quad([[x0, 1, 1], [x0 + 1, 1, 1], [x0 + 1, 0, 1], [x0, 0, 1]], col(f))); // vorne
+  }
+  cells.push(quad([[2, 1, 1], [2, 1, 0], [2, 0, 0], [2, 0, 1]], col(cross || 'D'))); // rechts: Kreuzfarbe der Ecke
+  return `<svg class="pair-ic" viewBox="0 0 26 22" width="${size}" height="${Math.round(size * 0.85)}" aria-hidden="true">${cells.join('')}</svg>`;
 }

@@ -6,7 +6,7 @@
  * oder geteilte Solve jederzeit neu auswerten.
  */
 import { L } from '../i18n.js';
-import { FACES, applyMove, applyAnyAlg, phaseStatus, solvedSlots, F2L_SLOTS, isSolved, CROSS_DOWN } from './facelets.js';
+import { FACES, applyMove, applyAnyAlg, phaseStatus, solvedSlots, F2L_SLOTS, isSolved, CROSS_DOWN, countHtm } from './facelets.js';
 import { identifyOll, identifyPll, f2lSolved, llOriented } from './ll-cases.js';
 
 const popcount = (m) => ((m & 1) + ((m >> 1) & 1) + ((m >> 2) & 1) + ((m >> 3) & 1));
@@ -87,7 +87,8 @@ export function analyzeSolve(start, moves, times) {
     const time = t(end) - t(prev);
     // Erkennung: Pause zwischen dem letzten Zug der vorigen Phase und dem ersten Zug dieser Phase
     const recog = moveCount > 0 && prev >= 0 ? t(prev + 1) - t(prev) : 0;
-    const ph = { key, time, moves: moveCount, recog, start: prev + 1, end };
+    // Züge der Phase in HTM (R2 = 1 Zug, auch wenn der Würfel es als R R meldet)
+    const ph = { key, time, moves: moveCount > 0 ? countHtm(moves.slice(prev + 1, end + 1)) : 0, recog, start: prev + 1, end };
     if (/^p\d$/.test(key)) {
       const slot = p.pairSlot[Number(key[1]) - 1];
       if (slot != null) ph.slot = F2L_SLOTS[face][slot].faces;
@@ -120,8 +121,8 @@ export function analyzeSolve(start, moves, times) {
     crossFace: face,
     phases,
     time: total,
-    moveCount: n,
-    tps: total > 0 ? (n / total) * 1000 : 0,
+    moveCount: countHtm(moves),
+    tps: total > 0 ? (countHtm(moves) / total) * 1000 : 0,
     xcross,
     ll,
     solved: isSolved(states[n]),

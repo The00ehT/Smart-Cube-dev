@@ -50,7 +50,7 @@ export function buildSolve(r, extra) {
     solution: r.solution,
     moveCount: r.moveCount,
     // TPS passend zur angezeigten Zugzahl (HTM): R2 zählt als ein Zug
-    tps: r.time > 0 ? Math.round((htmOf(r.moves) / r.time) * 100000) / 100 : 0,
+    tps: r.time > 0 ? Math.round((r.moveCount / r.time) * 100000) / 100 : 0,
     crossFace: r.crossFace,
     xcross: r.xcross,
     ll: r.ll,

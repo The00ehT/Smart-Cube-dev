@@ -36,6 +36,7 @@ export function encodeShare(solve) {
   else if (solve.penalty) q.set('p', '2');
   if (solve.date) q.set('d', new Date(solve.date).getTime().toString(36));
   if (solve.name) q.set('n', solve.name.slice(0, 24));
+  if (solve.front) q.set('o', String(solve.front)); // Haltung: welche Farbe vorne (0–3)
   if (solve.gyro) {
     q.set('g', solve.gyro.rotations.map((r) => `${r.t.toString(36)}~${ROT24.findIndex((x) => x.name === r.name).toString(36)}`).join('.'));
     if (solve.gyro.regrips.length) q.set('h', solve.gyro.regrips.map((t) => t.toString(36)).join('.'));
@@ -64,6 +65,7 @@ export function decodeShare(str) {
     penalty: p === 'd' ? 'DNF' : p === '2' ? 2000 : 0,
     date: d ? new Date(parseInt(d, 36)).toISOString() : null,
     name: (q.get('n') || '').slice(0, 24),
+    front: Math.max(0, Math.min(3, Number(q.get('o')) || 0)),
     gyro: q.has('g')
       ? {
           v0: '',

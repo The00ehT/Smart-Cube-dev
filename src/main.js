@@ -56,7 +56,7 @@ let solves = load(SOLVES_KEY, []);
 {
   let fixed = 0;
   for (const s of solves) {
-    if (s.tpsHtm || !s.solution || !s.time) continue;
+    if (s.htm2 || !s.solution || !s.time) continue;
     const mv = s.solution.split(' ').filter(Boolean);
     let n = 0;
     for (let i = 0; i < mv.length; i++) {
@@ -64,7 +64,17 @@ let solves = load(SOLVES_KEY, []);
       if (i + 1 < mv.length && mv[i + 1] === mv[i] && !mv[i].endsWith('2')) i++;
     }
     s.tps = Math.round((n / s.time) * 100000) / 100;
-    s.tpsHtm = true;
+    s.moveCount = n;
+    // Phasen-Züge ebenfalls in HTM (früher je Vierteldrehung gezählt)
+    if (hasDetail(s)) {
+      try {
+        const a = analyzeSolve(s.start, mv, s.times);
+        a.phases.forEach((p, k) => s.phases[k] && (s.phases[k].moves = p.moves));
+      } catch {
+        /* alter Solve ohne passende Daten */
+      }
+    }
+    s.htm2 = true;
     fixed++;
   }
   if (fixed) save(SOLVES_KEY, solves);
@@ -485,21 +495,6 @@ function solveRows(s) {
   ];
 }
 
-/** Kurze Legende zur Einfärbung (nur wenn es Vergleichswerte gibt) */
-function cmpLegend(s) {
-  const ref = splitBaseline(inScope(scopeOf(s)), s);
-  if (ref.cross == null && ref.oll == null) return '';
-  return `<div class="cmp-legend small"><span class="cmp-scale"></span>${s.xcross ? L('verglichen mit deinen X-Cross-Solves', 'compared with your X-cross solves') : L('verglichen mit deinem Schnitt', 'compared with your average')}</div>`;
-}
-
-/** Vergleich mit den anderen im Ergebnis-Fenster (aktualisiert sich, wenn sie fertig werden) */
-function renderResultCompare() {
-  const box = $('res-room');
-  const round = app.room?.board?.find((b) => b.n === app.lastRoomRound);
-  box.hidden = !round;
-  box.innerHTML = round ? compareHtml(round, app.room.roster || [], app.room.myId) : '';
-}
-
 function showResult(solve, badge) {
   if (!hasDetail(solve)) return;
   $('res-room').hidden = true;
@@ -517,7 +512,7 @@ function showResult(solve, badge) {
     tile(dec(m?.etps), 'Exec TPS'),
     `<div>${m?.fluency == null ? '<b>–</b>' : gauge(m.fluency)}<span>Fluency</span></div>`,
   ].join('');
-  $('res-table').innerHTML = cfopTable(solveRows(solve)) + cmpLegend(solve);
+  $('res-table').innerHTML = cfopTable(solveRows(solve));
   const g = solve.gyro;
   $('res-extra').textContent = [
     g ? `${g.rotations.length} Rotations · ~${g.regrips.length} Regrips` : '',
@@ -1241,7 +1236,7 @@ function openSolve(i) {
     const [c, f, o, pl] = phasesOf(s, { mergeF2l: true });
     $('sd-pie').innerHTML = donut(phaseSegments({ cross: c.time, f2l: f.time, oll: o.time, pll: pl.time }), { value: formatTime(s.time), label: 'gesamt' }, { size: 140 });
   } else $('sd-pie').innerHTML = '';
-  $('sd-cfop').innerHTML = detail && s.phases?.length >= 7 ? cfopTable(solveRows(s)) + cmpLegend(s) : '';
+  $('sd-cfop').innerHTML = detail && s.phases?.length >= 7 ? cfopTable(solveRows(s)) : '';
   $('sd-phases').innerHTML = rows.length && !(detail && s.phases?.length >= 7)
     ? `<tr><th>Phase</th><th>${L('Zeit', 'Time')}</th>${detail ? '<th>Recog</th>' : ''}<th>${L('Züge', 'Moves')}</th><th>TPS</th></tr>` + rows.join('')
     : '';

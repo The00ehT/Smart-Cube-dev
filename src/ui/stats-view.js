@@ -63,7 +63,7 @@ export class StatsView {
     dialog.addEventListener('click', (e) => {
       if (e.target.closest('[data-act=best]')) this.hooks.openBest?.();
     });
-    dialog.addEventListener('pointerleave', () => (this.tip.hidden = true));
+    dialog.addEventListener('pointerleave', (e) => e.pointerType === 'mouse' && this.clearReadout());
   }
 
   /** Mit diesen Solves neu zeichnen */
@@ -75,7 +75,7 @@ export class StatsView {
   render() {
     const all = this.all;
     this.dlg.querySelector('.sv-range').innerHTML =
-      `<span class="label">${L('Zeitraum: letzte', 'Last')}</span>` +
+      `<span class="label">${L('Letzte', 'Last')}</span>` +
       RANGES.map(
         ([label, n]) => `<button data-n="${n}" class="${n === this.range ? 'on' : ''}" aria-pressed="${n === this.range}">${label}</button>`,
       ).join('');
@@ -323,27 +323,44 @@ export class StatsView {
     </section>`;
   }
 
+  /**
+   * Wert unter dem Finger/Mauszeiger – fest unter der Grafik angezeigt (der Finger verdeckt sonst die Anzeige).
+   * Der Finger „klebt“ am Start-Element (Pointer-Capture), deshalb das Element unter der Position nehmen.
+   */
   hover(e) {
-    // Finger „klebt“ am Start-Element (Pointer-Capture) – deshalb das Element unter der Fingerposition nehmen
     const under = document.elementFromPoint(e.clientX, e.clientY) || e.target;
     const el = under.closest?.('[data-tip]');
-    const svg = under.closest?.('svg');
-    const cross = svg?.querySelector('.cross');
+    const svg = el?.closest('svg') || under.closest?.('svg');
+    if (!svg || !svg.closest('.stats-full')) return;
+    const cross = svg.querySelector('.cross');
+    const out = this.readout(svg);
     if (!el) {
-      this.tip.hidden = true;
-      if (cross) cross.setAttribute('x1', -10), cross.setAttribute('x2', -10);
+      if (e.pointerType === 'mouse') this.clearReadout();
       return;
     }
     if (cross && el.dataset.x) cross.setAttribute('x1', el.dataset.x), cross.setAttribute('x2', el.dataset.x);
     const [head, ...rest] = el.dataset.tip.split('|');
-    this.tip.innerHTML = `<b>${head}</b>${rest.map((r) => `<div>${r}</div>`).join('')}`;
-    this.tip.hidden = false;
-    const box = this.dlg.getBoundingClientRect();
-    const tw = this.tip.offsetWidth;
-    let left = e.clientX - box.left + 14;
-    if (left + tw > box.width - 8) left = e.clientX - box.left - tw - 14;
-    this.tip.style.left = `${Math.max(8, left)}px`;
-    this.tip.style.top = `${e.clientY - box.top + 14}px`;
+    out.innerHTML = `<b>${head}</b>${rest.map((r) => `<span>${r}</span>`).join('')}`;
+    out.classList.add('on');
+  }
+
+  /** Anzeigefeld direkt unter der Grafik */
+  readout(svg) {
+    let out = svg.nextElementSibling;
+    if (!out?.classList.contains('chart-readout')) {
+      out = document.createElement('div');
+      out.className = 'chart-readout';
+      svg.after(out);
+    }
+    return out;
+  }
+
+  clearReadout() {
+    this.dlg.querySelectorAll('.chart-readout').forEach((o) => {
+      o.classList.remove('on');
+      o.textContent = '';
+    });
+    this.dlg.querySelectorAll('.chart .cross').forEach((c) => (c.setAttribute('x1', -10), c.setAttribute('x2', -10)));
   }
 }
 
