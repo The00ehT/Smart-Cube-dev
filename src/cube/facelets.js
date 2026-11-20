@@ -420,3 +420,17 @@ export function mirrorAlg(alg) {
     })
     .join(' ');
 }
+
+/**
+ * Spiegelt einen Zustand an der Ebene zwischen R und L (passend zu mirrorAlg):
+ * ein Fall im Slot vorne links wird so zum Fall vorne rechts.
+ */
+export function mirrorState(state) {
+  const swap = { R: 'L', L: 'R' };
+  const out = new Array(54);
+  STICKERS.forEach((s, i) => {
+    const j = INDEX.get(key([-s.pos[0], s.pos[1], s.pos[2]], [-s.normal[0], s.normal[1], s.normal[2]]));
+    out[j] = swap[state[i]] ?? state[i];
+  });
+  return out.join('');
+}

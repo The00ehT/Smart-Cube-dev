@@ -33,4 +33,22 @@ for (const scr of ["R U' F2 D L' B R2 U2 F' L D2 R' B2 U F", "D2 F' R U L2 B' D 
   assert.ok(phaseStatus(after).D.cross && solvedSlots(after, 'D') & (1 << BL), 'X-Cross-Paar hinten links');
   console.log('X-Cross', x.len, 'Züge, Paar', x.pair, 'Haltung', x.r || '–', '| Lösung', q.solution.map((p) => p.key).join(','));
 }
+// Haltung („vorne“) frei wählbar: Vorschlag setzt das Paar aus jeder Haltung richtig ein
+{
+  let checked = 0;
+  for (let hk = 0; hk < 4; hk++) {
+    const q = solveInsights(solve, { fronts: { 3: hk, 4: hk } });
+    for (const pr of q.pairs.filter((x) => !x.free && x.best && !x.best.stuck)) {
+      const before = q.phaseStates[pr.k];
+      const v = relabelToCenters(applyAnyAlg(before, `${CROSS_DOWN[q.crossFace]} ${['', 'y', 'y2', "y'"][pr.holdK]}`));
+      const n0 = solvedSlots(v, 'D').toString(2).split('1').length;
+      const after = relabelToCenters(applyAnyAlg(v, pr.best.alg));
+      const n1 = solvedSlots(after, 'D').toString(2).split('1').length;
+      assert.ok(phaseStatus(after).D.cross && n1 > n0, `Paar ${pr.k} aus Haltung ${hk} (${pr.pos}): ${pr.best.alg}`);
+      checked++;
+    }
+  }
+  const q2 = solveInsights(solve, { fronts: { 3: 0, 4: 2 } });
+  console.log('Haltungen geprüft:', checked, '| Rotations:', JSON.stringify(q2.rotations), q2.pairs.map((x) => x.pos || '-').join(','));
+}
 console.log('insights: alle Tests bestanden');

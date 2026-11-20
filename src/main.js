@@ -219,6 +219,7 @@ function onMove(e) {
   // Algorithmus am Würfel aufnehmen oder trainieren: dann kein Solve-Ablauf
   if (algsView.recording && $('case-dialog').open) return void algsView.recordMove(e.move);
   if (trainer.active && trainer.onMove(e)) return;
+  if (insights.practicing && insights.onMove(e)) return;
 
   switch (app.phase) {
     case 'scrambling':
@@ -500,6 +501,13 @@ $('result-overlay').addEventListener('click', (e) => {
 const insights = new InsightsView($('insights-dialog'), {
   // eigene Algorithmen des Nutzers zusätzlich prüfen
   extraAlgs: (id) => (algsOf(id).own ? algsOf(id).algs : []),
+  state: () => app.state,
+  now: () => now(),
+  persist: () => persistSolves(), // eingestellte Haltungen („vorne“) am Solve speichern
+  // „Üben ab hier“ hat den Würfel verdreht: laufendes Scramble passt nicht mehr
+  onClose: () => {
+    if (!app.room && (app.phase === 'scrambling' || app.phase === 'ready' || app.phase === 'inspecting')) newScramble();
+  },
 });
 $('res-insights').addEventListener('click', () => {
   const s = resultSolve();
