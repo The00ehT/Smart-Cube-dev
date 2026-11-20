@@ -51,7 +51,7 @@ translateStatic(); // feste Texte der Seite (bei Englisch)
 const SOLVES_KEY = 'smartcube.solves.v1';
 const SETTINGS_KEY = 'smartcube.settings.v1';
 
-const settings = { keepAwake: true, inspection: false, autoScramble: true, hideTime: false, gyro: true, viewDown: 'auto', theme: 'auto', replayGyro: true, showResult: true, crossColor: 'auto', scrambleType: 'wca', ...load(SETTINGS_KEY, {}) };
+const settings = { keepAwake: true, inspection: false, autoScramble: true, hideTime: false, gyro: true, viewDown: 'auto', theme: 'auto', replayGyro: true, showResult: true, emojiHelp: true, crossColor: 'auto', scrambleType: 'wca', ...load(SETTINGS_KEY, {}) };
 let solves = load(SOLVES_KEY, []);
 // Früher zählte TPS jede Vierteldrehung (R2 = 2): einmalig auf HTM umrechnen, passend zur Zugzahl
 {
@@ -713,7 +713,7 @@ function openModes() {
   const sessions = [{ id: 'main' }, ...settings.sessions];
   const sessionHtml = `<section class="mode-group"><h3>${L('Session – eigene Statistik', 'Session – own stats')}</h3><div class="session-row">${sessions
     .map((x) => `<button type="button" class="session-chip${x.id === settings.session ? ' on' : ''}" data-session="${x.id}">${escapeHtml(scopeName(x.id, settings.sessions))}</button>`)
-    .join('')}<button type="button" class="session-chip add" data-session="+">＋ ${L('Neue Session', 'New session')}</button></div>
+    .join('')}<button type="button" class="session-chip add" data-session="+">＋ ${L('Neue Session', 'New session')}</button>${settings.sessions.length ? `<button type="button" class="session-chip add" data-act="manage-sessions">✎ ${L('Bearbeiten / löschen', 'Edit / delete')}</button>` : ''}</div>
     <p class="small">${L('Z. B. „OH“ oder „Blind“: Scrambles wie Standard, aber eigene Zeiten, Bestzeiten und Ø. Leichtes Cross und X-Cross zählen automatisch getrennt.', 'E.g. “OH” or “Blind”: scrambles like Standard, but own times, bests and averages. Easy cross and X-cross are counted separately automatically.')}</p></section>`;
   $('mode-list').innerHTML = sessionHtml + modeGroups()
     .map((g) => `<section class="mode-group"><h3>${g.title}</h3><div class="mode-grid">${g.modes
@@ -1358,6 +1358,10 @@ $('mode-btn').addEventListener('click', openModes);
 $('mode-close').addEventListener('click', () => $('mode-dialog').close());
 $('mode-dialog').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) return $('mode-dialog').close();
+  if (e.target.closest('[data-act=manage-sessions]')) {
+    $('mode-dialog').close();
+    return openScopes();
+  }
   const sb = e.target.closest('[data-session]');
   if (sb) {
     const id = sb.dataset.session === '+' ? createSession() : sb.dataset.session;
@@ -1404,6 +1408,10 @@ bindToggle('opt-inspection', 'inspection');
 bindToggle('opt-auto-scramble', 'autoScramble');
 bindToggle('opt-hide-time', 'hideTime');
 bindToggle('opt-result', 'showResult');
+// Erklärungen der Symbole (z. B. ⏱ = Ø, 🏆 = Bestzeit) ein-/ausblenden
+const applyEmojiHelp = () => document.body.classList.toggle('no-emoji-help', settings.emojiHelp === false);
+bindToggle('opt-emoji-help', 'emojiHelp', applyEmojiHelp);
+applyEmojiHelp();
 bindToggle('opt-awake', 'keepAwake', (on) => keepAwake(on));
 keepAwake(settings.keepAwake);
 $('gyro-help').innerHTML = L(
@@ -1531,17 +1539,39 @@ $('scope-dialog').addEventListener('click', (e) => {
   const del = e.target.closest('[data-del]');
   if (del) {
     const id = del.dataset.del;
-    const n = solves.filter((x) => x.session === id).length;
-    if (!confirm(L(`Session löschen? Ihre ${n} Solves wandern zu „Standard“.`, `Delete session? Its ${n} solves move to “Standard”.`))) return;
-    for (const x of solves) if (x.session === id) delete x.session;
-    settings.sessions = settings.sessions.filter((x) => x.id !== id);
-    if (settings.session === id) settings.session = 'main';
-    if (settings.viewScope === id) settings.viewScope = 'active';
-    save(SETTINGS_KEY, settings);
-    persistSolves();
-    renderModeChip();
-    renderSolves();
-    openScopes();
+    const ses = settings.sessions.find((x) => x.id === id);
+    const mine = solves.filter((x) => x.session === id);
+    const n = mine.length;
+    if (!confirm(L(`Session „${ses?.name}“ löschen?`, `Delete session “${ses?.name}”?`))) return;
+    // Solves mitlöschen oder zu „Standard“ verschieben?
+    const dropSolves = n > 0 && confirm(L(`Auch ihre ${n} Solves löschen?\n\nOK = Solves löschen · Abbrechen = Solves zu „Standard“ verschieben`, `Also delete its ${n} solves?\n\nOK = delete solves · Cancel = move solves to “Standard”`));
+    const before = { solves: [...solves], sessions: [...settings.sessions], session: settings.session, viewScope: settings.viewScope };
+    const refresh = () => {
+      save(SETTINGS_KEY, settings);
+      persistSolves();
+      renderModeChip();
+      renderSolves();
+      if ($('scope-dialog').open) openScopes();
+    };
+    undoable(
+      dropSolves ? L(`Session und ${n} Solves gelöscht`, `Session and ${n} solves deleted`) : L('Session gelöscht', 'Session deleted'),
+      () => {
+        if (dropSolves) solves.splice(0, solves.length, ...solves.filter((x) => x.session !== id));
+        else for (const x of mine) delete x.session;
+        settings.sessions = settings.sessions.filter((x) => x.id !== id);
+        if (settings.session === id) settings.session = 'main';
+        if (settings.viewScope === id) settings.viewScope = 'active';
+        refresh();
+      },
+      () => {
+        for (const x of mine) x.session = id;
+        solves.splice(0, solves.length, ...before.solves);
+        settings.sessions = before.sessions;
+        settings.session = before.session;
+        settings.viewScope = before.viewScope;
+        refresh();
+      },
+    );
   }
 });
 $('stats-scope-btn').addEventListener('click', openScopes);

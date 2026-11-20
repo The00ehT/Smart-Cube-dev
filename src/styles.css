@@ -1310,3 +1310,5 @@ body.solving .room-minis:not([hidden]) { display: flex !important; }
 .rp-hold { display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; }
 .rp-hold .in-fc { padding: 2px; }
 .rp-hold .in-fc .chip-color { width: 15px; height: 15px; }
+
+body.no-emoji-help .emoji-help { display: none; }

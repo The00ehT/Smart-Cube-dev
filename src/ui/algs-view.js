@@ -131,9 +131,9 @@ export class AlgsView {
             <div class="stat"><div class="v">${t(tot.recog)}</div><div class="k">Recog</div></div>
             <div class="stat"><div class="v">${t(tot.exec)}</div><div class="k">Exec</div></div>
             <div class="stat"><div class="v">${tot.seen} / ${max}</div><div class="k">${L('Fälle gesehen', 'Cases seen')}</div></div>
-            <div class="stat"><div class="v">${pct(tot.n ? tot.skip / tot.n : null)}</div><div class="k">Skips · 🎲 ${pct(this.set === 'PLL' ? probs.pll.Skip : probs.oll[0])}</div></div>
+            <div class="stat"><div class="v">${pct(tot.n ? tot.skip / tot.n : null)}</div><div class="k">Skips</div></div>
           </div>
-          <p class="small">${L(`Aus ${tot.n} Solves mit erkanntem ${this.set}-Fall. Recog = Pause vor dem ersten Zug der Phase.`, `From ${tot.n} solves with a recognized ${this.set} case. Recog = pause before the first move of the phase.`)}<br />⏱ Ø · 🏆 ${L('Bestzeit', 'best')} · 👁 ${L('so oft gehabt · Anteil', 'times seen · share')} · 🎲 ${L('Wahrscheinlichkeit', 'probability')}</p>`
+          <p class="small emoji-help">${L(`Aus ${tot.n} Solves mit erkanntem ${this.set}-Fall. ⏱ = Ø-Zeit · 🏆 = Bestzeit · Recog = Pause vor dem ersten Zug der Phase.`, `From ${tot.n} solves with a recognized ${this.set} case. ⏱ = average · 🏆 = best · Recog = pause before the first move of the phase.`)}</p>`
         : `<p class="small">${L(`Sobald du Solves machst, erkennt die App automatisch, welcher ${this.set}-Fall drankam, und zeigt hier Häufigkeit, Ø-Zeit und Recog je Fall.`, `Once you solve, the app automatically detects which ${this.set} case came up and shows frequency, average time and recog per case.`)}</p>`;
     }
 
@@ -174,13 +174,13 @@ export class AlgsView {
           </div>
         </button>`;
       }
-      const p = this.set === 'PLL' ? probs.pll[id.slice(4)] : probs.oll[Number(id.slice(4))];
+      // Nur das Wichtigste: Ø-Zeit und Bestzeit (Häufigkeit/Wahrscheinlichkeit stehen im Fall-Fenster)
       return `<button type="button" class="case-card" data-case="${id}">
         ${caseDiagram(id, 64)}
         <div class="cc-body">
           <div class="cc-name">${esc(caseName(id))}${own ? ` <span class="tag">${L('eigener', 'own')}</span>` : ''}</div>
-          <div class="cc-stats">${s ? `⏱ <b>${t(s.mean)}</b> · 🏆 ${t(s.best)}` : '<span class="small">⏱ –</span>'}</div>
-          <div class="cc-freq small" title="${L('Bei dir gesehen · Anteil · Wahrscheinlichkeit', 'Seen by you · share · probability')}">${s ? `👁 ${s.n}× · ${pct(s.share)} · ` : ''}🎲 ${pct(p)}</div>
+          <div class="cc-stats" title="${L('Ø-Zeit', 'Average')}">⏱ <b>${s ? t(s.mean) : '–'}</b></div>
+          <div class="cc-stats cc-pb" title="${L('Bestzeit', 'Best')}">🏆 ${s ? t(s.best) : '–'}</div>
         </div>
       </button>`;
     };

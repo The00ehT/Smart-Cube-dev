@@ -14,6 +14,9 @@ export function toast(text, { action, onAction, duration = 6000 } = {}) {
     document.body.append(box);
   }
   clearTimeout(timer);
+  // Über einem offenen Fenster (modaler Dialog) anzeigen – sonst liegt die Meldung dahinter und „Rückgängig“ ist nicht antippbar
+  const top = [...document.querySelectorAll('dialog[open]')].at(-1) || document.body;
+  if (box.parentElement !== top) top.append(box);
   box.innerHTML = '';
   const span = document.createElement('span');
   span.textContent = text;

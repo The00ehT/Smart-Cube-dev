@@ -167,6 +167,7 @@ const STATIC = {
   '▶ Ansehen': '▶ Replay',
   'Drehe eine beliebige Seite, um weiterzumachen.': 'Turn any face to continue.',
   'Ergebnis-Analyse nach jedem Solve zeigen': 'Show result analysis after every solve',
+  'Erklärungen der Symbole (⏱ 🏆 …) zeigen': 'Show explanations of the symbols (⏱ 🏆 …)',
   'Als Bild teilen': 'Share as image',
   'GAN-Stil (spitze Ecken)': 'GAN style (sharp corners)',
   'Stickerless (rund)': 'Stickerless (round)',
