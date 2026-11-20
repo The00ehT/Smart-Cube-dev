@@ -25,7 +25,7 @@ import { AlgsView } from './ui/algs-view.js';
 import { Trainer } from './ui/trainer.js';
 import { PLL_ALGS, OLL_ALGS } from './cube/ll-cases.js';
 import { ArchiveView } from './ui/archive-view.js';
-import { isArchived, addToArchive, removeFromArchive } from './archive.js';
+import { isArchived, addToArchive, removeFromArchive, archive, replaceArchive } from './archive.js';
 import { easyState } from './cube/easy-scramble.js';
 import { setupAlgFor } from './ui/cube-view.js';
 import { toast, undoable } from './ui/toast.js';
@@ -37,6 +37,7 @@ import { metricsOf, skillProfile, SKILLS } from './metrics.js';
 import { modeGroups, findMode } from './modes.js';
 import { scopeOf, scopeName, scopeList, filterScope } from './sessions.js';
 import { liveStage, barHtml } from './ui/live-bar.js';
+import { loadBig, saveBig, onBigSaved, flushBig, bigStorage } from './db.js';
 import { keepAwake, awakeStatus, setMusicFirst, canMixAudio } from './wake.js';
 import { InsightsView } from './ui/insights-view.js';
 import { algsOf } from './algs.js';
@@ -52,7 +53,9 @@ const SOLVES_KEY = 'smartcube.solves.v1';
 const SETTINGS_KEY = 'smartcube.settings.v1';
 
 const settings = { crossColors: null, keepAwake: true, inspection: false, autoScramble: true, hideTime: false, gyro: true, viewDown: 'auto', theme: 'auto', replayGyro: true, showResult: true, emojiHelp: true, crossColor: 'auto', scrambleType: 'wca', ...load(SETTINGS_KEY, {}) };
-let solves = load(SOLVES_KEY, []);
+// Solves liegen in IndexedDB (viel Platz); alte Daten aus localStorage werden beim ersten Start übernommen
+let solves = await loadBig(SOLVES_KEY, []);
+if (!Array.isArray(solves)) solves = [];
 // Früher zählte TPS jede Vierteldrehung (R2 = 2): einmalig auf HTM umrechnen, passend zur Zugzahl
 {
   let fixed = 0;
@@ -78,7 +81,7 @@ let solves = load(SOLVES_KEY, []);
     s.htm2 = true;
     fixed++;
   }
-  if (fixed) save(SOLVES_KEY, solves);
+  if (fixed) saveBig(SOLVES_KEY, solves);
 }
 
 // Modus: früher nur „Scramble-Art“ – übernehmen
@@ -1214,8 +1217,12 @@ function renderSolves() {
 }
 
 function persistSolves() {
-  if (!save(SOLVES_KEY, solves)) setStatus(L('Hinweis: Solves konnten im Browser nicht gespeichert werden.', 'Note: solves could not be saved in the browser.'));
+  saveBig(SOLVES_KEY, solves);
 }
+onBigSaved((ok, key) => {
+  if (!ok && key === SOLVES_KEY) setStatus(L('Hinweis: Solves konnten im Browser nicht gespeichert werden – bitte „Backup“ sichern.', 'Note: solves could not be saved in the browser – please save a backup.'));
+  if ($('settings-dialog')?.open) renderStorageInfo();
+});
 
 function escapeHtml(s) {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -1480,32 +1487,105 @@ $('btn-forget-mac').addEventListener('click', () => {
   setStatus(L('Gespeicherte MAC-Adressen gelöscht.', 'Saved MAC addresses deleted.'));
 });
 
-$('btn-export').addEventListener('click', () => {
-  const blob = new Blob([JSON.stringify({ app: 'smartcube', version: 1, solves }, null, 2)], { type: 'application/json' });
+// ---------------- Backup (alle Daten) ----------------
+
+// Gerätebezogen, nicht ins Backup: eigener Freundescode (sonst hätten zwei Geräte denselben) und Würfel-Adressen
+const BACKUP_SKIP = new Set(['smartcube.friendCode', 'smartcube.macs.v1', SOLVES_KEY, 'smartcube.archive.v1']);
+
+function exportBackup() {
+  const local = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k?.startsWith('smartcube.') && !BACKUP_SKIP.has(k)) local[k] = localStorage.getItem(k);
+  }
+  const data = { app: 'smartcube', version: 2, exported: new Date().toISOString(), solves, archive, local };
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `smartcube-solves-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `smartcube-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.append(a);
   a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-});
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast(L(`💾 Backup gespeichert (${solves.length} Solves)`, `💾 Backup saved (${solves.length} solves)`));
+}
 
-$('file-import').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  e.target.value = '';
-  if (!file) return;
+async function importBackup(file) {
+  let data;
   try {
-    const data = JSON.parse(await file.text());
-    const incoming = (Array.isArray(data) ? data : data.solves).filter((s) => typeof s.time === 'number');
-    const known = new Set(solves.map((s) => s.id));
-    const added = incoming.filter((s) => !known.has(s.id));
-    solves = [...solves, ...added].sort((a, b) => a.id - b.id);
-    persistSolves();
-    renderSolves();
-    setStatus(L(`${added.length} Solves importiert.`, `${added.length} solves imported.`));
+    data = JSON.parse(await file.text());
   } catch {
-    setStatus(L('Import fehlgeschlagen: keine gültige Export-Datei.', 'Import failed: not a valid export file.'));
+    return toast(L('Laden fehlgeschlagen: keine gültige Backup-Datei.', 'Load failed: not a valid backup file.'));
   }
-});
+  const list = Array.isArray(data) ? data : data?.solves;
+  if (!Array.isArray(list)) return toast(L('Laden fehlgeschlagen: keine gültige Backup-Datei.', 'Load failed: not a valid backup file.'));
+  // Solves und Archiv: zusammenführen (nichts geht verloren, doppelte werden erkannt)
+  const incoming = list.filter((s) => s && typeof s.time === 'number');
+  const known = new Set(solves.map((s) => s.id));
+  const added = incoming.filter((s) => !known.has(s.id));
+  solves.push(...added);
+  solves.sort((a, b) => a.id - b.id);
+  persistSolves();
+  let archAdded = 0;
+  if (Array.isArray(data.archive)) {
+    const have = new Set(archive.map((a) => a.solveId));
+    const add = data.archive.filter((a) => a && !have.has(a.solveId));
+    archAdded = add.length;
+    if (add.length) replaceArchive([...archive, ...add]);
+  }
+  // Einstellungen, Algorithmen, Profil, Freunde: ersetzen nur nach Rückfrage
+  const local = data.local && typeof data.local === 'object' ? Object.entries(data.local).filter(([k, v]) => k.startsWith('smartcube.') && !BACKUP_SKIP.has(k) && typeof v === 'string') : [];
+  const msg = L(`${added.length} Solves${archAdded ? ` und ${archAdded} Archiv-Einträge` : ''} übernommen.`, `${added.length} solves${archAdded ? ` and ${archAdded} archive entries` : ''} added.`);
+  if (local.length && confirm(L(`${msg}\n\nAuch Einstellungen, Sessions, Algorithmen, Profil und Freunde aus dem Backup übernehmen? (Ersetzt die jetzigen.)`, `${msg}\n\nAlso restore settings, sessions, algorithms, profile and friends from the backup? (Replaces the current ones.)`))) {
+    for (const [k, v] of local) {
+      try {
+        localStorage.setItem(k, v);
+      } catch {
+        /* zu groß – überspringen */
+      }
+    }
+    await flushBig();
+    location.reload();
+    return;
+  }
+  renderSolves();
+  setStatus(msg);
+  toast(msg);
+}
+
+$('btn-export').addEventListener('click', exportBackup);
+$('btn-export-2').addEventListener('click', exportBackup);
+for (const id of ['file-import', 'file-import-2'])
+  $(id).addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (file) await importBackup(file);
+    renderStorageInfo();
+  });
+
+/** Speicher-Anzeige in den Einstellungen */
+async function renderStorageInfo() {
+  const el = $('storage-info');
+  if (!el) return;
+  const size = (x) => new Blob([JSON.stringify(x)]).size;
+  const mb = (b) => `${dec(b / 1048576, 1)} MB`;
+  const used = size(solves) + size(archive);
+  let quota = '';
+  try {
+    const est = await navigator.storage?.estimate?.();
+    if (est?.quota) quota = ` · ${L('frei', 'free')}: ${est.quota > 1e10 ? L('reichlich', 'plenty') : mb(Math.max(0, est.quota - (est.usage || 0)))}`;
+  } catch {
+    /* egal */
+  }
+  let persisted = '';
+  try {
+    if (navigator.storage?.persisted) persisted = (await navigator.storage.persisted()) ? ` · 🔒 ${L('dauerhaft', 'persistent')}` : '';
+  } catch {
+    /* egal */
+  }
+  const where = bigStorage === 'indexeddb' ? 'IndexedDB' : L('Browser-Speicher (begrenzt, ~5 MB)', 'browser storage (limited, ~5 MB)');
+  el.textContent = `${solves.length} Solves · ${archive.length} ${L('im Archiv', 'archived')} · ${mb(used)} · ${where}${quota}${persisted}`;
+}
 
 // ---------------- Bereich (Session) wählen ----------------
 
@@ -1975,6 +2055,7 @@ const settingsDlg = $('settings-dialog');
 const openSettings = () => {
   settingsDlg.showModal();
   renderAwake();
+  renderStorageInfo();
 };
 $('btn-settings').addEventListener('click', openSettings);
 $('profile-chip').addEventListener('click', () => openProfile());

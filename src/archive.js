@@ -1,12 +1,19 @@
 /**
  * Archiv: ausgewählte Solves (gute Lösungen) mit kompletter Rekonstruktion, unabhängig von der Solve-Liste.
- * Gespeichert unter smartcube.archive.v1 als Liste von { ...solve, solveId, archivedAt, changedAt, note }.
+ * Gespeichert unter smartcube.archive.v1 (IndexedDB) als Liste von { ...solve, solveId, archivedAt, changedAt, note }.
  */
-import { load, save } from './storage.js';
+import { loadBig, saveBig } from './db.js';
 
 const KEY = 'smartcube.archive.v1';
-export let archive = load(KEY, []);
-const persist = () => save(KEY, archive);
+export let archive = await loadBig(KEY, []); // IndexedDB (großer Speicher), alte Daten werden übernommen
+if (!Array.isArray(archive)) archive = [];
+const persist = () => saveBig(KEY, archive);
+
+/** Ganzes Archiv ersetzen (Backup laden) */
+export function replaceArchive(list) {
+  archive = Array.isArray(list) ? list : [];
+  persist();
+}
 
 export const isArchived = (solve) => !!solve && archive.some((a) => a.solveId === solve.id);
 

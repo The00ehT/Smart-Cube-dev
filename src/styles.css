@@ -1336,3 +1336,5 @@ details.in-sec[open] > summary { margin-bottom: 8px; }
 
 .in-scr-opts { display: flex; justify-content: flex-end; }
 .small-btn.on { border-color: var(--accent); color: var(--accent); }
+.row-buttons { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
+#storage-info { margin-bottom: 4px; }

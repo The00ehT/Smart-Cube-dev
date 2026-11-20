@@ -133,8 +133,8 @@
         <div class="tab-head">
           <h2>Solves</h2>
           <div class="tab-actions">
-            <button id="btn-export" class="ghost" title="Alle Solves als Datei speichern">Export</button>
-            <label class="file-button ghost" title="Solves aus einer Export-Datei laden">Import<input type="file" id="file-import" accept="application/json,.json" hidden /></label>
+            <button id="btn-export" class="ghost" title="Backup: alle Daten als Datei speichern">Backup</button>
+            <label class="file-button ghost" title="Backup oder Export-Datei laden">Laden<input type="file" id="file-import" accept="application/json,.json" hidden /></label>
             <button id="btn-clear" class="ghost danger">Alle löschen</button>
           </div>
         </div>
@@ -406,6 +406,16 @@
         <label class="toggle"><input type="checkbox" id="opt-awake" checked /> Bildschirm anlassen (kein Bildschirmschoner)</label>
         <label class="toggle" id="music-first-row" hidden><input type="checkbox" id="opt-music-first" /> Musik im Hintergrund hat Vorrang (Bildschirm geht evtl. aus)</label>
         <div class="small" id="awake-status"></div>
+      </section>
+
+      <section class="set-sec">
+        <h3>Daten &amp; Backup</h3>
+        <div class="small" id="storage-info"></div>
+        <div class="row-buttons">
+          <button type="button" class="ghost" id="btn-export-2">💾 Backup speichern</button>
+          <label class="file-button ghost">📂 Backup laden<input type="file" id="file-import-2" accept="application/json,.json" hidden /></label>
+        </div>
+        <p class="small">Alles liegt nur auf diesem Gerät in diesem Browser. Das Backup enthält Solves, Archiv, Einstellungen, Sessions, Algorithmen, Profil und Freunde.</p>
       </section>
 
       <section class="set-sec">
