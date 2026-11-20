@@ -37,7 +37,7 @@ import { metricsOf, skillProfile, SKILLS } from './metrics.js';
 import { modeGroups, findMode } from './modes.js';
 import { scopeOf, scopeName, scopeList, filterScope } from './sessions.js';
 import { liveStage, barHtml } from './ui/live-bar.js';
-import { keepAwake } from './wake.js';
+import { keepAwake, awakeStatus } from './wake.js';
 import { InsightsView } from './ui/insights-view.js';
 import { algsOf } from './algs.js';
 import { radarSvg } from './ui/radar.js';
@@ -1423,8 +1423,25 @@ bindToggle('opt-result', 'showResult');
 const applyEmojiHelp = () => document.body.classList.toggle('no-emoji-help', settings.emojiHelp === false);
 bindToggle('opt-emoji-help', 'emojiHelp', applyEmojiHelp);
 applyEmojiHelp();
-bindToggle('opt-awake', 'keepAwake', (on) => keepAwake(on));
+bindToggle('opt-awake', 'keepAwake', (on) => {
+  keepAwake(on);
+  setTimeout(renderAwake, 400);
+});
 keepAwake(settings.keepAwake);
+/** Zustand „Bildschirm anlassen“ in den Einstellungen anzeigen */
+function renderAwake() {
+  const st = awakeStatus();
+  const txt = {
+    off: '',
+    lock: `✓ ${L('Aktiv (Wake Lock)', 'Active (wake lock)')}`,
+    video: `✓ ${L('Aktiv (Video-Methode)', 'Active (video method)')}`,
+    both: `✓ ${L('Aktiv (Wake Lock + Video)', 'Active (wake lock + video)')}`,
+    waiting: `⏳ ${L('Wird beim nächsten Antippen aktiv', 'Activates on your next tap')}`,
+  }[st.state];
+  $('awake-status').textContent = txt + (st.ios && st.state !== 'off' ? ` · ${L('iPhone: kann Musik im Hintergrund pausieren', 'iPhone: may pause background music')}` : '');
+}
+$('opt-awake').closest('.toggle').addEventListener('click', () => setTimeout(renderAwake, 600));
+document.addEventListener('click', () => $('settings-dialog')?.open && setTimeout(renderAwake, 500), { capture: true });
 $('gyro-help').innerHTML = L(
   `<p>Aus spart Akku am <b>Handy</b>: Die App verarbeitet dann keine Lagedaten und zeichnet den Würfel nur bei Zügen neu. Den <b>Würfel-Akku</b> schont das nicht – das Gyroskop im Würfel lässt sich nur mit GANs eigenem, nicht veröffentlichtem Befehl abschalten.</p>
    <p>💡 <b>GAN i4:</b> In Cube Station den Modus <b>Endurance</b> wählen (Gyroskop aus, laut GAN bis ~200 h statt ~30 h Akku). Danach hier ganz normal verbinden – Züge, Zeiten und Analyse funktionieren weiter, nur Rotations/Regrips fehlen. Ob der Würfel den Modus dauerhaft behält, bitte einmal ausprobieren.</p>`,
@@ -1947,7 +1964,10 @@ try {
 // ---------------- Einstellungen, Profil, Farbschema ----------------
 
 const settingsDlg = $('settings-dialog');
-const openSettings = () => settingsDlg.showModal();
+const openSettings = () => {
+  settingsDlg.showModal();
+  renderAwake();
+};
 $('btn-settings').addEventListener('click', openSettings);
 $('profile-chip').addEventListener('click', () => openProfile());
 $('pv-close').addEventListener('click', () => $('profile-dialog').close());
