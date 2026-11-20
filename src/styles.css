@@ -1222,3 +1222,28 @@ body.solving .room-minis:not([hidden]) { display: flex !important; }
 .room-size select { font: inherit; color: var(--text); background: var(--chip); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; }
 .pub-room.full { opacity: 0.6; }
 .pub-room.full .pub-go { color: var(--muted); }
+
+/* Sessions / Bereiche */
+.session-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.session-chip { padding: 7px 12px; border-radius: 999px; font-weight: 600; }
+.session-chip.on { background: var(--accent); color: var(--accent-text); }
+.session-chip.add { background: transparent; border-color: var(--line); }
+.scope-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.scope-pick { flex: 1; display: grid; text-align: left; padding: 10px 12px; border-radius: 12px; background: var(--panel-2); border: 1.5px solid transparent; color: var(--text); white-space: normal; }
+.scope-row.on .scope-pick { border-color: var(--accent); background: var(--accent-soft); }
+.scope-chip { font-size: 14px; padding: 6px 12px; border-radius: 999px; }
+#tab-stats .tab-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+#timer { cursor: pointer; }
+.room-vis { width: min(420px, 100%); margin: 0 auto; }
+.room-vis button { font-size: 14px; white-space: normal; }
+
+/* Raum: Verlauf und frühere Runden */
+.room-board tr[data-round], .rh-table tr[data-round] { cursor: pointer; }
+.room-board tr[data-round]:hover td, .rh-table tr[data-round]:hover td { background: var(--panel-2); }
+.person-head { cursor: pointer; }
+.person-head .person-name { text-decoration: underline dotted; text-underline-offset: 3px; }
+@media (min-width: 701px) { dialog.room-info { width: min(820px, calc(100vw - 24px)); } }
+.room-info .stats { margin-bottom: 10px; }
+.rr-l { margin-top: 12px; }
+.rr-replays { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.rr-people { margin-top: 12px; }

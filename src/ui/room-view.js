@@ -55,8 +55,33 @@ export class RoomView {
       if (b) this.openWatch(b.dataset.watch);
     });
     panel.querySelector('.room-people').addEventListener('click', (e) => {
-      const el = e.target.closest('.person:not(.me)');
-      if (el) this.openWatch(el.dataset.id);
+      const card = e.target.closest('.person');
+      if (!card) return;
+      // Avatar/Name → Verlauf dieser Person; sonst (bei den anderen) zuschauen
+      if (e.target.closest('.person-head') || card.classList.contains('me')) this.openHistory(card.dataset.id);
+      else this.openWatch(card.dataset.id);
+    });
+    panel.querySelector('.room-board').addEventListener('click', (e) => {
+      const tr = e.target.closest('tr[data-round]');
+      if (tr) this.openRound(Number(tr.dataset.round));
+    });
+    // Fenster für Verlauf einer Person und frühere Runden
+    this.info = document.createElement('dialog');
+    this.info.className = 'big-dialog room-info';
+    document.body.append(this.info);
+    this.info.addEventListener('click', (e) => {
+      if (e.target === this.info || e.target.closest('[data-act=close]')) return this.info.close();
+      const r = e.target.closest('[data-round]');
+      if (r) return this.openRound(Number(r.dataset.round));
+      const pp = e.target.closest('[data-person]');
+      if (pp) return this.openHistory(pp.dataset.person);
+      const rp = e.target.closest('[data-replay]');
+      if (rp) {
+        const [id, n] = rp.dataset.replay.split('|');
+        const c = this.cards.get(id);
+        const rec = c?.rounds?.[n];
+        if (rec) this.h.onReplay?.({ ...rec, name: c.name }, `${c.name} · ${L('Runde', 'Round')} ${n}`);
+      }
     });
     // Großes Zuschau-Fenster
     this.watch = document.createElement('dialog');
@@ -143,7 +168,7 @@ export class RoomView {
         el.className = 'person' + (me ? ' me' : '');
         el.dataset.id = p.id;
         el.innerHTML = `
-          <div class="person-head"><span class="avatar"></span><b class="person-name"></b><span class="person-status small"></span></div>
+          <div class="person-head" title="${L('Verlauf ansehen', 'View history')}"><span class="avatar"></span><b class="person-name"></b><span class="person-status small"></span></div>
           <div class="person-cube"></div>
           <div class="person-time">–</div>
           ${me ? '' : `<div class="person-watch small">👁 ${L('Zuschauen', 'Watch')}</div>`}`;
@@ -197,6 +222,7 @@ export class RoomView {
         if (msg.phase !== 'scrambling') c.moves = [];
       }
       if (msg.facelets && msg.facelets !== c.state && !(msg.phase === 'running' && c.moves.length)) this.#setState(c, msg.facelets);
+      if (msg.phase === 'done') this.#record(c);
       this.#status(c);
       if (watched) this.#watchResult(c);
     } else if (msg.kind === 'move') {
@@ -247,6 +273,76 @@ export class RoomView {
     c.el.querySelector('.person-time').textContent = formatSolve(r);
     this.#status(c);
     if (this.watchId === r.from) this.#watchResult(c);
+  }
+
+  /** Mitgeschnittene Züge eines fertigen Solves für die Wiederholung speichern (je Runde) */
+  #record(c) {
+    const n = this.room?.board?.at(-1)?.n;
+    if (!n || !c.start || !c.moves.length) return;
+    if (!isSolved(c.moves.reduce(applyMove, c.start))) return;
+    c.rounds ??= {};
+    c.rounds[n] = { start: c.start, moves: [...c.moves], times: [...c.times] };
+  }
+
+  // ---------------- Verlauf und frühere Runden ----------------
+
+  /** Verlauf einer Person: alle Runden mit Cross, F2L, OLL, PLL, Züge, TPS */
+  openHistory(id) {
+    const p = (this.room?.roster || []).find((x) => x.id === id);
+    if (!p) return;
+    const board = this.room.board || [];
+    const eff = (r) => (r.penalty === 'DNF' ? Infinity : r.time + (r.penalty || 0));
+    const rounds = board.filter((b) => b.results?.[id]);
+    const t = (x) => (x == null ? '–' : formatTime(x));
+    const me = id === this.room.myId;
+    const avg = (f) => {
+      const xs = rounds.map((b) => f(b.results[id])).filter((x) => x != null && Number.isFinite(x));
+      return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+    };
+    const sp = (k) => (r) => r.splits?.[k]?.[0];
+    const rows = [...rounds]
+      .reverse()
+      .map((b) => {
+        const r = b.results[id];
+        const c = this.cards.get(id);
+        return `<tr data-round="${b.n}"><td>${b.n}</td><td><b>${formatSolve(r)}</b></td><td>${t(sp('cross')(r))}${r.splits?.x ? ' <span class="tag">X</span>' : ''}</td><td>${t(sp('f2l')(r))}</td><td>${t(sp('oll')(r))}</td><td>${t(sp('pll')(r))}</td><td>${r.moveCount ?? '–'}</td><td>${r.tps ? r.tps.toFixed(2) : '–'}${c?.rounds?.[b.n] ? ' ▶' : ''}</td></tr>`;
+      })
+      .join('');
+    const valid = rounds.map((b) => eff(b.results[id])).filter(Number.isFinite);
+    const tile = (v, k) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`;
+    this.info.innerHTML = `<div class="rp-head"><div class="wv-who"><span class="avatar">${avatarHtml({ name: p.name, avatar: p.avatar })}</span><div><h2>${esc(p.name)}${me ? ` (${L('du', 'you')})` : ''}</h2><div class="small">${L('Verlauf in diesem Raum', 'History in this room')} · ${rounds.length} ${L('Runden', 'rounds')}</div></div></div>
+        <button type="button" class="rp-close" data-act="close" aria-label="${L('Schließen', 'Close')}">✕</button></div>
+      ${rounds.length
+        ? `<div class="stats">
+            ${tile(valid.length ? formatTime(Math.min(...valid)) : '–', L('Beste', 'Best'))}
+            ${tile(t(avg((r) => eff(r))), 'Ø')}
+            ${tile(t(avg(sp('cross'))), 'Ø Cross')}
+            ${tile(t(avg(sp('f2l'))), 'Ø F2L')}
+            ${tile(t(avg(sp('oll'))), 'Ø OLL')}
+            ${tile(t(avg(sp('pll'))), 'Ø PLL')}
+          </div>
+          <div class="table-wrap"><table class="phase-table rh-table"><tr><th>${L('Runde', 'Round')}</th><th>${L('Zeit', 'Time')}</th><th>Cross</th><th>F2L</th><th>OLL</th><th>PLL</th><th>${L('Züge', 'Moves')}</th><th>TPS</th></tr>${rows}</table></div>
+          <p class="small">${L('Runde antippen für den Vergleich und die Wiederholung (▶).', 'Tap a round for the comparison and replay (▶).')}</p>`
+        : `<p class="small">${L('Noch keine Runde abgeschlossen.', 'No round finished yet.')}</p>`}`;
+    if (!this.info.open) this.info.showModal();
+  }
+
+  /** Frühere Runde: Vergleich, Scramble, Wiederholungen */
+  openRound(n) {
+    const round = (this.room?.board || []).find((b) => b.n === n);
+    if (!round) return;
+    const roster = this.room.roster || [];
+    const replays = roster
+      .filter((p) => this.cards.get(p.id)?.rounds?.[n])
+      .map((p) => `<button type="button" class="ghost small-btn" data-replay="${esc(p.id)}|${n}">▶ ${esc(p.id === this.room.myId ? L('Du', 'You') : p.name)}</button>`)
+      .join('');
+    this.info.innerHTML = `<div class="rp-head"><div><h2>${L('Runde', 'Round')} ${n}</h2><div class="small">${L('Vergleich und Wiederholung', 'Comparison and replay')}</div></div>
+        <button type="button" class="rp-close" data-act="close" aria-label="${L('Schließen', 'Close')}">✕</button></div>
+      ${compareHtml(round, roster, this.room.myId)}
+      <div class="label rr-l">Scramble</div><div class="alg">${esc(round.scramble || '–')}</div>
+      ${replays ? `<div class="label rr-l">${L('Ansehen', 'Watch again')}</div><div class="rr-replays">${replays}</div>` : `<p class="small">${L('Für diese Runde wurden keine Züge mitgeschnitten (z. B. später beigetreten).', 'No moves were recorded for this round (e.g. joined later).')}</p>`}
+      <div class="rr-people small">${L('Verlauf ansehen', 'View history')}: ${roster.map((p) => `<button type="button" class="link-btn" data-person="${esc(p.id)}">${esc(p.name)}</button>`).join(' ')}</div>`;
+    if (!this.info.open) this.info.showModal();
   }
 
   #setState(c, facelets) {
@@ -356,7 +452,7 @@ export class RoomView {
       .map((b) => {
         const ts = roster.map((p) => eff(b.results[p.id])).filter((t) => t != null);
         const best = ts.length ? Math.min(...ts) : null;
-        return `<tr><td>${b.n}</td>${roster
+        return `<tr data-round="${b.n}" title="${L('Runde ansehen', 'View round')}"><td>${b.n} ›</td>${roster
           .map((p) => {
             const r = b.results[p.id];
             if (!r) return '<td class="small">–</td>';

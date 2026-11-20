@@ -53,8 +53,12 @@ self.addEventListener('fetch', (e) => {
 }
 
 // base './' → läuft aus jedem Unterordner (z. B. GitHub Pages unter /smartcube/)
+// Version = Zeitpunkt des Builds (UTC), damit man auf zwei Geräten vergleichen kann, ob beide aktuell sind
+const VERSION = new Date().toISOString().slice(0, 16).replace('T', ' ');
+
 export default defineConfig({
   base: './',
+  define: { __APP_VERSION__: JSON.stringify(VERSION) },
   plugins: [offline()],
   worker: { format: 'es' },
   build: {

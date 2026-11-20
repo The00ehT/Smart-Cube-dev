@@ -1,9 +1,13 @@
 /**
  * Lobby für öffentliche Räume – ohne eigenen Server.
  *
- * Die Lobby ist eine feste Peer-ID im selben PeerJS-Netz wie die Räume. Das Gerät, das als Erstes einen
- * öffentlichen Raum öffnet, übernimmt sie; weitere öffentliche Räume melden sich dort an, wer Räume sucht,
- * bekommt dort die Liste. Schließt das Lobby-Gerät, übernimmt automatisch ein anderer öffentlicher Raum.
+ * Die Lobby läuft auf festen Peer-IDs im selben PeerJS-Netz wie die Räume. Das Gerät, das als Erstes einen
+ * öffentlichen Raum öffnet, übernimmt eine davon; weitere öffentliche Räume melden sich dort an, wer Räume
+ * sucht, bekommt dort die Liste. Schließt das Lobby-Gerät, übernimmt automatisch ein anderer Raum.
+ *
+ * Robust gegen „hängende“ IDs: Es gibt mehrere Lobby-Plätze. Ist einer belegt, aber antwortet nicht (z. B. ein
+ * Handy mit der App im Hintergrund), wird der nächste genommen. Suchende fragen alle Plätze und führen die
+ * Listen zusammen – so geht kein Raum verloren, auch wenn kurzzeitig zwei Lobbys laufen.
  *
  * Nachrichten:
  *   announce { room }   Raum-Gastgeber → Lobby (auch für Aktualisierungen: Spielerzahl, Runde)
@@ -13,7 +17,7 @@
  */
 import { peerOptions, normalizeCode } from './room.js';
 
-const LOBBY_ID = 'smartcube-lobby-v1';
+const SLOTS = ['smartcube-lobby-v2-a', 'smartcube-lobby-v2-b', 'smartcube-lobby-v2-c'];
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Fremde Angaben nur geprüft übernehmen */
@@ -36,17 +40,34 @@ export function cleanRoom(r) {
   };
 }
 
+async function newPeer(id) {
+  const { Peer } = await import('peerjs');
+  return new Promise((resolve, reject) => {
+    const peer = id ? new Peer(id, peerOptions()) : new Peer(peerOptions());
+    const fail = (err) => {
+      peer.destroy();
+      reject(err);
+    };
+    peer.once('open', () => {
+      peer.off('error', fail);
+      resolve(peer);
+    });
+    peer.once('error', fail);
+  });
+}
+
 export class Lobby {
   constructor() {
-    this.peer = null;
-    this.isLobby = false;
-    this.conn = null; // Verbindung zur Lobby (wenn nicht selbst Lobby)
-    this.rooms = new Map(); // nur als Lobby: code → { room, conn }
-    this.watchers = new Set(); // nur als Lobby: Verbindungen der Suchenden
+    this.client = null; // eigener Peer (zufällige ID) für Verbindungen zu Lobbys
+    this.links = new Map(); // Platz → Verbindung zu einer fremden Lobby
+    this.lists = new Map(); // Platz → Räume, die diese Lobby meldet
+    this.host = null; // selbst Lobby: { slot, peer, rooms: Map code → { room, conn }, watchers: Set }
+    this.home = null; // Platz, bei dem der eigene Raum angemeldet ist
     this.mine = null; // eigener öffentlicher Raum
     this.watching = false;
     this.listeners = new Set();
     this.list = [];
+    this.status = 'idle'; // idle | searching | ok | none
   }
 
   // ---------------- Öffentlich ----------------
@@ -55,7 +76,7 @@ export class Lobby {
   async announce(room) {
     this.mine = cleanRoom(room);
     if (!this.mine) return;
-    await this.#ensure(true);
+    if (!this.home || !(this.home === this.host?.slot || this.links.get(this.home)?.open)) this.home = await this.#findHome();
     this.#sendMine();
   }
 
@@ -63,23 +84,20 @@ export class Lobby {
   withdraw() {
     const code = this.mine?.code;
     this.mine = null;
-    if (this.isLobby) {
-      this.#drop();
-      if (this.watching) this.#ensure(false);
-    } else if (code && this.conn?.open) this.conn.send({ type: 'remove', code });
+    if (this.host) this.#dropHost();
+    else if (code && this.home && this.links.get(this.home)?.open) this.links.get(this.home).send({ type: 'remove', code });
+    this.home = null;
+    this.#merge();
   }
 
-  /** Liste öffentlicher Räume beobachten; cb(rooms) bei jeder Änderung. Rückgabe: stop() */
+  /** Liste öffentlicher Räume beobachten; cb(rooms, status) bei jeder Änderung. Rückgabe: stop() */
   watch(cb) {
     this.listeners.add(cb);
     this.watching = true;
-    cb(this.list);
-    const look = () => {
-      if (!this.isLobby && !this.conn?.open) this.#ensure(!!this.mine);
-    };
-    look();
+    cb(this.list, this.status);
+    this.#linkAll();
     // Später geöffnete öffentliche Räume finden (falls gerade keine Lobby da war)
-    const timer = setInterval(look, 8000);
+    const timer = setInterval(() => this.#linkAll(), 8000);
     return () => {
       clearInterval(timer);
       this.listeners.delete(cb);
@@ -89,176 +107,178 @@ export class Lobby {
 
   // ---------------- intern ----------------
 
-  #notify(list) {
-    this.list = list;
-    for (const cb of this.listeners) cb(list);
+  #merge() {
+    const byCode = new Map();
+    const add = (r) => r && !byCode.has(r.code) && byCode.set(r.code, r);
+    if (this.mine) add(this.mine);
+    if (this.host) for (const r of this.host.rooms.values()) add(r.room);
+    for (const list of this.lists.values()) list.forEach(add);
+    this.list = [...byCode.values()].sort((a, b) => b.created - a.created);
+    for (const cb of this.listeners) cb(this.list, this.status);
   }
 
-  #drop() {
+  async #clientPeer() {
+    if (this.client && !this.client.destroyed && !this.client.disconnected) return this.client;
     try {
-      this.conn?.close();
-      this.peer?.destroy();
+      this.client?.destroy();
     } catch {
       /* egal */
     }
-    this.peer = null;
-    this.conn = null;
-    this.isLobby = false;
-    this.rooms.clear();
-    this.watchers.clear();
+    this.client = await newPeer(null);
+    return this.client;
   }
 
-  async #newPeer(id) {
-    const { Peer } = await import('peerjs');
-    return new Promise((resolve, reject) => {
-      const peer = id ? new Peer(id, peerOptions()) : new Peer(peerOptions());
-      const fail = (err) => {
-        peer.destroy();
-        reject(err);
+  /** Mit der Lobby auf einem Platz verbinden; null, wenn dort keine (antwortende) Lobby ist */
+  async #link(slot) {
+    if (this.host?.slot === slot) return null;
+    const open = this.links.get(slot);
+    if (open?.open) return open;
+    let peer;
+    try {
+      peer = await this.#clientPeer();
+    } catch {
+      return null;
+    }
+    const conn = await new Promise((resolve) => {
+      const c = peer.connect(slot, { reliable: true });
+      const done = (v) => {
+        clearTimeout(timer);
+        peer.off('error', onErr);
+        resolve(v);
       };
-      peer.once('open', () => {
-        peer.off('error', fail);
-        resolve(peer);
-      });
-      peer.once('error', fail);
+      const timer = setTimeout(() => done(null), 4500);
+      const onErr = (err) => {
+        if (err?.type === 'peer-unavailable' && String(err.message || '').includes(slot)) done(null);
+      };
+      peer.on('error', onErr);
+      c.once('open', () => done(c));
     });
+    if (!conn) return null;
+    this.links.set(slot, conn);
+    conn.on('data', (msg) => {
+      if (msg?.type === 'list' && Array.isArray(msg.rooms)) {
+        this.lists.set(slot, msg.rooms.map(cleanRoom).filter(Boolean));
+        this.#merge();
+      }
+    });
+    conn.on('close', () => this.#lost(slot, conn));
+    conn.send({ type: 'watch' });
+    return conn;
   }
 
-  /**
-   * Verbindung zur Lobby sicherstellen. claim = true: Ist keine Lobby da, selbst Lobby werden
-   * (nur Gastgeber öffentlicher Räume – Suchende ohne Lobby bekommen einfach eine leere Liste).
-   */
-  async #ensure(claim) {
-    if (this.isLobby || this.conn?.open) return;
-    if (this.connecting) {
-      // Läuft schon ein (Such-)Versuch: abwarten; wer Lobby werden darf, versucht es danach selbst
-      await this.connecting;
-      if (claim && !this.isLobby && !this.conn?.open) return this.#ensure(true);
-      return;
+  /** Suchen: alle Plätze fragen (gleichzeitig) */
+  async #linkAll() {
+    if (this.linking) return;
+    this.linking = true;
+    if (!this.list.length) this.status = 'searching';
+    const res = await Promise.all(SLOTS.map((s) => this.#link(s)));
+    this.linking = false;
+    this.status = res.some(Boolean) || this.host ? 'ok' : 'none';
+    this.#merge();
+  }
+
+  /** Platz für den eigenen Raum: erste antwortende Lobby, sonst ersten freien Platz übernehmen */
+  async #findHome() {
+    if (this.host) return this.host.slot;
+    for (let round = 0; round < 2; round++) {
+      for (const slot of SLOTS) {
+        if (await this.#link(slot)) return slot;
+        if (await this.#claim(slot)) return slot;
+      }
+      await wait(500 + Math.random() * 1000);
     }
-    this.connecting = (async () => {
-      for (let attempt = 0; attempt < 3; attempt++) {
-        if (await this.#connect()) return;
-        if (!claim) {
-          this.#notify([]);
-          return;
-        }
-        if (await this.#claim()) return;
-        await wait(300 + Math.random() * 700);
-      }
-    })().finally(() => (this.connecting = null));
-    return this.connecting;
+    return null;
   }
 
-  /** Als Teilnehmer mit der Lobby verbinden; false, wenn es keine gibt */
-  async #connect() {
+  /** Selbst Lobby auf diesem Platz werden; false, wenn er belegt ist */
+  async #claim(slot) {
+    let peer;
     try {
-      if (!this.peer || this.peer.destroyed || this.isLobby) {
-        this.#drop();
-        this.peer = await this.#newPeer(null);
-      }
-      const peer = this.peer;
-      const conn = await new Promise((resolve) => {
-        const c = peer.connect(LOBBY_ID, { reliable: true });
-        const timer = setTimeout(() => resolve(null), 6000);
-        const onErr = (err) => {
-          if (err?.type === 'peer-unavailable') {
-            clearTimeout(timer);
-            resolve(null);
-          }
-        };
-        peer.on('error', onErr);
-        c.once('open', () => {
-          clearTimeout(timer);
-          peer.off('error', onErr);
-          resolve(c);
-        });
-      });
-      if (!conn) return false;
-      this.conn = conn;
-      conn.on('data', (msg) => {
-        if (msg?.type === 'list' && Array.isArray(msg.rooms)) this.#notify(msg.rooms.map(cleanRoom).filter(Boolean));
-      });
-      conn.on('close', () => this.#lost(conn));
-      if (this.watching) conn.send({ type: 'watch' });
-      return true;
+      peer = await newPeer(slot);
     } catch {
       return false;
     }
-  }
-
-  /** Selbst Lobby werden; false, wenn jemand schneller war */
-  async #claim() {
-    try {
-      this.#drop();
-      this.peer = await this.#newPeer(LOBBY_ID);
-    } catch {
-      this.peer = null;
-      return false;
-    }
-    this.isLobby = true;
-    this.peer.on('connection', (conn) => {
+    this.host = { slot, peer, rooms: new Map(), watchers: new Set() };
+    peer.on('connection', (conn) => {
       conn.on('data', (msg) => this.#lobbyReceive(conn, msg));
       conn.on('close', () => {
-        this.watchers.delete(conn);
-        for (const [code, r] of this.rooms) if (r.conn === conn) this.rooms.delete(code);
+        if (!this.host) return;
+        this.host.watchers.delete(conn);
+        for (const [code, r] of this.host.rooms) if (r.conn === conn) this.host.rooms.delete(code);
         this.#publish();
       });
     });
-    this.peer.on('disconnected', () => this.isLobby && this.peer?.reconnect());
+    peer.on('disconnected', () => this.host?.peer === peer && peer.reconnect());
+    this.status = 'ok';
     this.#publish();
     return true;
   }
 
+  #dropHost() {
+    try {
+      this.host?.peer.destroy();
+    } catch {
+      /* egal */
+    }
+    this.host = null;
+  }
+
   #lobbyReceive(conn, msg) {
-    if (!msg || typeof msg !== 'object') return;
+    const h = this.host;
+    if (!h || !msg || typeof msg !== 'object') return;
     if (msg.type === 'watch') {
-      this.watchers.add(conn);
-      conn.send({ type: 'list', rooms: this.#current() });
+      h.watchers.add(conn);
+      conn.send({ type: 'list', rooms: this.#hostedList() });
     } else if (msg.type === 'announce') {
       const room = cleanRoom(msg.room);
       if (!room) return;
       // Höchstens 30 Räume, keine fremden Codes überschreiben
-      const known = this.rooms.get(room.code);
+      const known = h.rooms.get(room.code);
       if (known && known.conn !== conn) return;
-      if (!known && this.rooms.size >= 30) return;
-      this.rooms.set(room.code, { room, conn });
+      if (!known && h.rooms.size >= 30) return;
+      h.rooms.set(room.code, { room, conn });
       this.#publish();
     } else if (msg.type === 'remove') {
-      const known = this.rooms.get(normalizeCode(msg.code));
-      if (known?.conn === conn) {
-        this.rooms.delete(normalizeCode(msg.code));
+      const code = normalizeCode(msg.code);
+      if (h.rooms.get(code)?.conn === conn) {
+        h.rooms.delete(code);
         this.#publish();
       }
     }
   }
 
-  #current() {
-    const list = [...this.rooms.values()].map((r) => r.room);
-    if (this.mine) list.unshift(this.mine);
-    return list.sort((a, b) => b.created - a.created);
+  #hostedList() {
+    const list = [...this.host.rooms.values()].map((r) => r.room);
+    if (this.mine && this.home === this.host.slot) list.unshift(this.mine);
+    return list;
   }
 
   #publish() {
-    const rooms = this.#current();
-    for (const c of this.watchers) if (c.open) c.send({ type: 'list', rooms });
-    this.#notify(rooms);
+    if (this.host) {
+      const rooms = this.#hostedList();
+      for (const c of this.host.watchers) if (c.open) c.send({ type: 'list', rooms });
+    }
+    this.#merge();
   }
 
   #sendMine() {
-    if (!this.mine) return;
-    if (this.isLobby) this.#publish();
-    else if (this.conn?.open) this.conn.send({ type: 'announce', room: this.mine });
+    if (!this.mine || !this.home) return;
+    if (this.home === this.host?.slot) this.#publish();
+    else this.links.get(this.home)?.open && this.links.get(this.home).send({ type: 'announce', room: this.mine });
+    this.#merge();
   }
 
-  /** Lobby weg (geschlossen oder Netz weg): neu verbinden bzw. übernehmen */
-  async #lost(conn) {
-    if (conn !== this.conn) return;
-    this.conn = null;
-    if (!this.mine && !this.watching) return;
-    await wait(300 + Math.random() * 1200); // nicht alle gleichzeitig
-    if (this.conn?.open || this.isLobby) return;
-    await this.#ensure(!!this.mine);
-    this.#sendMine();
+  /** Lobby weg (geschlossen oder Netz weg): eigenen Raum neu anmelden, Liste neu holen */
+  async #lost(slot, conn) {
+    if (this.links.get(slot) !== conn) return;
+    this.links.delete(slot);
+    this.lists.delete(slot);
+    this.#merge();
+    await wait(400 + Math.random() * 1200); // nicht alle gleichzeitig
+    if (this.mine && this.home === slot) {
+      this.home = await this.#findHome();
+      this.#sendMine();
+    }
+    if (this.watching) this.#linkAll();
   }
 }

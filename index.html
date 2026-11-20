@@ -124,7 +124,7 @@
 
       <!-- ============ Statistik ============ -->
       <section class="tab" id="tab-stats" data-tab="stats" hidden>
-        <div class="tab-head"><h2>Statistik</h2></div>
+        <div class="tab-head"><h2>Statistik</h2><button type="button" class="ghost scope-chip" id="stats-scope-btn"></button></div>
         <div class="card stats-full" id="stats-view"></div>
       </section>
 
@@ -139,7 +139,7 @@
           </div>
         </div>
         <div class="seg-control solves-mode" id="solves-mode">
-          <button type="button" data-mode="all" class="on">Alle Solves</button>
+          <button type="button" data-mode="all" class="on" id="solves-scope-btn">Alle Solves</button>
           <button type="button" data-mode="archive">★ Archiv</button>
         </div>
         <div class="card list-card" id="solves-all">
@@ -166,7 +166,11 @@
           <p>Alle im Raum bekommen <b>dasselbe Scramble</b>, ihr seht euch <b>live beim Lösen</b> zu und die Zeiten landen in
             einer gemeinsamen Tabelle. Die Verbindung läuft direkt zwischen den Geräten.</p>
           <div class="room-choose">
-            <label class="toggle room-pub"><input type="checkbox" id="room-public" /> 🌍 Öffentlich – für alle sichtbar, Beitritt ohne Code</label>
+            <div class="seg-control room-vis" id="room-vis" role="radiogroup" aria-label="Sichtbarkeit">
+              <button type="button" data-vis="private" class="on" role="radio">🔒 Privat – mit Code</button>
+              <button type="button" data-vis="public" role="radio">🌍 Öffentlich – ohne Code</button>
+            </div>
+            <input type="checkbox" id="room-public" hidden />
             <input type="text" id="room-name" class="room-name" placeholder="Raumname (optional)" maxlength="40" hidden />
             <label class="room-size">Plätze
               <select id="room-max">
@@ -426,6 +430,7 @@
       <section class="set-sec">
         <h3>Offline</h3>
         <div class="offline-status" id="offline-status">…</div>
+        <div class="small app-version" id="app-version"></div>
         <div class="avatar-actions">
           <button type="button" class="ghost" id="offline-check">Offline-Prüfung</button>
         </div>
@@ -456,6 +461,7 @@
     </dialog>
     <dialog id="replay-dialog" class="big-dialog"></dialog>
     <dialog id="insights-dialog" class="big-dialog insights-dialog"></dialog>
+    <dialog id="scope-dialog" class="mode-dialog scope-dialog"></dialog>
     <dialog id="case-dialog" class="big-dialog case-dialog"></dialog>
     <dialog id="trainer-dialog" class="big-dialog trainer-dialog"></dialog>
   </body>

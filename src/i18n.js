@@ -48,6 +48,8 @@ const STATIC = {
   'Als gelöst markieren': 'Mark as solved',
   'Ausrichten': 'Reset',
   'Modus': 'Mode',
+  '🔒 Privat – mit Code': '🔒 Private – with code',
+  '🌍 Öffentlich – ohne Code': '🌍 Public – no code',
   'Plätze': 'Seats',
   'unbegrenzt': 'unlimited',
   '2 (Duell)': '2 (duel)',

@@ -34,6 +34,7 @@ import { L, locale, dec, translateStatic, lang } from './i18n.js';
 const MV = L('Züge', 'moves');
 import { metricsOf, skillProfile, SKILLS } from './metrics.js';
 import { modeGroups, findMode } from './modes.js';
+import { scopeOf, scopeName, scopeList, filterScope } from './sessions.js';
 import { liveStage, barHtml } from './ui/live-bar.js';
 import { keepAwake } from './wake.js';
 import { InsightsView } from './ui/insights-view.js';
@@ -55,6 +56,20 @@ let solves = load(SOLVES_KEY, []);
 if (!settings.mode) settings.mode = settings.scrambleType || 'wca';
 const scrambleMode = () => (settings.mode === 'cross2' || settings.mode === 'xcross' ? settings.mode : 'wca');
 
+// ---------------- Sessions / Bereiche der Statistik ----------------
+settings.sessions ??= [];
+if (!settings.session || (settings.session !== 'main' && !settings.sessions.some((x) => x.id === settings.session))) settings.session = 'main';
+/** Bereich, in den neue Solves zählen: Leichtes Cross / X-Cross getrennt, sonst die gewählte Session */
+const activeScope = () => (scrambleMode() !== 'wca' ? scrambleMode() : settings.session || 'main');
+/** Bereich, den Solves- und Statistik-Tab zeigen (Standard: der aktive) */
+const viewScope = () => {
+  const v = settings.viewScope;
+  if (!v || v === 'active') return activeScope();
+  if (['main', 'cross2', 'xcross', 'all'].includes(v) || settings.sessions.some((x) => x.id === v)) return v;
+  return activeScope();
+};
+const inScope = (id) => filterScope(solves, id);
+
 const app = {
   conn: null,
   state: SOLVED, // aktueller Würfelzustand (Kociemba)
@@ -73,7 +88,7 @@ setDefaultSkin(settings.skin || {});
 const view = new CubeView($('cube'));
 view.setGyroEnabled(settings.gyro);
 const replay = new Replay($('replay-dialog'));
-const statsView = new StatsView($('stats-view'), { coach: (el) => renderCoach(el), openBest: () => openBest() });
+const statsView = new StatsView($('stats-view'), { coach: (el) => renderCoach(el), openBest: () => openBest(viewScope()) });
 // Trainer für OLL/PLL/F2L/eigene Algorithmen und „Endlos-PLL“ – ohne Setup-Scramble
 const trainer = new Trainer($('trainer-dialog'), {
   now: () => now(),
@@ -381,6 +396,7 @@ function finishSolve() {
     scramble: app.ghost ? (app.ghost.scramble && applyAlg(SOLVED, app.ghost.scramble) === r.start ? app.ghost.scramble : '') : app.scramble,
     device: app.conn?.name || '',
     ...(app.scrambleType && app.scrambleType !== 'wca' && app.scramble ? { scrambleType: app.scrambleType } : {}),
+    ...(settings.session && settings.session !== 'main' ? { session: settings.session } : {}),
   });
   solves.push(solve);
   persistSolves();
@@ -394,12 +410,14 @@ function finishSolve() {
   renderSolveMetrics($('solve-metrics'), solve);
   renderArchiveBtn();
   renderSolves();
-  const pb = best(solves) === effectiveTime(solve) && solves.length > 1;
-  const prev = solves.slice(0, -1);
+  // Bestzeit/Durchschnitte nur im eigenen Bereich (Session, Leichtes Cross, X-Cross)
+  const scoped = inScope(scopeOf(solve));
+  const pb = best(scoped) === effectiveTime(solve) && scoped.length > 1;
+  const prev = scoped.slice(0, -1);
   const newAo = [12, 5].find((n) => {
-    const now5 = averageOf(solves, n);
+    const now5 = averageOf(scoped, n);
     const before = bestAverage(prev, n);
-    return now5 !== null && Number.isFinite(now5) && (before === null || now5 < before) && solves.length > n;
+    return now5 !== null && Number.isFinite(now5) && (before === null || now5 < before) && scoped.length > n;
   });
   $('live-bar').hidden = true;
   if (pb || newAo) celebrate(solve, pb ? L('Neue Bestzeit!', 'New PB!') : L(`Neuer bester Ø${newAo}!`, `New best ao${newAo}!`));
@@ -430,7 +448,7 @@ function finishSolve() {
 /** CFOP-Zeilen eines Solves für die Tabelle */
 function solveRows(s) {
   const ph = s.phases;
-  const ref = splitBaseline(solves, s);
+  const ref = splitBaseline(inScope(scopeOf(s)), s);
   const pairs = ph.slice(1, 5);
   const sum = (k) => pairs.reduce((a, p) => a + (p[k] || 0), 0);
   const llNote = (p, label) => {
@@ -451,7 +469,7 @@ function solveRows(s) {
 
 /** Kurze Legende zur Einfärbung (nur wenn es Vergleichswerte gibt) */
 function cmpLegend(s) {
-  const ref = splitBaseline(solves, s);
+  const ref = splitBaseline(inScope(scopeOf(s)), s);
   if (ref.cross == null && ref.oll == null) return '';
   return `<div class="cmp-legend small"><span class="cmp-scale"></span>${s.xcross ? L('verglichen mit deinen X-Cross-Solves', 'compared with your X-cross solves') : L('verglichen mit deinem Schnitt', 'compared with your average')}</div>`;
 }
@@ -623,7 +641,7 @@ $('ghost-stop').addEventListener('click', () => {
 });
 /** Gegner für die Geister-Modi: Bestzeit oder ein typischer Solve aus dem Ø12 */
 function ghostOpponent(id) {
-  const det = solves.filter((s) => hasDetail(s) && s.penalty !== 'DNF');
+  const det = inScope(activeScope()).filter((s) => hasDetail(s) && s.penalty !== 'DNF');
   if (!det.length) return null;
   if (id === 'ghost-avg') {
     const recent = det.slice(-12);
@@ -653,7 +671,13 @@ function modeHint(m) {
 function openModes() {
   if (app.phase === 'running') return;
   const current = app.room ? 'room' : settings.mode;
-  $('mode-list').innerHTML = modeGroups()
+  // Session (eigene Statistik, Scrambles wie Standard)
+  const sessions = [{ id: 'main' }, ...settings.sessions];
+  const sessionHtml = `<section class="mode-group"><h3>${L('Session – eigene Statistik', 'Session – own stats')}</h3><div class="session-row">${sessions
+    .map((x) => `<button type="button" class="session-chip${x.id === settings.session ? ' on' : ''}" data-session="${x.id}">${escapeHtml(scopeName(x.id, settings.sessions))}</button>`)
+    .join('')}<button type="button" class="session-chip add" data-session="+">＋ ${L('Neue Session', 'New session')}</button></div>
+    <p class="small">${L('Z. B. „OH“ oder „Blind“: Scrambles wie Standard, aber eigene Zeiten, Bestzeiten und Ø. Leichtes Cross und X-Cross zählen automatisch getrennt.', 'E.g. “OH” or “Blind”: scrambles like Standard, but own times, bests and averages. Easy cross and X-cross are counted separately automatically.')}</p></section>`;
+  $('mode-list').innerHTML = sessionHtml + modeGroups()
     .map((g) => `<section class="mode-group"><h3>${g.title}</h3><div class="mode-grid">${g.modes
       .map((m) => {
         const hint = modeHint(m);
@@ -686,13 +710,15 @@ function setMode(id) {
   settings.scrambleType = scrambleMode();
   save(SETTINGS_KEY, settings);
   renderModeChip();
+  renderSolves(); // Kurzstatistik zeigt den neuen Bereich (z. B. X-Cross getrennt)
   if (app.phase !== 'running') newScramble();
 }
 
 function renderModeChip() {
   const m = findMode(app.room ? 'room' : settings.mode) || findMode('wca');
   $('mode-ic').textContent = m.icon;
-  $('mode-name').textContent = app.room ? L('Online-Raum', 'Online room') : m.title;
+  const sess = !app.room && scrambleMode() === 'wca' && settings.session !== 'main' ? ` · ${scopeName(settings.session, settings.sessions)}` : '';
+  $('mode-name').textContent = (app.room ? L('Online-Raum', 'Online room') : m.title) + sess;
   $('mode-btn').className = `mode-chip tone-${m.tone}`;
   $('btn-new-scramble').title = m.kind === 'ghost' ? L('Neues Rennen', 'New race') : L('Neues Scramble', 'New scramble');
 }
@@ -722,7 +748,7 @@ function runCoachAction(a) {
   }
 }
 function renderCoach(el) {
-  const list = coachInsights(solves).slice(0, 4);
+  const list = coachInsights(inScope(activeScope())).slice(0, 4);
   app.coach = list;
   if (el) el.innerHTML = `<h3 class="coach-h">💡 Coach</h3>${coachHtml(list)}`;
 }
@@ -732,7 +758,7 @@ $('stats-view').addEventListener('click', (e) => {
 });
 /** Ein Tipp unter dem Timer (wechselt nach jedem Solve) */
 function renderCoachTip() {
-  const list = coachInsights(solves).filter((c) => c.action);
+  const list = coachInsights(inScope(activeScope())).filter((c) => c.action);
   const el = $('coach-tip');
   if (!list.length || solves.length % 3 !== 0) {
     el.hidden = true;
@@ -987,7 +1013,7 @@ function renderSplits(solve) {
   }
   const [cross, f2l, oll, pll] = phasesOf(solve, { mergeF2l: true });
   const pairs = solve.phases.slice(1, 5);
-  const ref = splitBaseline(solves, solve);
+  const ref = splitBaseline(inScope(scopeOf(solve)), solve);
   const b = (t, r) => `<b><span class="ct-tv"${splitTone(t, r)}>${formatTime(t)}</span></b>`;
   const recog = (p) => (p.recog > 0 ? `<small>Recog ${formatTime(p.recog)}</small>` : '');
   const skip = (p) => (p.skip ? '<small class="tag">Skip</small>' : '');
@@ -1015,6 +1041,7 @@ function updateViewOrientation() {
 }
 
 function renderStats() {
+  const solves = inScope(viewScope());
   const cur = (n) => formatTime(averageOf(solves, n));
   const items = [
     [L('Bestzeit', 'Best'), formatTime(best(solves))],
@@ -1040,6 +1067,7 @@ function renderStats() {
 
 /** Kurzstatistik unter dem Timer */
 function renderQuick() {
+  const solves = inScope(activeScope());
   const items = [
     ['Ø 5', formatTime(averageOf(solves, 5))],
     ['Ø 12', formatTime(averageOf(solves, 12))],
@@ -1047,23 +1075,32 @@ function renderQuick() {
     ['Solves', String(solves.length)],
   ];
   $('stats-quick').innerHTML = items
-    .map(([k, v, act]) => (act && pbIndex() >= 0 ? `<button type="button" class="q-link" data-act="${act}" title="${L('Details der Bestzeit', 'Details of your best')}"><span class="k">${k} ›</span><b>${v}</b></button>` : `<div><span class="k">${k}</span><b>${v}</b></div>`))
+    .map(([k, v, act]) => (act && pbIndex(activeScope()) >= 0 ? `<button type="button" class="q-link" data-act="${act}" title="${L('Details der Bestzeit', 'Details of your best')}"><span class="k">${k} ›</span><b>${v}</b></button>` : `<div><span class="k">${k}</span><b>${v}</b></div>`))
     .join('');
 }
 
-/** Index des schnellsten gültigen Solves (−1 ohne) */
-function pbIndex() {
+/** Index (in allen Solves) des schnellsten gültigen Solves eines Bereichs (−1 ohne) */
+function pbIndex(scope = activeScope()) {
   let bi = -1;
   solves.forEach((s, i) => {
+    if (scope !== 'all' && scopeOf(s) !== scope) return;
     const t = effectiveTime(s);
     if (Number.isFinite(t) && (bi < 0 || t < effectiveTime(solves[bi]))) bi = i;
   });
   return bi;
 }
 /** Bestzeit antippen → Solve-Details öffnen (statt in allen Solves zu suchen) */
-function openBest() {
-  const i = pbIndex();
+function openBest(scope = activeScope()) {
+  const i = pbIndex(scope);
   if (i >= 0) openSolve(i);
+}
+// Nach dem Solve: Zeit oder Phasen antippen → Übersicht (Ergebnis-Fenster) wieder öffnen
+for (const id of ['timer', 'splits', 'live-bar']) {
+  $(id).addEventListener('click', () => {
+    if (app.phase === 'running' || app.phase === 'inspecting' || !app.lastSolve || !$('result-overlay').hidden) return;
+    showResult(app.lastSolve, '');
+    if (app.room) renderResultCompare();
+  });
 }
 $('stats-quick').addEventListener('click', (e) => {
   if (e.target.closest('[data-act=best]')) openBest();
@@ -1087,15 +1124,17 @@ function renderMiniPie(det) {
 function renderSolves() {
   renderStats();
   renderQuick();
-  if (app.tab === 'stats') statsView.open(solves);
+  if (app.tab === 'stats') statsView.open(inScope(viewScope()));
   const list = $('solves');
-  if (!solves.length) {
+  const scope = viewScope();
+  renderScopeButtons();
+  if (!inScope(scope).length) {
     list.innerHTML = `<li class="empty">${L('Noch keine Solves', 'No solves yet')}</li>`;
     return;
   }
   // Reihenfolge: neueste/älteste zuerst oder nach Zeit (DNF ans Ende)
   const sort = settings.solvesSort || 'new';
-  let order = solves.map((_, i) => i).reverse();
+  let order = solves.map((_, i) => i).filter((i) => scope === 'all' || scopeOf(solves[i]) === scope).reverse();
   if (sort === 'old') order.reverse();
   else if (sort === 'fast' || sort === 'slow') {
     const t = (i) => effectiveTime(solves[i]);
@@ -1106,11 +1145,12 @@ function renderSolves() {
       return sort === 'fast' ? ta - tb : tb - ta;
     });
   }
-  const pb = pbIndex();
+  const pb = pbIndex(scope);
+  const scopedAll = inScope(scope);
   const rows = [];
   for (const i of order.slice(0, 300)) {
     const s = solves[i];
-    const ao5 = averageOf(solves.slice(0, i + 1), 5);
+    const ao5 = averageOf(scopedAll.slice(0, scopedAll.indexOf(s) + 1), 5);
     rows.push(
       `<li data-i="${i}"${i === pb ? ' class="pb"' : ''}><span class="n">${i + 1}.</span><span class="t">${formatSolve(s)}</span>` +
         `<span class="meta">${s.metrics?.htm ?? s.moveCount ?? '–'} ${MV}</span><span class="ao">${ao5 === null ? '' : 'Ø5 ' + formatTime(ao5)}</span></li>`,
@@ -1188,7 +1228,7 @@ function openSolve(i) {
 
 $('sd-image').addEventListener('click', () => {
   const s = solves[Number($('solve-dialog').dataset.index)];
-  if (s) shareSolveImage(s, profile, best(solves) === effectiveTime(s) ? 'Bestzeit' : '');
+  if (s) shareSolveImage(s, profile, best(inScope(scopeOf(s))) === effectiveTime(s) ? 'Bestzeit' : '');
 });
 $('sd-insights').addEventListener('click', () => {
   const s = solves[Number($('solve-dialog').dataset.index)];
@@ -1275,6 +1315,22 @@ $('mode-btn').addEventListener('click', openModes);
 $('mode-close').addEventListener('click', () => $('mode-dialog').close());
 $('mode-dialog').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) return $('mode-dialog').close();
+  const sb = e.target.closest('[data-session]');
+  if (sb) {
+    const id = sb.dataset.session === '+' ? createSession() : sb.dataset.session;
+    if (!id) return;
+    settings.session = id;
+    save(SETTINGS_KEY, settings);
+    $('mode-dialog').close();
+    // Sessions bauen auf dem Standard-Modus auf
+    if (findMode(settings.mode)?.kind !== 'scramble' || scrambleMode() !== 'wca') setMode('wca');
+    else {
+      renderModeChip();
+      renderSolves();
+    }
+    toast(L(`Session „${scopeName(id, settings.sessions)}“ aktiv`, `Session “${scopeName(id, settings.sessions)}” active`));
+    return;
+  }
   const b = e.target.closest('[data-mode]');
   if (b && !b.disabled) {
     $('mode-dialog').close();
@@ -1356,11 +1412,96 @@ $('file-import').addEventListener('change', async (e) => {
   }
 });
 
+// ---------------- Bereich (Session) wählen ----------------
+
+function createSession() {
+  const name = (prompt(L('Name der Session (z. B. OH, Blind, Füße):', 'Session name (e.g. OH, blind, feet):')) || '').trim().slice(0, 24);
+  if (!name) return null;
+  const id = 's' + Date.now().toString(36);
+  settings.sessions.push({ id, name });
+  save(SETTINGS_KEY, settings);
+  return id;
+}
+
+/** Beschriftung der Bereichs-Knöpfe im Solves- und Statistik-Tab */
+function renderScopeButtons() {
+  const name = scopeName(viewScope(), settings.sessions);
+  const n = inScope(viewScope()).length;
+  $('solves-scope-btn').textContent = `${name} (${n}) ▾`;
+  $('stats-scope-btn').textContent = `${name} ▾`;
+}
+
+/** Auswahl: welcher Bereich wird angezeigt (Sessions, Leichtes Cross, X-Cross, alle) */
+function openScopes() {
+  const cur = viewScope();
+  const list = scopeList(solves, settings.sessions);
+  const row = (x) => `<div class="scope-row${x.id === cur ? ' on' : ''}">
+      <button type="button" class="scope-pick" data-scope="${x.id}"><b>${escapeHtml(x.name)}</b><span class="small">${x.n} Solves${x.id === activeScope() ? ` · ${L('aktiv im Timer', 'active in timer')}` : ''}</span></button>
+      ${x.own ? `<button type="button" class="ghost small-btn" data-rename="${x.id}" title="${L('Umbenennen', 'Rename')}">✎</button><button type="button" class="ghost small-btn danger" data-del="${x.id}" title="${L('Löschen', 'Delete')}">🗑</button>` : ''}
+    </div>`;
+  const sec = (title, items) => `<section class="mode-group"><h3>${title}</h3>${items.map(row).join('')}</section>`;
+  $('scope-dialog').innerHTML = `<div class="rp-head"><div><h2>${L('Welche Solves?', 'Which solves?')}</h2><div class="small">${L('Statistik und Liste zeigen nur diesen Bereich.', 'Stats and list show only this group.')}</div></div>
+      <button class="rp-close" data-act="close" aria-label="${L('Schließen', 'Close')}">✕</button></div>
+    ${sec(L('Sessions', 'Sessions'), list.filter((x) => x.kind === 'session'))}
+    <button type="button" class="ghost small-btn" data-act="new">＋ ${L('Neue Session', 'New session')}</button>
+    ${sec(L('Modi (getrennt gezählt)', 'Modes (counted separately)'), list.filter((x) => x.kind === 'mode'))}
+    ${sec(L('Alles', 'Everything'), list.filter((x) => x.kind === 'all'))}`;
+  if (!$('scope-dialog').open) $('scope-dialog').showModal();
+}
+$('scope-dialog').addEventListener('click', (e) => {
+  const d = $('scope-dialog');
+  if (e.target === d || e.target.closest('[data-act=close]')) return d.close();
+  const pick = e.target.closest('[data-scope]');
+  if (pick) {
+    settings.viewScope = pick.dataset.scope === activeScope() ? 'active' : pick.dataset.scope;
+    save(SETTINGS_KEY, settings);
+    d.close();
+    renderSolves();
+    if (app.tab === 'stats') statsView.open(inScope(viewScope()));
+    return;
+  }
+  if (e.target.closest('[data-act=new]')) {
+    if (createSession()) openScopes();
+    return;
+  }
+  const rn = e.target.closest('[data-rename]');
+  if (rn) {
+    const ses = settings.sessions.find((x) => x.id === rn.dataset.rename);
+    const name = (prompt(L('Neuer Name:', 'New name:'), ses?.name) || '').trim().slice(0, 24);
+    if (ses && name) {
+      ses.name = name;
+      save(SETTINGS_KEY, settings);
+      renderModeChip();
+      renderSolves();
+      openScopes();
+    }
+    return;
+  }
+  const del = e.target.closest('[data-del]');
+  if (del) {
+    const id = del.dataset.del;
+    const n = solves.filter((x) => x.session === id).length;
+    if (!confirm(L(`Session löschen? Ihre ${n} Solves wandern zu „Standard“.`, `Delete session? Its ${n} solves move to “Standard”.`))) return;
+    for (const x of solves) if (x.session === id) delete x.session;
+    settings.sessions = settings.sessions.filter((x) => x.id !== id);
+    if (settings.session === id) settings.session = 'main';
+    if (settings.viewScope === id) settings.viewScope = 'active';
+    save(SETTINGS_KEY, settings);
+    persistSolves();
+    renderModeChip();
+    renderSolves();
+    openScopes();
+  }
+});
+$('stats-scope-btn').addEventListener('click', openScopes);
+
 // ---------------- Solves: Liste oder Archiv ----------------
 
 $('solves-mode').addEventListener('click', (e) => {
   const b = e.target.closest('[data-mode]');
   if (!b) return;
+  // „Alle Solves“ (Bereich) nochmal antippen → Auswahl der Session / des Modus
+  if (b.dataset.mode === 'all' && b.classList.contains('on')) return openScopes();
   const arch = b.dataset.mode === 'archive';
   $('solves-mode').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
   $('solves-all').hidden = arch;
@@ -1651,7 +1792,7 @@ function showTab(name) {
   // Timer-Tab ist eine feste Ansicht ohne Scrollen (siehe styles.css: body.tab-timer)
   for (const t of TABS) document.body.classList.toggle(`tab-${t}`, t === name);
   for (const b of document.querySelectorAll('[role=tab][data-tab]')) b.setAttribute('aria-selected', String(b.dataset.tab === name));
-  if (name === 'stats') statsView.open(solves);
+  if (name === 'stats') statsView.open(inScope(viewScope()));
   // Öffentliche Räume nur suchen, solange der Raum-Tab ohne eigenen Raum offen ist (nach dem Start-Code)
   queueMicrotask(() => lobbyWatch(name === 'room' && !app.room));
   if (name === 'algs') {
@@ -1869,6 +2010,7 @@ const roomView = new RoomView($('room-panel'), $('room-strip'), {
   onNextRound: () => hostNextRound(),
   onLeave: () => leaveRoom(),
   onAutoChange: (on) => (app.roomAuto = on),
+  onReplay: (data, title) => replay.open(data, { title }),
 });
 app.roomAuto = true;
 
@@ -2026,8 +2168,12 @@ function lobbyWatch(on) {
     stopLobbyWatch = null;
   }
 }
-function renderRoomList(rooms) {
+function renderRoomList(rooms, status) {
   const box = $('room-list');
+  if (!rooms.length && status === 'searching') {
+    box.innerHTML = `<p class="small">${L('Suche öffentliche Räume …', 'Looking for public rooms …')}</p>`;
+    return;
+  }
   const others = rooms.filter((r) => r.code !== app.room?.code);
   box.innerHTML = others.length
     ? others
@@ -2041,9 +2187,17 @@ function renderRoomList(rooms) {
         .join('')
     : `<p class="small">${L('Gerade ist kein öffentlicher Raum offen. Erstelle doch selbst einen – er erscheint dann hier bei allen.', 'No public room is open right now. Create one yourself – it then shows up here for everyone.')}</p>`;
 }
+$('app-version').textContent = `${L('App-Version', 'App version')}: ${typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev'} UTC – ${L('auf allen Geräten gleich? Sonst Seite neu laden.', 'same on all devices? Otherwise reload the page.')}`;
 $('room-list').addEventListener('click', (e) => {
   const b = e.target.closest('[data-join]');
   if (b) enterRoom('join', b.dataset.join);
+});
+$('room-vis').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-vis]');
+  if (!b) return;
+  $('room-vis').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+  $('room-public').checked = b.dataset.vis === 'public';
+  $('room-public').dispatchEvent(new Event('change'));
 });
 $('room-public').addEventListener('change', (e) => {
   $('room-name').hidden = !e.target.checked;
