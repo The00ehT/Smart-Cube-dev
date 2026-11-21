@@ -9,7 +9,7 @@
  * Nachrichten: get { card } → card { card }
  */
 import { load, save } from './storage.js';
-import { peerOptions, sanitizeAvatar, sanitizeCode } from './room.js';
+import { peerOptions, sanitizeAvatar, sanitizeCode, sanitizeSkin } from './room.js';
 
 const KEY = 'smartcube.friends.v1';
 const CODE_KEY = 'smartcube.friendCode';
@@ -52,6 +52,12 @@ function sanitizeCard(c) {
     ao5: num(c.ao5),
     ao12: num(c.ao12),
     count: num(c.count) || 0,
+    // Würfel-Aussehen des Freundes (für das 3D-Modell); eigene Bilder nur, wenn sie klein genug zum Speichern sind
+    skin: (() => {
+      const sk = sanitizeSkin(c.skin);
+      if (sk?.images && JSON.stringify(sk.images).length + (sk.logo?.length || 0) > 300000) return { ...sk, theme: 'colors', images: undefined, logo: undefined };
+      return sk;
+    })(),
     last: (Array.isArray(c.last) ? c.last : []).slice(0, 12).map((s) => ({
       time: num(s?.time),
       penalty: s?.penalty === 'DNF' ? 'DNF' : num(s?.penalty) || 0,

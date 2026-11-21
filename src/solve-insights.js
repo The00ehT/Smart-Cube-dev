@@ -556,6 +556,26 @@ export function solveInsights(solve, opts = {}) {
       }
     }
   }
+  /** Liegt mitten in der Phase (je ≥ 3 Züge davor und danach) ein Zwischenfall der letzten Schicht? */
+  const twoLookOf = (p, kind) => {
+    if (!p.moves || p.end - p.start + 1 < 6) return false;
+    const edges = (st) => [1, 3, 5, 7].filter((i) => st[i] === st[4]).length;
+    const s0 = llAt(p.start);
+    if (!f2lSolved(s0)) return false;
+    if (kind === 'oll' && edges(s0) === 4) return false; // schon Kreuz oben: nur ein Schritt (OCLL)
+    const c0 = kind === 'pll' ? identifyPll(s0) : null;
+    for (let k = p.start + 3; k <= p.end - 2; k++) {
+      const st = llAt(k);
+      if (!f2lSolved(st)) continue;
+      if (kind === 'oll') {
+        if (edges(st) === 4 && !llOriented(st)) return true;
+      } else if (llOriented(st)) {
+        const c = identifyPll(st);
+        if (c && c !== 'Skip' && c !== c0) return true;
+      }
+    }
+    return false;
+  };
   for (const [l, p] of [[out.oll, oll], [out.pll, pll]]) {
     if (l.frontOptions && !l.source) {
       l.source = 'assumed';
@@ -564,7 +584,10 @@ export function solveInsights(solve, opts = {}) {
     // Bild des echten Zustands zu Beginn der Phase, so wie du ihn gehalten hast
     if (l.frontOptions && !l.skip) l.dia = { state: view(states[p.start], face, Y[l.holdK ?? 0]), hold: holdColors(states[p.start], face, Y[l.holdK ?? 0]) };
     l.saved = l.best ? Math.max(0, l.moves - l.best.len) : 0;
-    l.twoLook = !!l.best && l.moves >= l.best.len + 4 && l.moves >= l.best.len * 1.35; // vermutlich 2-Look oder Umweg
+    // 2-Look nur, wenn wirklich zwei Schritte erkennbar sind: Zwischendrin liegt der Würfel in einem eigenen Fall
+    // (OLL: Kreuz oben fertig, PLL: nur noch ein anderer PLL-Fall) UND es mehr Züge waren als der direkte Alg.
+    // Nur Zählen reichte nicht (z. B. Mittelschicht-Algs M: ein Zug am Würfel = zwei Außenzüge).
+    l.twoLook = !!l.best && !l.skip && l.moves >= l.best.len + 3 && twoLookOf(p, l === out.oll ? 'oll' : 'pll');
   }
 
   // OLL/PLL sind feste Algorithmen – zählen nicht zur möglichen Ersparnis

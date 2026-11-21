@@ -440,28 +440,36 @@ export function mirrorState(state) {
  * die zählen als ein Zug. Überall in der App wird so gezählt.
  */
 export function countHtm(moves) {
-  let n = 0;
-  for (let i = 0; i < moves.length; i++) {
-    n++;
-    if (i + 1 < moves.length && moves[i + 1] === moves[i] && !moves[i].endsWith('2')) i++;
-  }
-  return n;
+  const c = new HtmCounter();
+  for (const m of moves) c.push(m);
+  return c.n;
 }
 
-/** Laufender Zähler in HTM (für Züge, die einzeln ankommen) */
+/**
+ * Laufender Zähler in HTM (für Züge, die einzeln ankommen).
+ * Gleiche Seite zweimal in Folge = ein Doppelzug (R R = R2) – auch wenn dazwischen nur Züge der Gegenseite
+ * kommen: Eine Mittelschicht (M = R L′) wird oft verschränkt gemeldet (R L′ R L′ = M2) und zählt als 2 Züge.
+ */
+const AXIS_OF = { U: 0, D: 0, R: 1, L: 1, F: 2, B: 2 };
 export class HtmCounter {
   constructor() {
     this.n = 0;
-    this.last = null;
-    this.merged = false;
+    this.axis = -1;
+    this.per = {}; // letzter Zug je Seite innerhalb der Achse
   }
   push(move) {
-    if (move === this.last && !this.merged && !move.endsWith('2')) this.merged = true; // R R = R2
+    const f = move[0];
+    const ax = AXIS_OF[f];
+    if (ax === undefined || ax !== this.axis) {
+      this.axis = ax ?? -1;
+      this.per = {};
+    }
+    const st = this.per[f];
+    if (st && st.move === move && !st.merged && !move.endsWith('2')) st.merged = true; // R R = R2
     else {
       this.n++;
-      this.merged = false;
+      this.per[f] = { move, merged: false };
     }
-    this.last = move;
     return this.n;
   }
 }

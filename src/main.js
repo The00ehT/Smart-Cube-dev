@@ -1539,7 +1539,9 @@ replay.onGyroToggle = (on) => {
   save(SETTINGS_KEY, settings);
 };
 
-$('btn-forget-mac').addEventListener('click', () => {
+// Der Knopf steht im Tab „Technische Daten“ (wird erst in initTech() gebaut)
+$('set-tech').addEventListener('click', (e) => {
+  if (!e.target.closest('#btn-forget-mac')) return;
   forgetMacs();
   setStatus(L('Gespeicherte MAC-Adressen gelöscht.', 'Saved MAC addresses deleted.'));
 });
@@ -1566,6 +1568,7 @@ function initTech() {
     <section class="set-sec">
       <h3>${L('Verbindung', 'Connection')}</h3>
       <div class="hw tech-grid" id="tech-conn"></div>
+      <button type="button" class="ghost" id="btn-forget-mac">${L('Gespeicherte MAC-Adressen vergessen', 'Forget saved MAC addresses')}</button>
     </section>
     <section class="set-sec">
       <h3>${L('Gyroskop-Modus des Würfels', 'Cube gyroscope mode')}</h3>
@@ -1687,7 +1690,7 @@ function renderTech() {
     locale,
     labels: { perf: 'Performance', eco: 'Eco', aria: L('Akku-Verlauf der letzten 24 Stunden', 'Battery history, last 24 hours') },
   });
-  $('tech-chart').innerHTML = svg || `<p class="small">${L('Noch zu wenige Messwerte. Würfel verbinden und etwas warten.', 'Not enough measurements yet. Connect the cube and wait a bit.')}</p>`;
+  $('tech-chart').innerHTML = svg ? `${svg}<p class="small">${L('Pausen (App zu, Würfel aus) sind ausgeblendet – die Zeitachse zählt nur Zeit mit Messwerten.', 'Pauses (app closed, cube off) are hidden – the time axis only counts time with measurements.')}</p>` : `<p class="small">${L('Noch zu wenige Messwerte. Würfel verbinden und etwas warten.', 'Not enough measurements yet. Connect the cube and wait a bit.')}</p>`;
   const drain = drainByMode(battLog);
   const fmtDrain = (d) => (d ? `${dec(d.ratePerHour, 1)} ${L('%-Pkt/h', 'pp/h')}${d.fullHours ? ` · ≈ ${dec(d.fullHours, 0)} h` : ''} (${dec(d.hours, 1)} h ${L('gemessen', 'measured')})` : L('zu wenig Daten (< 20 min)', 'not enough data (< 20 min)'));
   $('tech-drain').innerHTML = techRows([
@@ -2812,6 +2815,7 @@ function myCard() {
     ao5: averageOf(main, 5),
     ao12: averageOf(main, 12),
     count: main.length,
+    skin: currentSkin(), // damit Freunde deinen Würfel in 3D sehen
     // letzte 12 (für die Ø 5 / Ø 12 Ansicht), je mit Rekonstruktion (Züge + Zeiten) zum Nachschauen
     last: main.slice(-12).reverse().map((x) => ({ time: x.time, penalty: x.penalty || 0, date: x.date, moves: x.moveCount ?? null, tps: x.tps ?? null, share: shareOfSolve(x, false) })),
   };
@@ -2969,9 +2973,17 @@ function friendDetailHtml(f, view) {
     <p class="small">${have < list.length ? L(`Splits gibt es für ${have} von ${list.length} Solves (nur mit Smartcube aufgenommen). `, `Splits for ${have} of ${list.length} solves (recorded with a smart cube only). `) : ''}${L('Solve antippen für Details und Rekonstruktion.', 'Tap a solve for details and reconstruction.')}</p>`}`;
 }
 
+let friendCube = null; // 3D-Würfel im Freundes-Profil
+function disposeFriendCube() {
+  friendCube?.cube.dispose();
+  friendCube = null;
+}
+$('friend-dialog').addEventListener('close', disposeFriendCube);
+
 function openFriend(code, status = '', view = '') {
   const f = friendOf(code);
   const dlg = $('friend-dialog');
+  disposeFriendCube();
   if (!f) return dlg.close();
   dlg.dataset.code = code;
   dlg.dataset.view = view;
@@ -2990,12 +3002,20 @@ function openFriend(code, status = '', view = '') {
   dlg.innerHTML = `<div class="rp-head"><div class="pv-head"><span class="avatar big">${avatarHtml(f)}</span>
       <div><h2>${esc(f.name || '?')}</h2><div class="small">${formatFriendCode(f.code)} · ${L('Stand', 'Updated')}: ${agoText(f.at)}${status ? ` · ${status}` : ''}</div></div></div>
       <button type="button" class="rp-close" data-fr="close" aria-label="${L('Schließen', 'Close')}">✕</button></div>
+    <div class="fr-cube" id="fr-cube" title="${L('Der Würfel von', 'The cube of')} ${esc(f.name || '?')}"></div>
     <div class="stats pv-tiles">${tile(fmtPen(c.pb), L('Bestzeit', 'Best'), 'pb', !!c.pb?.share)}${tile(formatTime(c.ao5), 'Ø 5', 'ao5', (c.last || []).length >= 5)}${tile(formatTime(c.ao12), 'Ø 12', 'ao12', (c.last || []).length >= 12)}</div>
     ${c.pb?.date ? `<p class="small">🏆 PB ${L('vom', 'from')} ${new Date(c.pb.date).toLocaleDateString(locale)} · ${c.count || 0} Solves ${L('gesamt', 'total')}${c.pb.share ? ` · ${L('antippen für Splits und Rekonstruktion', 'tap for splits and reconstruction')}` : ''}</p>` : ''}
     <h3 class="sub-h">${L('Letzte 10 Solves', 'Last 10 solves')}</h3>
     ${rows ? `<div class="table-wrap"><table class="phase-table"><tr><th>#</th><th>${L('Zeit', 'Time')}</th><th>${L('Züge', 'Moves')}</th><th>TPS</th><th>${L('Datum', 'Date')}</th></tr>${rows}</table></div>` : `<p class="small">${L('Noch keine Solves.', 'No solves yet.')}</p>`}
     <menu><button type="button" class="ghost" data-fr="remove">🗑 ${L('Entfernen', 'Remove')}</button><button type="button" data-fr="refresh">↻ ${L('Aktualisieren', 'Refresh')}</button></menu>`;
   if (!dlg.open) dlg.showModal();
+  // 3D-Modell mit dem Aussehen des Freundes (Skin aus seiner Profilkarte)
+  try {
+    friendCube = new CubeView($('fr-cube'), c.skin ? { ...SKIN_PRESETS.gan, ...c.skin } : undefined);
+    friendCube.setState(applyAlg(SOLVED, "R U R' U'"));
+  } catch (err) {
+    console.warn('Freunde-Würfel:', err);
+  }
 }
 
 $('friend-dialog').addEventListener('click', async (e) => {

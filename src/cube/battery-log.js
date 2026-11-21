@@ -69,7 +69,8 @@ export function toCsv(log) {
 
 /**
  * Diagramm als SVG-Text: Akku (%) über die Zeit der letzten `hours` Stunden, Hintergrundbänder je Modus.
- * Linie wird bei Lücken unterbrochen. Gibt '' zurück, wenn zu wenige Daten da sind.
+ * Pausen (Lücken über GAP_MS, z. B. App zu oder Würfel aus) werden herausgeschnitten: Die Zeitachse zählt
+ * nur die Zeit mit Messungen, die Linie ist ein zusammenhängender Graph. Gibt '' zurück, wenn zu wenige Daten da sind.
  * @param labels { perf, eco, unknown } Beschriftungen der Legende
  */
 export function batteryChartSvg(log, { hours = 24, now = Date.now(), width = 520, height = 190, labels = {}, locale = 'de-DE' } = {}) {
@@ -84,33 +85,32 @@ export function batteryChartSvg(log, { hours = 24, now = Date.now(), width = 520
   const padB = 24;
   const W = width - padL - padR;
   const H = height - padT - padB;
-  const x = (t) => padL + ((t - t0) / (t1 - t0)) * W;
+  // Zeit ohne Pausen: jede Lücke zählt 0 (Messung davor und danach liegen direkt nebeneinander)
+  const ct = new Map();
+  let acc = 0;
+  pts.forEach((s, i) => {
+    if (i) {
+      const dt = s.t - pts[i - 1].t;
+      acc += dt > GAP_MS ? 0 : dt;
+    }
+    ct.set(s, acc);
+  });
+  const total = Math.max(acc, 60000);
+  const x = (s) => padL + (ct.get(s) / total) * W;
   const y = (l) => padT + (1 - l / 100) * H;
   const fmt = (n) => n.toFixed(1);
 
-  // Bänder: von Messung zu Messung im Modus der früheren, nur ohne Lücke
+  // Bänder: von Messung zu Messung im Modus der früheren (Pausen sind herausgeschnitten, haben also keine Breite)
   const bandColor = { P: 'var(--ph-oll)', E: 'var(--good)', '-': 'var(--muted)' };
   let bands = '';
   for (let i = 1; i < pts.length; i++) {
-    if (pts[i].t - pts[i - 1].t > GAP_MS) continue;
-    bands += `<rect x="${fmt(x(pts[i - 1].t))}" y="${padT}" width="${fmt(Math.max(0.5, x(pts[i].t) - x(pts[i - 1].t)))}" height="${H}" fill="${bandColor[pts[i - 1].m] || bandColor['-']}" opacity="0.16"/>`;
+    const w = x(pts[i]) - x(pts[i - 1]);
+    if (w <= 0) continue;
+    bands += `<rect x="${fmt(x(pts[i - 1]))}" y="${padT}" width="${fmt(Math.max(0.5, w))}" height="${H}" fill="${bandColor[pts[i - 1].m] || bandColor['-']}" opacity="0.16"/>`;
   }
 
-  // Linie je zusammenhängendem Stück
-  let lines = '';
-  let seg = [pts[0]];
-  const flush = () => {
-    if (seg.length === 1) lines += `<circle cx="${fmt(x(seg[0].t))}" cy="${fmt(y(seg[0].l))}" r="2" fill="var(--accent)"/>`;
-    else lines += `<polyline points="${seg.map((s) => `${fmt(x(s.t))},${fmt(y(s.l))}`).join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
-  };
-  for (let i = 1; i < pts.length; i++) {
-    if (pts[i].t - pts[i - 1].t > GAP_MS) {
-      flush();
-      seg = [];
-    }
-    seg.push(pts[i]);
-  }
-  flush();
+  // Eine durchgehende Linie
+  const lines = `<polyline points="${pts.map((s) => `${fmt(x(s))},${fmt(y(s.l))}`).join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
 
   const grid = [0, 25, 50, 75, 100]
     .map((v) => `<line x1="${padL}" x2="${width - padR}" y1="${fmt(y(v))}" y2="${fmt(y(v))}" stroke="var(--chart-grid)"/><text x="${padL - 5}" y="${fmt(y(v) + 4)}" text-anchor="end" font-size="10" fill="var(--chart-ink)">${v}</text>`)

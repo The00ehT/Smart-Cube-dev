@@ -443,12 +443,36 @@ export class Replay {
     $('.rp-play', this.dlg).textContent = `⏸ ${L('Pause', 'Pause')}`;
     const wall0 = performance.now();
     const t0 = this.cursor;
+    // Würfeldrehungen bekommen Zeit zum Nachvollziehen: Die Zeitleiste steht während der Drehung still und
+    // die Drehung läuft langsam (Züge laufen schnell, eine Drehung in derselben Zeit wäre nur ein Blitzen)
+    let stalled = 0; // Summe der Wartezeit
+    let stallUntil = 0;
     const step = () => {
       if (!this.playing) return;
-      const t = t0 + (performance.now() - wall0) * this.speed;
+      const nowW = performance.now();
+      if (nowW < stallUntil) {
+        this.raf = requestAnimationFrame(step);
+        return;
+      }
+      if (stallUntil) {
+        this.player.tempoScale = Math.max(1.5, 5 * this.speed); // wieder schnell für die Züge
+        stallUntil = 0;
+      }
+      const t = t0 + (nowW - wall0 - stalled) * this.speed;
       while (this.k < this.events.length && this.events[this.k].t <= t) {
         const e = this.events[this.k];
-        if (e.kind !== 'grip') this.player.experimentalAddMove(e.text, { cancel: false });
+        if (e.kind !== 'grip') {
+          if (e.kind === 'rot') {
+            const dur = Math.min(2200, Math.max(380, 700 / this.speed)); // ms bis zum Ende der Drehung
+            this.player.tempoScale = 500 / dur; // Twisty: Dauer = 500 ms / tempoScale
+            this.player.experimentalAddMove(e.text, { cancel: false });
+            this.k++;
+            stalled += dur;
+            stallUntil = nowW + dur;
+            break; // erst weiter, wenn die Drehung fertig ist
+          }
+          this.player.experimentalAddMove(e.text, { cancel: false });
+        }
         this.k++;
       }
       this.cursor = Math.min(t, this.total);
@@ -462,6 +486,7 @@ export class Replay {
   pause() {
     this.playing = false;
     cancelAnimationFrame(this.raf);
+    if (this.player) this.player.tempoScale = Math.max(1.5, 5 * this.speed); // falls mitten in einer Drehung
     const b = this.dlg.querySelector('.rp-play');
     if (b) b.textContent = `▶ ${L('Abspielen', 'Play')}`;
   }

@@ -1376,3 +1376,12 @@ tr.tap:active td { background: var(--accent-soft); }
 .set-fold > summary::after { content: ' ▾'; color: var(--muted); }
 .set-fold[open] > summary::after { content: ' ▴'; }
 .set-fold-body { display: grid; gap: 12px; margin-top: 12px; }
+
+/* Kuchendiagramme: Ring mittig, Legende darunter in voller Breite (auch auf dem Handy) */
+.donut-wrap { justify-content: center; }
+@media (max-width: 640px) {
+  .donut-wrap { flex-direction: column; align-items: center; gap: 14px; }
+  .donut-wrap .donut-legend { width: 100%; max-width: none; flex: none; }
+}
+
+.fr-cube { width: 170px; height: 150px; margin: 0 auto 8px; }
