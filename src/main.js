@@ -1745,22 +1745,53 @@ setInterval(() => {
 // Gerätebezogen, nicht ins Backup: eigener Freundescode (sonst hätten zwei Geräte denselben) und Würfel-Adressen
 const BACKUP_SKIP = new Set(['smartcube.friendCode', 'smartcube.macs.v1', BATT_KEY, SOLVES_KEY, 'smartcube.archive.v1']);
 
-function exportBackup() {
+/**
+ * Backup als Datei sichern. Auf dem Handy öffnet sich das Teilen-Menü („In Dateien sichern“, iCloud Drive, AirDrop …),
+ * am Computer der Speichern-Dialog, sonst ein normaler Download.
+ */
+async function exportBackup() {
   const local = {};
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
     if (k?.startsWith('smartcube.') && !BACKUP_SKIP.has(k)) local[k] = localStorage.getItem(k);
   }
   const data = { app: 'smartcube', version: 2, exported: new Date().toISOString(), solves, archive, local };
-  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const name = `smartcube-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  const text = JSON.stringify(data);
+  const file = new File([text], name, { type: 'application/json' });
+  const done = (how) => toast(L(`💾 Backup ${how} (${solves.length} Solves)`, `💾 Backup ${how === 'geteilt' ? 'shared' : 'saved'} (${solves.length} solves)`));
+  const touch = matchMedia('(pointer: coarse)').matches;
+  // 1. Handy/Tablet: Teilen-Menü mit der Datei (dort „In Dateien sichern“ wählen)
+  if (touch && navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: 'Smartcube Backup' });
+      return done('geteilt');
+    } catch (err) {
+      if (err?.name === 'AbortError') return; // abgebrochen
+      // sonst weiter mit dem Download
+    }
+  }
+  // 2. Computer (Chrome/Edge): Speichern-Dialog mit Ordnerwahl
+  if (!touch && window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({ suggestedName: name, types: [{ description: 'Smartcube Backup', accept: { 'application/json': ['.json'] } }] });
+      const w = await handle.createWritable();
+      await w.write(file);
+      await w.close();
+      return done('gespeichert');
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+    }
+  }
+  // 3. Download
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `smartcube-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.href = URL.createObjectURL(file);
+  a.download = name;
   document.body.append(a);
   a.click();
   a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  toast(L(`💾 Backup gespeichert (${solves.length} Solves)`, `💾 Backup saved (${solves.length} solves)`));
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  done('gespeichert');
 }
 
 async function importBackup(file) {

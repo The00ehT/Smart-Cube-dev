@@ -162,7 +162,7 @@ const STATIC = {
   'Daten & Backup': 'Data & backup',
   '💾 Backup speichern': '💾 Save backup',
   '📂 Backup laden': '📂 Load backup',
-  'Alles liegt nur auf diesem Gerät in diesem Browser. Das Backup enthält Solves, Archiv, Einstellungen, Sessions, Algorithmen, Profil und Freunde.': 'Everything is stored only on this device in this browser. The backup contains solves, archive, settings, sessions, algorithms, profile and friends.',
+  'Alles liegt nur auf diesem Gerät in diesem Browser. Das Backup enthält Solves, Archiv, Einstellungen, Sessions, Algorithmen, Profil und Freunde. Am iPhone öffnet „Backup speichern“ das Teilen-Menü: dort „In Dateien sichern“ wählen (z. B. iCloud Drive).': 'Everything is stored only on this device in this browser. The backup contains solves, archive, settings, sessions, algorithms, profile and friends. On iPhone “Save backup” opens the share sheet: choose “Save to Files” (e.g. iCloud Drive).',
   'Profilbild ändern': 'Change picture',
   'Dein Name': 'Your name',
   'Avatar auswählen': 'Choose avatar',
