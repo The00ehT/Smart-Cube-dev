@@ -80,6 +80,27 @@ export function f2lDiagram(state, size = 72, opts = {}) {
   return `<svg class="ll-dia f2l-dia" viewBox="0 0 60 64" width="${size}" height="${size}" aria-hidden="true"><polygon points="${[[-1.5, 1.5, -1.5], [1.5, 1.5, -1.5], [1.5, 1.5, 1.5], [1.5, -1.5, 1.5], [-1.5, -1.5, 1.5], [-1.5, 1.5, 1.5]].map((p) => proj(p).join(',')).join(' ')}" fill="#1a1d23"/>${polys.join('')}</svg>`;
 }
 
+/**
+ * Letzte Schicht als 3D-Ansicht (oben, vorne, rechts) in echten Farben der Haltung des Lösers.
+ * Zeigt, welche Farbe vorne/rechts lag – dazu dient die Haltung bei OLL/PLL in der Analyse.
+ * @param state   Zustand (Kreuz unten, Buchstaben = Seiten der Haltung)
+ * @param palette Farbe je Seitenbuchstabe (z. B. { U: PHYS[…], F: … })
+ */
+export function ll3dDiagram(state, size = 46, palette = PHYS) {
+  const polys = [];
+  for (const f of ['U', 'F', 'R']) {
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        const pts = FACE_PTS[f](r, c);
+        const mid = pts.reduce((a, p) => a.map((v, k) => v + p[k] / 4), [0, 0, 0]);
+        const inset = pts.map((p) => p.map((v, k) => mid[k] + (v - mid[k]) * 0.86));
+        polys.push(`<polygon points="${inset.map((p) => proj(p).map((v) => v.toFixed(1)).join(',')).join(' ')}" fill="${palette[state[FACE_OFF[f] + r * 3 + c]] ?? '#888'}"/>`);
+      }
+    }
+  }
+  return `<svg class="ll-dia f2l-dia" viewBox="0 0 60 64" width="${size}" height="${size}" aria-hidden="true"><polygon points="${[[-1.5, 1.5, -1.5], [1.5, 1.5, -1.5], [1.5, 1.5, 1.5], [1.5, -1.5, 1.5], [-1.5, -1.5, 1.5], [-1.5, 1.5, 1.5]].map((p) => proj(p).join(',')).join(' ')}" fill="#1a1d23"/>${polys.join('')}</svg>`;
+}
+
 /** Passende Grafik für eine Fall-ID */
 import { CASE_STATE } from '../cube/ll-cases.js';
 import { displayState } from '../cube/f2l-cases.js';

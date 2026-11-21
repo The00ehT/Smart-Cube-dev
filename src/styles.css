@@ -248,6 +248,13 @@ code { font-size: 12px; background: var(--chip); padding: 1px 4px; border-radius
 .moves { font: 13px/1.6 var(--mono); color: var(--muted); word-break: break-word; min-height: 1.6em; margin-top: 8px; }
 .hw { margin-top: 8px; font-size: 13px; color: var(--muted); display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; }
 .hw:empty { display: none; }
+/* Einstellungen: Tabs und Technische Daten */
+.set-tabs { margin: 0 0 4px; }
+.tech-grid { margin-top: 0; word-break: break-all; }
+.tech-grid > span:nth-child(odd) { word-break: normal; }
+.tech-chart svg { width: 100%; height: auto; display: block; }
+.tech-cmds { font-family: var(--mono); line-height: 1.7; }
+#tech-mode-btns button:disabled { opacity: 0.5; }
 .pad-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
 .pad-grid button { padding: 10px 0; font-weight: 650; }
 .pad .hint { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
@@ -1349,3 +1356,23 @@ button.stat.tap:active { background: var(--accent-soft); }
 tr.tap { cursor: pointer; }
 tr.tap:active td { background: var(--accent-soft); }
 #friend-dialog .link-btn { padding: 0; margin-bottom: 4px; }
+
+/* Rekonstruktion: Drehung von Hand einfügen (Haltung bearbeiten) */
+.rp-mv.editable { cursor: pointer; outline: 1px dashed var(--line); outline-offset: 1px; border-radius: 4px; }
+.in-adopted { margin-left: 8px; }
+.rp-mv.wide { font-weight: 700; color: var(--accent); }
+.rp-wide-toggle { font-size: 14px; }
+
+/* Analyse: OLL/PLL-Bild 2D ⇄ 3D */
+.ll-pic { all: unset; cursor: pointer; display: block; flex: none; border-radius: 8px; }
+.ll-pic:focus-visible { outline: 2px solid var(--accent); }
+.ll-pic .dia-3d { display: none; }
+.ll-3d .ll-pic .dia-2d { display: none; }
+.ll-3d .ll-pic .dia-3d { display: block; }
+/* Einstellungen: einklappbarer Bereich */
+.set-fold > summary { cursor: pointer; list-style: none; }
+.set-fold > summary::-webkit-details-marker { display: none; }
+.set-fold > summary h3 { display: inline; }
+.set-fold > summary::after { content: ' ▾'; color: var(--muted); }
+.set-fold[open] > summary::after { content: ' ▴'; }
+.set-fold-body { display: grid; gap: 12px; margin-top: 12px; }

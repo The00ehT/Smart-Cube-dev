@@ -12,6 +12,9 @@ import { CubeView } from './ui/cube-view.js';
 import { setDefaultSkin, SKIN_PRESETS } from './ui/cube3d.js';
 import { forgetMacs } from './ui/mac-dialog.js';
 import { load, save } from './storage.js';
+import { addSample, drainByMode, batteryChartSvg, toCsv } from './cube/battery-log.js';
+import { MODE_PERFORMANCE, MODE_ECO } from './cube/cube-mode.js';
+import { markSlices } from './cube/wide.js';
 import { averageOf, bestAverage, best, mean, formatTime, formatSolve, effectiveTime } from './stats.js';
 import { buildSolve, hasDetail, phasesOf, phaseName } from './solve-data.js';
 import { decodeShare, encodeShare } from './share.js';
@@ -52,6 +55,12 @@ const $ = (id) => document.getElementById(id);
 translateStatic(); // feste Texte der Seite (bei Englisch)
 const SOLVES_KEY = 'smartcube.solves.v1';
 const SETTINGS_KEY = 'smartcube.settings.v1';
+const BATT_KEY = 'smartcube.battlog.v1';
+/** Akku-Verlauf des Würfels (siehe Einstellungen → Technische Daten) */
+const battLog = (() => {
+  const v = load(BATT_KEY, []);
+  return Array.isArray(v) ? v.filter((x) => x && Number.isFinite(x.t) && Number.isFinite(x.l)) : [];
+})();
 
 const settings = { crossColors: null, keepAwake: true, inspection: false, autoScramble: true, hideTime: false, gyro: true, viewDown: 'auto', theme: 'auto', replayGyro: true, showResult: true, emojiHelp: true, crossColor: 'auto', scrambleType: 'wca', ...load(SETTINGS_KEY, {}) };
 // Solves liegen in IndexedDB (viel Platz); alte Daten aus localStorage werden beim ersten Start übernommen
@@ -176,6 +185,12 @@ function onCubeEvent(e) {
     case 'battery':
       setBattery(e.level);
       break;
+    case 'mode':
+      // Würfel meldet den neuen Gyro-Modus: im Akku-Verlauf markieren, Anzeige auffrischen
+      app.modeSetAt = Date.now();
+      if (app.battery != null && addSample(battLog, Date.now(), app.battery, e.mode)) save(BATT_KEY, battLog);
+      renderTech();
+      break;
     case 'hardware':
       app.hardware = e.info;
       renderHardware();
@@ -211,6 +226,8 @@ async function connect(kind) {
   view.resetGyroSeen();
   renderDevice();
   renderHardware();
+  app.modeSetAt = 0;
+  applyCubeMode(); // Gyro-Modus des Würfels passend zur Einstellung setzen (nur GAN Gen4)
   if (app.phase === 'idle') setStatus(isSolved(app.state) ? L('Verbunden. Hol dir ein Scramble.', 'Connected. Grab a scramble.') : L('Verbunden.', 'Connected.'));
   if (app.conn.kind === 'gan') {
     clearInterval(app.batteryTimer);
@@ -243,6 +260,7 @@ function onDisconnected() {
   renderHardware();
   setBattery(null);
   renderTimer();
+  renderTech();
 }
 
 // ---------------- Züge und Ablauf ----------------
@@ -897,10 +915,15 @@ function setStatus(text) {
 
 function setBattery(level) {
   const b = $('battery');
+  app.battery = level == null ? null : Math.round(level);
   if (level == null) {
     b.hidden = true;
+    renderTech();
     return;
   }
+  // Akku-Verlauf (mit aktuellem Gyro-Modus des Würfels) fortschreiben
+  if (addSample(battLog, Date.now(), level, app.conn?.mode)) save(BATT_KEY, battLog);
+  renderTech();
   b.hidden = false;
   const lv = Math.max(0, Math.min(100, Math.round(level)));
   b.innerHTML = `<i class="batt-ic" style="--lv:${lv}" aria-hidden="true"></i>${lv}%`;
@@ -1491,16 +1514,14 @@ function renderAwake() {
 }
 $('opt-awake').closest('.toggle').addEventListener('click', () => setTimeout(renderAwake, 600));
 document.addEventListener('click', () => $('settings-dialog')?.open && setTimeout(renderAwake, 500), { capture: true });
-$('gyro-help').innerHTML = L(
-  `<p>Aus spart Akku am <b>Handy</b>: Die App verarbeitet dann keine Lagedaten und zeichnet den Würfel nur bei Zügen neu. Den <b>Würfel-Akku</b> schont das nicht – das Gyroskop im Würfel lässt sich nur mit GANs eigenem, nicht veröffentlichtem Befehl abschalten.</p>
-   <p>💡 <b>GAN i4:</b> In Cube Station den Modus <b>Endurance</b> wählen (Gyroskop aus, laut GAN bis ~200 h statt ~30 h Akku). Danach hier ganz normal verbinden – Züge, Zeiten und Analyse funktionieren weiter, nur Rotations/Regrips fehlen. Ob der Würfel den Modus dauerhaft behält, bitte einmal ausprobieren.</p>`,
-  `<p>Off saves battery on your <b>phone</b>: the app then ignores orientation data and only redraws the cube on moves. It does not save the <b>cube’s</b> battery – the gyroscope inside the cube can only be turned off with GAN’s own, unpublished command.</p>
-   <p>💡 <b>GAN i4:</b> choose <b>Endurance</b> mode in Cube Station (gyroscope off, per GAN up to ~200 h instead of ~30 h). Then connect here as usual – moves, times and analysis keep working, only rotations/regrips are missing. Please check whether the cube keeps the mode permanently.</p>`,
-);
-bindToggle('opt-gyro', 'gyro', (on) => {
+/** Gyro an/aus: Ansicht, Auswertung und (bei GAN Gen4) der Modus des Würfels */
+function afterGyroChange(on) {
   view.setGyroEnabled(on);
   if (!on) app.lastGyro = null;
-});
+  applyCubeMode();
+  renderTech();
+}
+view.setGyroEnabled(settings.gyro);
 replay.useGyro = settings.replayGyro;
 replay.onRace = (sol) => raceAgainst(sol, sol.name ? `${sol.name} (${formatTime(analyzeSolve(sol.start, sol.moves, sol.times).time)})` : L('Geteilter Solve', 'Shared solve'));
 // Haltung je Paar aus der Rekonstruktion am eigenen Solve speichern (gleiche Werte wie in der Analyse)
@@ -1509,6 +1530,8 @@ replay.onFronts = (sol, fronts) => {
   if (!own) return;
   own.fronts = fronts;
   own.front = fronts.cross || 0;
+  if (sol.rots) own.rots = sol.rots;
+  else delete own.rots;
   persistSolves();
 };
 replay.onGyroToggle = (on) => {
@@ -1521,10 +1544,207 @@ $('btn-forget-mac').addEventListener('click', () => {
   setStatus(L('Gespeicherte MAC-Adressen gelöscht.', 'Saved MAC addresses deleted.'));
 });
 
+// ---------------- Technische Daten (Einstellungen) ----------------
+
+/** Gyro-Modus des Würfels passend zur Einstellung setzen: an = Performance, aus = Eco (nur GAN Gen4) */
+async function applyCubeMode() {
+  const c = app.conn;
+  if (!c?.modeSupported) return;
+  try {
+    await c.setMode(settings.gyro ? MODE_PERFORMANCE : MODE_ECO);
+  } catch (err) {
+    console.warn('Modus umschalten fehlgeschlagen', err);
+    toast(L('Modus des Würfels ließ sich nicht umschalten.', 'Could not switch the cube’s mode.'));
+  }
+  renderTech();
+}
+
+const MODE_NAME = { performance: 'Performance', eco: 'Eco' };
+
+function initTech() {
+  $('set-tech').innerHTML = `
+    <section class="set-sec">
+      <h3>${L('Verbindung', 'Connection')}</h3>
+      <div class="hw tech-grid" id="tech-conn"></div>
+    </section>
+    <section class="set-sec">
+      <h3>${L('Gyroskop-Modus des Würfels', 'Cube gyroscope mode')}</h3>
+      <div class="seg-control" id="tech-mode-btns" role="radiogroup" aria-label="${L('Gyroskop-Modus', 'Gyroscope mode')}">
+        <button type="button" role="radio" data-gyro="1">Performance (${L('Gyro an', 'gyro on')})</button>
+        <button type="button" role="radio" data-gyro="0">Eco (${L('Gyro aus', 'gyro off')})</button>
+      </div>
+      <div class="hw tech-grid" id="tech-mode"></div>
+    </section>
+    <section class="set-sec">
+      <h3>${L('Akku-Verlauf', 'Battery history')}</h3>
+      <div class="tech-chart" id="tech-chart"></div>
+      <div class="hw tech-grid" id="tech-drain"></div>
+      <div class="row-buttons">
+        <button type="button" class="ghost" id="tech-csv">${L('CSV speichern', 'Save CSV')}</button>
+        <button type="button" class="ghost" id="tech-clear">${L('Verlauf löschen', 'Clear history')}</button>
+      </div>
+    </section>
+    <section class="set-sec">
+      <h3>${L('Letzte Befehle an den Würfel', 'Latest commands to the cube')}</h3>
+      <div class="small tech-cmds" id="tech-cmds"></div>
+    </section>
+    <section class="set-sec">
+      <h3>${L('Rohe Züge vom Würfel', 'Raw moves from the cube')}</h3>
+      <div class="small tech-cmds" id="tech-moves"></div>
+      <div class="row-buttons"><button type="button" class="ghost" id="tech-moves-clear">${L('Zurücksetzen', 'Reset')}</button></div>
+    </section>`;
+  $('tech-mode-btns').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-gyro]');
+    if (!b) return;
+    const on = b.dataset.gyro === '1';
+    settings.gyro = on;
+    save(SETTINGS_KEY, settings);
+    afterGyroChange(on);
+  });
+  $('tech-csv').addEventListener('click', () => {
+    if (!battLog.length) return toast(L('Noch keine Messwerte.', 'No measurements yet.'));
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([toCsv(battLog)], { type: 'text/csv' }));
+    a.download = `smartcube-battery-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  });
+  $('tech-moves-clear').addEventListener('click', () => {
+    if (app.conn?.moveLog) app.conn.moveLog.length = 0;
+    renderTech();
+  });
+  $('tech-clear').addEventListener('click', () => {
+    if (!battLog.length || !confirm(L('Akku-Verlauf wirklich löschen?', 'Really clear the battery history?'))) return;
+    battLog.length = 0;
+    save(BATT_KEY, battLog);
+    renderTech();
+  });
+  renderTech();
+}
+
+const techRows = (rows) =>
+  rows
+    .filter(([, v]) => v != null && v !== '')
+    .map(([k, v]) => `<span>${k}</span><span>${escapeHtml(String(v))}</span>`)
+    .join('');
+
+function renderTech() {
+  const root = $('set-tech');
+  if (!root || !$('tech-conn')) return;
+  const c = app.conn;
+  const gan = c?.kind === 'gan';
+  const info = app.hardware || {};
+  const dash = '–';
+
+  // Verbindung
+  $('tech-conn').innerHTML = !c
+    ? `<span>${L('Status', 'Status')}</span><span>${L('nicht verbunden', 'not connected')}</span>`
+    : techRows([
+        [L('Gerät', 'Device'), c.name],
+        [L('Art', 'Type'), { gan: 'GAN', other: L('Anderer Smartcube', 'Other smart cube'), virtual: L('Virtuell', 'Virtual') }[c.kind]],
+        ['MAC', c.mac],
+        [L('Protokoll', 'Protocol'), gan ? (c.tech.generation ? `GAN Gen${c.tech.generation}` : L('unbekannt', 'unknown')) : null],
+        ['Service', c.tech?.service],
+        [L('Befehle (schreiben)', 'Commands (write)'), c.tech?.commandCharacteristic],
+        [L('Status (Meldungen)', 'State (notifications)'), c.tech?.stateCharacteristic],
+        [L('Modell', 'Model'), info.hardwareName],
+        ['Firmware', info.softwareVersion],
+        ['Hardware', info.hardwareVersion],
+        [L('Produktdatum', 'Product date'), info.productDate],
+        [L('Gyro-Hardware (laut Bibliothek)', 'Gyro hardware (per library)'), info.gyroSupported == null ? null : info.gyroSupported ? L('ja', 'yes') : L('nein', 'no')],
+        [L('Gyro-Daten empfangen', 'Gyro data received'), gan ? (c.supportsGyro ? L('ja', 'yes') : L('noch nicht', 'not yet')) : null],
+        [L('Akku', 'Battery'), app.battery != null ? `${app.battery} %` : dash],
+      ]);
+
+  // Modus
+  const btns = $('tech-mode-btns');
+  btns.querySelectorAll('button').forEach((b) => {
+    const on = (b.dataset.gyro === '1') === !!settings.gyro;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+    b.disabled = !c?.modeSupported;
+  });
+  let modeRows;
+  if (!c) modeRows = [[L('Status', 'Status'), L('nicht verbunden', 'not connected')]];
+  else if (!gan) modeRows = [[L('Status', 'Status'), L('nur GAN-Würfel', 'GAN cubes only')]];
+  else if (!c.modeSupported) modeRows = [[L('Status', 'Status'), L('Umschalten nur bei GAN Gen4 (z. B. i4) – hier nicht verfügbar', 'Switching only on GAN Gen4 (e.g. i4) – not available here')]];
+  else {
+    const rate = c.gyroRate();
+    const settled = app.modeSetAt && Date.now() - app.modeSetAt > 3500;
+    const seen = settled ? c.observedMode() : null;
+    const verdict = !c.mode ? dash : !settled ? L('wird gemessen …', 'measuring …') : seen == null ? L('unklar', 'unclear') : seen === c.mode ? `✓ ${L('bestätigt', 'confirmed')}` : `⚠ ${L('Würfel verhält sich wie', 'cube behaves like')} ${MODE_NAME[seen]}`;
+    modeRows = [
+      [L('Gesendet', 'Sent'), c.mode ? MODE_NAME[c.mode] : L('noch nichts', 'nothing yet')],
+      [L('Gemessene Rate', 'Measured rate'), `${dec(rate, 1)} ${L('Meldungen/s', 'messages/s')}`],
+      [L('Prüfung', 'Check'), verdict],
+    ];
+  }
+  $('tech-mode').innerHTML = techRows(modeRows);
+
+  // Akku
+  const svg = batteryChartSvg(battLog, {
+    hours: 24,
+    locale,
+    labels: { perf: 'Performance', eco: 'Eco', aria: L('Akku-Verlauf der letzten 24 Stunden', 'Battery history, last 24 hours') },
+  });
+  $('tech-chart').innerHTML = svg || `<p class="small">${L('Noch zu wenige Messwerte. Würfel verbinden und etwas warten.', 'Not enough measurements yet. Connect the cube and wait a bit.')}</p>`;
+  const drain = drainByMode(battLog);
+  const fmtDrain = (d) => (d ? `${dec(d.ratePerHour, 1)} ${L('%-Pkt/h', 'pp/h')}${d.fullHours ? ` · ≈ ${dec(d.fullHours, 0)} h` : ''} (${dec(d.hours, 1)} h ${L('gemessen', 'measured')})` : L('zu wenig Daten (< 20 min)', 'not enough data (< 20 min)'));
+  $('tech-drain').innerHTML = techRows([
+    ['Performance', fmtDrain(drain.P)],
+    ['Eco', fmtDrain(drain.E)],
+    [L('Messwerte', 'Samples'), battLog.length],
+  ]);
+
+  // Befehle
+  const log = c?.commandLog || [];
+  $('tech-cmds').innerHTML = log.length
+    ? log.slice(-8).reverse().map((x) => `${new Date(x.t).toLocaleTimeString(locale)} · ${escapeHtml(x.label)} · <code>${x.hex}</code>`).join('<br>')
+    : L('noch keine', 'none yet');
+
+  // Rohe Züge mit Abstand zum vorigen; erkannte Slices (R + L′ kurz hintereinander) stehen als Vermutung dabei
+  const mlog = (c?.moveLog || []).slice(-24);
+  const rows = mlog.map((x, i) => {
+    const prev = mlog[i - 1];
+    const gap = prev ? (x.cube != null && prev.cube != null ? x.cube - prev.cube : x.t - prev.t) : null;
+    return { text: x.move, t: gap ?? 0, kind: 'move', gap };
+  });
+  const guessed = markSlices(rows.map((r, i) => ({ ...r, t: rows.slice(0, i + 1).reduce((a, q) => a + (q.gap ?? 0), 0) })));
+  $('tech-moves').innerHTML = guessed.length
+    ? guessed
+        .map((x, i) => {
+          if (x.hide) return '';
+          const pair = x.label ? `<code>${escapeHtml(x.text)} ${escapeHtml(guessed[i + 1].text)}</code> <b>→ ${x.label}</b>` : `<code>${escapeHtml(x.text)}</code>`;
+          return `${pair}${x.gap != null ? ` <span>+${Math.max(0, Math.round(x.gap))} ms</span>` : ''}`;
+        })
+        .filter(Boolean)
+        .join(' · ')
+    : L('noch keine', 'none yet');
+}
+
+// Tabs im Einstellungsfenster: Allgemein ⇄ Technische Daten
+$('set-tabs').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-set-tab]');
+  if (!b) return;
+  const tech = b.dataset.setTab === 'tech';
+  $('set-general').hidden = tech;
+  $('set-tech').hidden = !tech;
+  $('set-tabs').querySelectorAll('button').forEach((x) => {
+    x.classList.toggle('on', x === b);
+    x.setAttribute('aria-selected', String(x === b));
+  });
+  if (tech) renderTech();
+});
+initTech();
+// Rate und Prüfung laufend aktualisieren, solange der Tab offen ist
+setInterval(() => {
+  if ($('settings-dialog')?.open && !$('set-tech').hidden) renderTech();
+}, 1000);
+
 // ---------------- Backup (alle Daten) ----------------
 
 // Gerätebezogen, nicht ins Backup: eigener Freundescode (sonst hätten zwei Geräte denselben) und Würfel-Adressen
-const BACKUP_SKIP = new Set(['smartcube.friendCode', 'smartcube.macs.v1', SOLVES_KEY, 'smartcube.archive.v1']);
+const BACKUP_SKIP = new Set(['smartcube.friendCode', 'smartcube.macs.v1', BATT_KEY, SOLVES_KEY, 'smartcube.archive.v1']);
 
 function exportBackup() {
   const local = {};

@@ -7,7 +7,7 @@ import { formatTime, formatSolve } from '../stats.js';
 import { metricsOf } from '../metrics.js';
 import { L, dec } from '../i18n.js';
 import { colorChip } from './replay.js';
-import { caseDiagram, f2lDiagram, PHYS } from './ll-diagram.js';
+import { caseDiagram, f2lDiagram, ll3dDiagram, PHYS } from './ll-diagram.js';
 import { groupAlg } from '../cube/alg-format.js';
 import { COLOR_NAMES, SOLVED, applyAlg, isSolved, phaseStatus, solvedSlots, relativeState, HtmCounter, translateMoves, tokenizeAlg, CROSS_DOWN } from '../cube/facelets.js';
 import { ScrambleTracker } from '../cube/scramble-tracker.js';
@@ -57,7 +57,15 @@ const practiceBtn = (idx) => `<button type="button" class="ghost small-btn in-pr
 
 /** Haltung: welche Farbe war vorne? antippbar (ohne Gyroskop selbst einstellen) */
 const EDIT = { on: false }; // Haltung bearbeiten (Farbwahl sichtbar) – sonst kompakt
+const LLPIC = { d3: false }; // OLL/PLL-Bild: 2D (Fall) oder 3D (dein Zustand in deiner Haltung)
 const SCR = { down: false }; // Scramble mit Kreuzfarbe unten (statt Weiß oben, Grün vorne)
+
+/** Knopf „Haltung in die Rekonstruktion übernehmen“ – nur sinnvoll, solange Phasen nicht fest eingestellt sind */
+function adoptButton(r, adopted) {
+  const open = [...r.pairs.filter((p) => !p.free).map((p) => p.source), r.oll.frontOptions ? r.oll.source : 'set', r.pll.frontOptions ? r.pll.source : 'set', r.cross.source].some((x) => x && x !== 'set');
+  if (!open) return adopted ? `<span class="small in-adopted">✓ ${L('Haltung übernommen', 'Hold adopted')}</span>` : '';
+  return `<button type="button" class="ghost small-btn" data-act="adopt-hold" title="${L('Haltung aller Phasen (Kreuz, Paare, OLL, PLL) fest in die Rekonstruktion übernehmen', 'Apply the hold of every phase (cross, pairs, OLL, PLL) to the reconstruction')}">🧭 ${L('In Rekonstruktion übernehmen', 'Apply to reconstruction')}</button>`;
+}
 
 /** Haltung beim Kreuz (welche Farbe vorne, 0–3) – dieselbe wie in der Cross-Zeile angezeigt */
 function crossHoldK(r) {
@@ -121,6 +129,7 @@ function pairRow(p, r) {
       ? tip('↻', `${p.rotation.name} ${L('unnötig', 'unnecessary')}`, w.alg, `${L('Ohne Drehung', 'Without rotating')} · ${colorChip(p.rotation.fromFront)} ${L('vorne', 'front')} · Slot ${POS_SHORT[w.pos]}`, true)
       : `<div class="small">↻ ${p.rotation.name} – ${L('ok, Slot lag hinten', 'fine, slot was in the back')}</div>`;
   }
+  if (p.midRot?.length) rot += `<div class="small">↻ ${L('Drehung im Paar', 'Rotation during the pair')}: ${esc(p.midRot.join(' '))}</div>`;
   // Vorschläge: höchstens einer zum Paar selbst (leichteres Paar ODER Vorausschau), dazu EO beim letzten Paar
   const sug = p.lookahead ? lookTip(p, r) : p.easier ? tip('💡', `${L('Leichter', 'Easier')}: ${pairIcon(p.easier.hold.front + p.easier.hold.right, r.crossFace)} ${p.easier.id}`, p.easier.alg, `${mv(p.easier.len)} · ${colorChip(p.easier.hold.front)} ${L('vorne', 'front')}`) : '';
   return `<details class="in-item in-collapse"${open ? ' open' : ''}>${head}<div class="in-meta">${frontPicker(p)}${practiceBtn(p.k)}</div>${rot}${body}${sug}${eoTip(p)}</details>`;
@@ -152,11 +161,19 @@ function eoTip(p) {
 /** OLL/PLL: Fall, Zeiten und eigene Züge (feste Algorithmen, keine Ersparnis) */
 function llRow(name, cls, l) {
   const b = l.best;
+  const hold = l.frontOptions ? `<div class="in-meta">${frontPicker({ k: name.toLowerCase(), frontOptions: l.frontOptions, holdK: l.holdK ?? 0, source: l.source })}</div>` : '';
+  const midRot = l.midRot?.length ? `<div class="small">↻ ${L('Drehung währenddessen', 'Rotation during it')}: ${esc(l.midRot.join(' '))}</div>` : '';
   const caseName = b ? (b.id.startsWith('PLL') ? `${b.id.slice(4)}-Perm` : b.id) : '';
   const twoLook = l.twoLook ? `<span class="in-tag warn" title="${L(`Direkter Alg: ${b.len} Züge`, `Direct alg: ${b.len} moves`)}">2-Look?</span>` : '';
   const head = `<summary class="in-head"><i class="key ${cls}"></i><b>${name}</b>${l.skip ? '<span class="in-tag good">Skip</span>' : caseName ? `<span class="small">${esc(caseName)}</span>` : ''}<span class="small">${mv(l.moves)} · ${formatTime(l.time)}</span>${twoLook}</summary>`;
   if (l.skip) return `<details class="in-item in-collapse">${head}<div class="small">🎉 Skip</div></details>`;
-  return `<details class="in-item in-collapse">${head}<div class="in-case">${b ? caseDiagram(b.id, 46) : ''}<div class="in-case-tx">
+  // Bild antippen: 2D (Fall) ⇄ 3D (dein Zustand in deiner Haltung, mit Vorne/Rechts)
+  const h = l.dia?.hold;
+  const d3 = l.dia ? ll3dDiagram(l.dia.state, 46, { U: PHYS[h.up], D: PHYS[h.down], F: PHYS[h.front], R: PHYS[h.right], L: PHYS[h.left], B: PHYS[h.back] }) : '';
+  const pic = d3
+    ? `<button type="button" class="ll-pic" data-act="ll-3d" title="${L('Antippen: 2D ⇄ 3D', 'Tap: 2D ⇄ 3D')}"><span class="dia-2d">${b ? caseDiagram(b.id, 46) : ''}</span><span class="dia-3d">${d3}</span></button>`
+    : b ? caseDiagram(b.id, 46) : '';
+  return `<details class="in-item in-collapse">${head}${hold}${midRot}<div class="in-case">${pic}<div class="in-case-tx">
       <div class="in-alg mine">${esc(groupAlg(l.userMoves)) || '–'}</div>
       <div class="small">${b ? '' : L('Fall nicht erkannt · ', 'Case not recognized · ')}${l.recog ? `Recog ${formatTime(l.recog)} · Exec ${formatTime(Math.max(0, l.time - l.recog))}` : ''}${l.twoLook ? ` · ${L(`direkt: ${mv(b.len)}`, `direct: ${mv(b.len)}`)}` : ''}</div>
     </div></div><div class="in-actions">${practiceBtn(name === 'OLL' ? 5 : 6)}</div></details>`;
@@ -166,7 +183,8 @@ function llRow(name, cls, l) {
 function rotSummary(r) {
   const anyAssumed = r.pairs.some((p) => !p.free && p.source === 'assumed');
   const ro = r.rotations;
-  if (ro.count) return `<div class="in-rot${ro.unnecessary ? ' warn' : ''}">↻ ${ro.count} Rotation${ro.count === 1 ? '' : 's'}${ro.unnecessary ? ` · <b>${ro.unnecessary} ${L('unnötig', 'unnecessary')}</b>` : ''}</div>`;
+  const mid = ro.mid ? ` · ${ro.mid} ${L('im Paar', 'inside a pair')}` : '';
+  if (ro.count) return `<div class="in-rot${ro.unnecessary ? ' warn' : ''}">↻ ${ro.count} Rotation${ro.count === 1 ? '' : 's'}${ro.unnecessary ? ` · <b>${ro.unnecessary} ${L('unnötig', 'unnecessary')}</b>` : ''}${mid}</div>`;
   if (anyAssumed) return `<div class="small in-rot-hint">${L('Rotations bewerten: „✎ Haltung“ einstellen.', 'Rate rotations: set “✎ Hold”.')}</div>`;
   return `<div class="small">✓ ${L('Keine Rotations', 'No rotations')}</div>`;
 }
@@ -183,7 +201,19 @@ export class InsightsView {
     dlg.addEventListener('click', (e) => {
       if (e.target === dlg || e.target.closest('[data-act=close]')) return dlg.close();
       const fb = e.target.closest('[data-front]');
-      if (fb) return this.setFront(fb.dataset.pair === 'cross' ? 'cross' : Number(fb.dataset.pair), Number(fb.dataset.front));
+      if (fb) return this.setFront(['cross', 'oll', 'pll'].includes(fb.dataset.pair) ? fb.dataset.pair : Number(fb.dataset.pair), Number(fb.dataset.front));
+      if (e.target.closest('[data-act=adopt-hold]')) return this.adoptHolds();
+      if (e.target.closest('[data-act=ll-3d]')) {
+        // alle OLL/PLL-Bilder gemeinsam umschalten, ohne neu zu rendern (Aufklappzustand bleibt)
+        LLPIC.d3 = !LLPIC.d3;
+        try {
+          localStorage.setItem('smartcube.llDia3d', LLPIC.d3 ? '1' : '');
+        } catch {
+          /* egal */
+        }
+        dlg.classList.toggle('ll-3d', LLPIC.d3);
+        return;
+      }
       const pb = e.target.closest('[data-practice]');
       if (pb) return this.startPractice(Number(pb.dataset.practice));
       if (e.target.closest('[data-act=practice-stop]')) return this.stopPractice();
@@ -232,6 +262,26 @@ export class InsightsView {
     this.deps.persist?.();
     const top = this.dlg.scrollTop;
     this.render(solve);
+    this.dlg.scrollTop = top;
+  }
+
+  /**
+   * Haltung aller Phasen aus der Analyse (eingestellt, aus dem Gyroskop oder angenommen) fest in die
+   * Rekonstruktion übernehmen: Kreuz, Paare, OLL und PLL → solve.fronts (gilt auch im Replay und im Teilen-Link)
+   */
+  adoptHolds() {
+    const r = this.result;
+    if (!r) return;
+    const f = { cross: crossHoldK(r) };
+    for (const p of r.pairs) if (!p.free && p.holdK != null) f[p.k] = p.holdK;
+    for (const [k, l] of [['oll', r.oll], ['pll', r.pll]]) if (l.frontOptions && l.holdK != null) f[k] = l.holdK;
+    this.fronts = f;
+    this.solve.fronts = f;
+    this.solve.front = f.cross || 0;
+    this.deps.persist?.();
+    this.adopted = true;
+    const top = this.dlg.scrollTop;
+    this.render(this.solve);
     this.dlg.scrollTop = top;
   }
 
@@ -367,10 +417,12 @@ export class InsightsView {
     try {
       EDIT.on = localStorage.getItem('smartcube.editHold') === '1';
       SCR.down = localStorage.getItem('smartcube.scrCrossDown') === '1';
+      LLPIC.d3 = localStorage.getItem('smartcube.llDia3d') === '1';
     } catch {
       EDIT.on = false;
     }
     this.fronts = { ...(solve.fronts || {}) };
+    this.adopted = false;
     this.stopPractice();
     this.dlg.innerHTML = `<div class="rp-head"><div><h2>${L('Analyse', 'Analysis')}</h2><div class="small">${formatSolve(solve)}</div></div>
       <button type="button" class="rp-close" data-act="close" aria-label="${L('Schließen', 'Close')}">✕</button></div>
@@ -400,11 +452,12 @@ export class InsightsView {
       r.saved > 1
         ? `<div class="in-summary"><b>~${mv(r.saved)} ${L('sparbar', 'to save')}</b>${secs ? ` <span>≈ ${dec(secs / 1000, 1)} s</span>` : ''}<div class="small">${total} → ${total - r.saved} ${L('Züge mit den kürzesten Wegen (Cross + F2L)', 'moves with the shortest ways (cross + F2L)')}</div></div>`
         : `<div class="in-summary good"><b>✓ ${L('Sehr effizient', 'Very efficient')}</b></div>`;
+    this.dlg.classList.toggle('ll-3d', LLPIC.d3);
     this.dlg.innerHTML = `<div class="rp-head"><div><h2>${L('Analyse', 'Analysis')}</h2><div class="small">${formatSolve(solve)} · ${mv(total)}</div></div>
       <button type="button" class="rp-close" data-act="close" aria-label="${L('Schließen', 'Close')}">✕</button></div>
       <div class="in-practice" hidden></div>
       ${summary}
-      <div class="in-toolbar"><button type="button" class="ghost small-btn${EDIT.on ? ' on' : ''}" data-act="edit-hold">${EDIT.on ? `✓ ${L('Fertig', 'Done')}` : `✎ ${L('Haltung', 'Hold')}`}</button></div>
+      <div class="in-toolbar"><button type="button" class="ghost small-btn${EDIT.on ? ' on' : ''}" data-act="edit-hold">${EDIT.on ? `✓ ${L('Fertig', 'Done')}` : `✎ ${L('Haltung', 'Hold')}`}</button>${adoptButton(r, this.adopted)}</div>
       ${scrambleSection(r)}
       ${crossSection(r)}
       <section class="in-sec"><h3><i class="key ph-pair"></i>F2L</h3>${rotSummary(r)}${r.pairs.map((p) => pairRow(p, r)).join('')}</section>

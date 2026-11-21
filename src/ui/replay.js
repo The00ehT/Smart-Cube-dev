@@ -11,7 +11,12 @@ import { TwistyPlayer } from 'cubing/twisty';
 import { SOLVED, applyAlg, applyAnyAlg, CROSS_DOWN, COLOR_NAMES } from '../cube/facelets.js';
 const YR = ['', 'y', 'y2', "y'"];
 const mod4 = (n) => ((n % 4) + 4) % 4;
+/** Schlüssel der Haltung je Phase: Kreuz, Paar 1–4, OLL, PLL (Position = Phasenindex) */
+const HOLD_KEYS = ['cross', '1', '2', '3', '4', 'oll', 'pll'];
+/** Drehung von Hand in der Phase: erst y, dann y', dann y2, dann wieder keine */
+const ROT_CYCLE = ['', 'y', "y'", 'y2'];
 import { viewerEvents } from '../cube/gyro.js';
+import { detectWide, wideCount } from '../cube/wide.js';
 import { analyzeSolve, PHASE_NAMES } from '../cube/analysis.js';
 import { setupAlgFor } from './cube-view.js';
 import { formatTime, formatSolve } from '../stats.js';
@@ -60,6 +65,7 @@ export class Replay {
           <div class="rp-front"></div>
           <div class="rp-phases"></div>
           <label class="toggle rp-gyro-toggle" hidden><input type="checkbox" class="rp-gyro" checked /> ${L('Rotations &amp; Regrips zeigen (Gyro)', 'Show rotations &amp; regrips (gyro)')}</label>
+          <label class="toggle rp-wide-toggle"><input type="checkbox" class="rp-wide" checked /> ${L('Wide Moves &amp; Slices erkennen', 'Detect wide moves &amp; slices')} <span class="small rp-wide-count"></span></label>
           <div class="rp-actions">
             <button class="rp-share primary">${L('Teilen', 'Share')}</button>
             <button class="rp-race ghost" type="button">👻 ${L('Dagegen antreten', 'Race it')}</button>
@@ -90,6 +96,8 @@ export class Replay {
     });
     $('.rp-phases', dialog).addEventListener('click', (e) => {
       const mv = e.target.closest('[data-k]');
+      // Haltung bearbeiten: Tipp auf einen Zug setzt davor eine Würfeldrehung (auch mitten in einem Paar)
+      if (mv && this.editHold && this.holdByPhase && mv.dataset.mi != null) return this.cycleRot(Number(mv.dataset.mi));
       if (mv) {
         this.pause();
         this.seekMove(Number(mv.dataset.k) + 1);
@@ -134,6 +142,26 @@ export class Replay {
       this.onGyroToggle?.(this.useGyro);
     });
     this.useGyro = true;
+    // Wide Moves (r, u …) und Slices (M, E, S) erkennen: Voreinstellung an, gemerkt in diesem Browser
+    try {
+      this.wideOn = localStorage.getItem('smartcube.replayWide') !== '0';
+    } catch {
+      this.wideOn = true;
+    }
+    $('.rp-wide', dialog).checked = this.wideOn;
+    $('.rp-wide', dialog).addEventListener('change', (e) => {
+      this.wideOn = e.target.checked;
+      try {
+        localStorage.setItem('smartcube.replayWide', this.wideOn ? '1' : '0');
+      } catch {
+        /* egal */
+      }
+      this.pause();
+      const mi = this.events?.[Math.max(0, (this.k || 0) - 1)]?.i;
+      this.build();
+      const at = mi == null ? 0 : this.events.findIndex((ev) => ev.kind === 'move' && ev.i === mi) + 1;
+      this.seekMove(Math.max(0, at));
+    });
   }
 
   /**
@@ -210,15 +238,45 @@ export class Replay {
   renderFront() {
     const box = $('.rp-front', this.dlg);
     box.hidden = !this.holdByPhase;
-    box.innerHTML = `<button type="button" class="ghost small-btn" data-act="edit-hold">${this.editHold ? `✓ ${L('Haltung fertig', 'Hold done')}` : `✎ ${L('Haltung (vorne) je Paar einstellen', 'Set hold (front) per pair')}`}</button>`;
+    box.innerHTML = `<button type="button" class="ghost small-btn" data-act="edit-hold">${this.editHold ? `✓ ${L('Haltung fertig', 'Hold done')}` : `✎ ${L('Haltung (vorne) je Phase einstellen', 'Set hold (front) per phase')}`}</button>${
+      this.editHold ? `<span class="small">${L('Farbe wählen = vorne in dieser Phase. Tipp auf einen Zug = Drehung davor (y → y′ → y2 → keine), z. B. mitten im Paar.', 'Pick a color = front in this phase. Tap a move = rotation before it (y → y′ → y2 → none), e.g. in the middle of a pair.')}</span>` : ''
+    }`;
   }
 
-  /** Haltungen der Phasen als Liste [Kreuz, Paar 1..4] – nicht eingestellte Paare übernehmen die vorige */
+  /** Haltungen der Phasen als Liste [Kreuz, Paar 1..4, OLL, PLL] – nicht eingestellte Phasen übernehmen die vorige */
   holds() {
     const f = this.fronts();
     const out = [mod4(f.cross || 0)];
-    for (let k = 1; k <= 4; k++) out.push(f[k] != null ? mod4(f[k]) : out[k - 1]);
+    for (let k = 1; k < HOLD_KEYS.length; k++) out.push(f[HOLD_KEYS[k]] != null ? mod4(f[HOLD_KEYS[k]]) : out[k - 1]);
     return out;
+  }
+
+  /** Von Hand eingetragene Drehungen: [{ i (Zugindex), t, name }] – gelten nur ohne Gyro-Daten */
+  manualRots() {
+    return Object.entries(this.solve.rots || {})
+      .map(([i, name]) => ({ i: Number(i), t: this.solve.times[Number(i)] ?? 0, name }))
+      .filter((r) => r.i > 0 && YR.includes(r.name) && r.name);
+  }
+
+  /** Drehung vor dem Zug i umschalten (keine → y → y' → y2 → keine); der erste Zug einer Phase gehört zur Haltung */
+  cycleRot(i) {
+    const ph = this.analysis.phases.find((p) => p.moves && i >= p.start && i <= p.end);
+    if (!ph || i === ph.start) {
+      $('.rp-msg', this.dlg).textContent = L('Vor dem ersten Zug einer Phase stellst du die Haltung (Farbe vorne) ein.', 'Before the first move of a phase, set the hold (front color).');
+      return;
+    }
+    $('.rp-msg', this.dlg).textContent = '';
+    const rots = { ...(this.solve.rots || {}) };
+    const next = ROT_CYCLE[(ROT_CYCLE.indexOf(rots[i] || '') + 1) % ROT_CYCLE.length];
+    if (next) rots[i] = next;
+    else delete rots[i];
+    this.solve.rots = Object.keys(rots).length ? rots : undefined;
+    this.pause();
+    const mi = this.events?.[Math.max(0, (this.k || 0) - 1)]?.i;
+    this.build();
+    const at = mi == null ? 0 : this.events.findIndex((ev) => ev.kind === 'move' && ev.i === mi) + 1;
+    this.seekMove(Math.max(0, at));
+    this.onFronts?.(this.solve, this.fronts());
   }
 
   /** Ereignisliste (Züge aus Sicht des Lösers, ggf. Drehungen und Griffwechsel) neu aufbauen */
@@ -230,17 +288,24 @@ export class Replay {
     // Ohne Gyro: eingestellte Haltung je Paar als y-Drehung vor dem ersten Zug des Paares
     const rotations = gyro?.rotations ? [...gyro.rotations] : [];
     if (!gyro) {
-      let cur = holds[0];
-      for (let k = 1; k <= 4; k++) {
+      const manual = this.manualRots();
+      rotations.push(...manual);
+      // Haltung am Ende einer Phase = Haltung am Anfang + Drehungen mittendrin
+      const midSteps = (p) => manual.filter((r) => r.i > p.start && r.i <= p.end).reduce((a, r) => a + YR.indexOf(r.name), 0);
+      let cur = mod4(holds[0] + (this.analysis.phases[0]?.moves ? midSteps(this.analysis.phases[0]) : 0));
+      for (let k = 1; k < HOLD_KEYS.length; k++) {
         const p = this.analysis.phases[k];
         if (!p?.moves) continue;
         const steps = mod4(holds[k] - cur);
         if (steps) rotations.push({ t: s.times[p.start] ?? 0, name: YR[steps] });
-        cur = holds[k];
+        cur = mod4(holds[k] + midSteps(p));
       }
     }
     // Kreuz unten; mit Gyro zusätzlich die gemessenen Drehungen
-    const ev = viewerEvents(s.moves, s.times, { v0, rotations });
+    let ev = viewerEvents(s.moves, s.times, { v0, rotations });
+    // Wide Moves (Gegenseite + gleichzeitige Würfeldrehung, nur mit Gyro) und Slices (R L′ = M …) erkennen
+    if (this.wideOn) ev = detectWide(ev, { gyro: !!gyro });
+    $('.rp-wide-count', this.dlg).textContent = this.wideOn && wideCount(ev) ? `· ${wideCount(ev)} ${L('erkannt', 'found')}` : '';
     for (const t of gyro?.regrips || []) {
       const at = ev.findIndex((e) => e.t > t);
       ev.splice(at < 0 ? ev.length : at, 0, { kind: 'grip', text: '✋', t });
@@ -259,16 +324,29 @@ export class Replay {
     $('.rp-twizzle', this.dlg).href = this.twizzleUrl();
   }
 
-  /** Ereignisse für die Anzeige gruppieren: zwei gleiche Vierteldrehungen hintereinander → Doppelzug */
-  groups(from, to) {
+  /**
+   * Ereignisse für die Anzeige gruppieren: zwei gleiche Vierteldrehungen hintereinander → Doppelzug.
+   * Erkannte Slices (label/hide) erscheinen als ein Zug; `literal` nutzt immer die echten Züge (für den Export).
+   */
+  groups(from, to, literal = false) {
     const out = [];
+    const lab = (e) => (literal ? e.text : e.label ?? e.text);
+    const endOf = (k) => (literal ? k : k + (this.events[k].span || 0));
     for (let k = from; k <= to; k++) {
       const e = this.events[k];
-      const n = this.events[k + 1];
-      if (e.kind === 'move' && n && k + 1 <= to && n.kind === 'move' && n.text === e.text && !e.text.endsWith('2')) {
-        out.push({ text: e.text[0] + '2', first: k, last: k + 1, kind: 'move' });
-        k++;
-      } else out.push({ text: e.text, first: k, last: k, kind: e.kind });
+      if (!literal && e.hide) continue;
+      const last = endOf(k);
+      let nk = last + 1;
+      while (!literal && nk <= to && this.events[nk]?.hide) nk++;
+      const n = this.events[nk];
+      if (e.kind === 'move' && n && nk <= to && n.kind === 'move' && lab(n) === lab(e) && !lab(e).endsWith('2')) {
+        const nLast = endOf(nk);
+        out.push({ text: lab(e)[0] + '2', first: k, last: nLast, kind: 'move' });
+        k = nLast;
+      } else {
+        out.push({ text: lab(e), first: k, last, kind: e.kind });
+        k = last;
+      }
     }
     return out;
   }
@@ -284,7 +362,8 @@ export class Replay {
       .map((p, pi) => {
         const r = this.phaseRange(pi);
         if (!r) return null;
-        const txt = this.groups(r[0], r[1]).filter((g) => g.kind !== 'grip').map((g) => g.text).join(' ');
+        // Export mit den echten Zügen (Slices als zwei Außenzüge), Wide Moves sind exakt gleichwertig
+        const txt = this.groups(r[0], r[1], true).filter((g) => g.kind !== 'grip').map((g) => g.text).join(' ');
         return txt ? `${txt} // ${PHASE_NAMES[p.key]}` : null;
       })
       .filter(Boolean)
@@ -303,15 +382,15 @@ export class Replay {
       const r = this.phaseRange(pi);
       const mv = r
         ? this.groups(r[0], r[1])
-            .map((g) => `<span class="rp-mv ${g.kind}" data-k="${g.last}" data-first="${g.first}"${g.kind === 'grip' ? ` title="${L('Regrip (geschätzt)', 'Regrip (estimated)')}"` : ''}>${g.text}</span>`)
+            .map((g) => `<span class="rp-mv ${g.kind}${this.events[g.first].wide || this.events[g.first].label ? ' wide' : ''}${this.editHold && this.holdByPhase && g.kind === 'move' ? ' editable' : ''}" data-k="${g.last}" data-first="${g.first}"${g.kind === 'move' && this.events[g.first].i != null ? ` data-mi="${this.events[g.first].i}"` : ''}${g.kind === 'grip' ? ` title="${L('Regrip (geschätzt)', 'Regrip (estimated)')}"` : this.events[g.first].wide ? ` title="${L('Wide Move erkannt: Gegenseite + Würfeldrehung', 'Wide move detected: opposite face + cube rotation')}"` : this.events[g.first].label ? ` title="${L('Slice erkannt: zwei gegenläufige Außenzüge', 'Slice detected: two opposite outer turns')}"` : ''}>${g.text}</span>`)
             .join(' ')
         : '';
       const rots = r ? this.events.slice(r[0], r[1] + 1).filter((e) => e.kind === 'rot').length : 0;
       const slot = p.slot ? ` ${pairIcon(p.slot, this.analysis?.crossFace)}` : '';
       // Haltung (vorne) fürs Kreuz und jedes Paar mit Zügen
       let hold = '';
-      if (this.holdByPhase && pi <= 4 && (pi === 0 || p.moves)) {
-        const key = pi === 0 ? 'cross' : String(pi);
+      if (this.holdByPhase && pi < HOLD_KEYS.length && (pi === 0 || p.moves)) {
+        const key = HOLD_KEYS[pi];
         const cur = holdsNow[pi];
         hold = this.editHold
           ? `<span class="rp-hold">${YR.map((_, i) => `<button type="button" class="in-fc${i === cur ? ' on' : ''}" data-rfront="${key}|${i}" title="${COLOR_NAMES[this.frontColor(i)]}">${colorChip(this.frontColor(i))}</button>`).join('')}</span>`

@@ -25,6 +25,8 @@ export const pctText = (x, d = 0) => (x == null ? '–' : `${dec(x * 100, d)} %`
 
 // Feste Texte aus index.html (Textstücke, Titel, Platzhalter, ARIA-Beschriftungen)
 const STATIC = {
+  Allgemein: 'General',
+  'Technische Daten': 'Technical data',
   Statistik: 'Stats',
   Algorithmen: 'Algorithms',
   Raum: 'Room',
