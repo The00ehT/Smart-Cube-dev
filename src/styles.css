@@ -248,6 +248,13 @@ code { font-size: 12px; background: var(--chip); padding: 1px 4px; border-radius
 .moves { font: 13px/1.6 var(--mono); color: var(--muted); word-break: break-word; min-height: 1.6em; margin-top: 8px; }
 .hw { margin-top: 8px; font-size: 13px; color: var(--muted); display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; }
 .hw:empty { display: none; }
+/* Einstellungen: Tabs und Technische Daten */
+.set-tabs { margin: 0 0 4px; }
+.tech-grid { margin-top: 0; word-break: break-all; }
+.tech-grid > span:nth-child(odd) { word-break: normal; }
+.tech-chart svg { width: 100%; height: auto; display: block; }
+.tech-cmds { font-family: var(--mono); line-height: 1.7; }
+#tech-mode-btns button:disabled { opacity: 0.5; }
 .pad-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
 .pad-grid button { padding: 10px 0; font-weight: 650; }
 .pad .hint { font-size: 12px; color: var(--muted); margin: 8px 0 0; }

@@ -306,7 +306,12 @@
         <h2>Einstellungen</h2>
         <button class="rp-close" id="settings-close" aria-label="Schließen">✕</button>
       </div>
+      <div class="seg-control set-tabs" id="set-tabs" role="tablist">
+        <button type="button" role="tab" class="on" aria-selected="true" data-set-tab="general">Allgemein</button>
+        <button type="button" role="tab" aria-selected="false" data-set-tab="tech">Technische Daten</button>
+      </div>
 
+      <div id="set-general">
       <section class="set-sec">
         <h3>Profil</h3>
         <div class="profile-edit">
@@ -441,6 +446,8 @@
         <div class="small gyro-help" id="gyro-help"></div>
         <button id="btn-forget-mac">Gespeicherte MAC-Adressen vergessen</button>
       </section>
+      </div>
+      <div id="set-tech" hidden></div>
     </dialog>
 
     <dialog id="mode-dialog" class="mode-dialog">

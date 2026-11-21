@@ -6,13 +6,16 @@
  *   { type: 'gyro', quaternion: {x,y,z,w} } Lage des Würfels (GAN-Koordinaten)
  *   { type: 'battery', level }
  *   { type: 'hardware', info: {...} }
+ *   { type: 'mode', mode: 'performance'|'eco' }   Gyro-Modus des Würfels wurde umgestellt (nur GAN Gen4)
  *   { type: 'disconnect' }
  * und bietet { name, kind, supportsGyro, supportsReset, reset(), refresh(), disconnect() }.
+ * GAN-Würfel bieten zusätzlich: tech (Protokolldaten), modeSupported, mode, setMode(), gyroRate(), commandLog.
  */
 import { connectGanCube, now } from 'gan-web-bluetooth';
 import { askMac, getStoredMac, storeMac } from '../ui/mac-dialog.js';
 import { L } from '../i18n.js';
 import { SOLVED, patternDataToFacelets } from './facelets.js';
+import { RateMeter, classifyRate, createModeSender, generationOf, hex, modeCommand, supportsModeCommand } from './cube-mode.js';
 
 export const bluetoothAvailable = () => typeof navigator !== 'undefined' && !!navigator.bluetooth;
 
@@ -31,6 +34,12 @@ export async function connectGan(emit) {
   storeMac(conn.deviceName, conn.deviceMAC);
 
   let gyroSeen = false;
+  const gyroMeter = new RateMeter(3000);
+  const commandLog = []; // letzte gesendete Befehle (Klartext), für die Technischen Daten
+  const logCommand = (label, bytes) => {
+    commandLog.push({ t: Date.now(), label, hex: hex(bytes.subarray(0, 8)) });
+    if (commandLog.length > 20) commandLog.shift();
+  };
   const sub = conn.events$.subscribe((e) => {
     switch (e.type) {
       case 'MOVE':
@@ -41,6 +50,7 @@ export async function connectGan(emit) {
         break;
       case 'GYRO':
         if (!gyroSeen) { gyroSeen = true; api.supportsGyro = true; emit({ type: 'gyro-available' }); }
+        gyroMeter.push(Date.now());
         emit({ type: 'gyro', quaternion: e.quaternion });
         break;
       case 'BATTERY':
@@ -56,10 +66,45 @@ export async function connectGan(emit) {
     }
   });
 
+  // Protokolldaten: Generation aus dem Bluetooth-Service der Befehls-Characteristic
+  const serviceUuid = conn.commandCharacteristic?.service?.uuid ?? null;
+  const generation = generationOf(serviceUuid);
+  const modeSupported = supportsModeCommand(generation) && typeof conn.sendCommandMessage === 'function';
+  const modeSender = createModeSender(async (mode) => {
+    const msg = modeCommand(mode);
+    await conn.sendCommandMessage(msg); // verschlüsselt auf 20 Bytes und schreibt (interne Methode der Bibliothek)
+    logCommand(`D4 · ${mode}`, msg);
+  });
+
   const api = {
     kind: 'gan',
     name: conn.deviceName,
     mac: conn.deviceMAC,
+    tech: {
+      generation,
+      service: serviceUuid,
+      commandCharacteristic: conn.commandCharacteristic?.uuid ?? null,
+      stateCharacteristic: conn.stateCharacteristic?.uuid ?? null,
+      deviceId: conn.device?.id ?? null,
+    },
+    commandLog,
+    modeSupported,
+    /** zuletzt an den Würfel geschickter Gyro-Modus (null = noch nicht gesetzt) */
+    mode: null,
+    /** Gyro-Meldungen pro Sekunde (gleitend über 3 s) */
+    gyroRate: () => gyroMeter.perSecond(Date.now()),
+    /** aus der Rate abgeleiteter Modus: 'performance' | 'eco' | null (unklar) */
+    observedMode: () => classifyRate(gyroMeter.perSecond(Date.now())),
+    /** Gyro-Modus des Würfels setzen; wirft bei Fehler oder wenn der Würfel das nicht kann */
+    async setMode(mode) {
+      if (!modeSupported) throw new Error('Dieser Würfel unterstützt das Umschalten nicht');
+      await modeSender.set(mode);
+      if (modeSender.sent() === mode) {
+        api.mode = mode;
+        gyroMeter.clear();
+        emit({ type: 'mode', mode });
+      }
+    },
     supportsGyro: false,
     supportsReset: true,
     async reset() {
