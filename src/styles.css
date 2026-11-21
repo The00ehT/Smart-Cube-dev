@@ -117,7 +117,7 @@ code { font-size: 12px; background: var(--chip); padding: 1px 4px; border-radius
   border-bottom: 1px solid var(--line);
 }
 .brand { display: flex; align-items: center; gap: 8px; }
-.brand .logo { width: 26px; height: 26px; }
+.brand .logo { width: 26px; height: 26px; border-radius: 7px; object-fit: cover; }
 .brand h1 { font-size: 18px; margin: 0; font-weight: 750; }
 .top-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .device {

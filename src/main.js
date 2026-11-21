@@ -803,12 +803,12 @@ function setMode(id) {
     if (id === 'pll-endless') {
       if (app.phase === 'running') return;
       showTab('timer');
-      trainer.start(Object.keys(PLL_ALGS).map((n) => `PLL ${n}`), `∞ ${L('Endlos-PLL', 'Endless PLL')}`);
+      trainer.start(Object.keys(PLL_ALGS).map((n) => `PLL ${n}`), `∞ ${L('Endlos-PLL', 'Endless PLL')}`, { uniform: true });
     }
     if (id === 'oll-endless') {
       if (app.phase === 'running') return;
       showTab('timer');
-      trainer.start(Object.keys(OLL_ALGS).map((n) => `OLL ${n}`), `∞ ${L('Endlos-OLL', 'Endless OLL')}`);
+      trainer.start(Object.keys(OLL_ALGS).map((n) => `OLL ${n}`), `∞ ${L('Endlos-OLL', 'Endless OLL')}`, { uniform: true });
     }
     return;
   }
@@ -1500,17 +1500,13 @@ bindToggle('opt-music-first', 'musicFirst', (on) => {
 /** Zustand „Bildschirm anlassen“ in den Einstellungen anzeigen */
 function renderAwake() {
   const st = awakeStatus();
-  const txt = {
-    off: '',
-    lock: `✓ ${L('Aktiv (Wake Lock)', 'Active (wake lock)')}`,
-    video: `✓ ${L('Aktiv (Video-Methode)', 'Active (video method)')}`,
-    both: `✓ ${L('Aktiv (Wake Lock + Video)', 'Active (wake lock + video)')}`,
-    waiting: `⏳ ${L('Wird beim nächsten Antippen aktiv', 'Activates on your next tap')}`,
-  }[st.state];
-  // Musik-Hinweis nur auf iPhone/iPad: mit Audio-Session-API läuft Musik weiter, sonst Wahl „Musik hat Vorrang“
+  // Nur noch Hinweise, wenn etwas zu tun ist – wenn alles läuft („Aktiv …“, „Musik läuft weiter“) steht nichts da
+  const warn = st.state === 'waiting' ? `⏳ ${L('Wird beim nächsten Antippen aktiv', 'Activates on your next tap')}` : '';
+  // Musik: nur wenn der Browser sie nicht neben dem Wach-Video zulässt, gibt es die Wahl „Musik hat Vorrang“
   $('music-first-row').hidden = !st.ios || st.mix || st.state === 'off';
-  const music = !st.ios || st.state === 'off' ? '' : st.mix ? ` · 🎵 ${L('Musik läuft weiter', 'music keeps playing')}` : st.muted ? ` · 🎵 ${L('Musik hat Vorrang', 'music first')}` : ` · ${L('kann Musik anhalten', 'may pause music')}`;
-  $('awake-status').textContent = txt + music;
+  const music = !st.ios || st.mix || st.state === 'off' ? '' : st.muted ? `🎵 ${L('Musik hat Vorrang', 'music first')}` : L('kann Musik anhalten', 'may pause music');
+  $('awake-status').textContent = [warn, music].filter(Boolean).join(' · ');
+  $('awake-status').hidden = !$('awake-status').textContent;
 }
 $('opt-awake').closest('.toggle').addEventListener('click', () => setTimeout(renderAwake, 600));
 document.addEventListener('click', () => $('settings-dialog')?.open && setTimeout(renderAwake, 500), { capture: true });

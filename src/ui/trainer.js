@@ -110,9 +110,12 @@ export class Trainer {
   }
 
   /** Training starten: Fälle (IDs wie 'PLL T', 'OLL 27', 'F2L 5', 'Eigene 3') und Titel */
-  start(ids, title) {
+  /** @param opts { uniform } gleichverteilt: jeder Fall kommt gleich oft dran (Endlos-OLL/-PLL), sonst langsame/neue öfter */
+  start(ids, title, opts = {}) {
     this.ids = ids.filter((id) => this.caseState(id));
     if (!this.ids.length) return;
+    this.uniform = !!opts.uniform;
+    this.bag = [];
     this.session = [];
     this.last = null;
     this.active = true;
@@ -143,8 +146,27 @@ export class Trainer {
     }
   }
 
+  /**
+   * Gleichverteilt: Jeder Fall genau einmal pro Durchgang in zufälliger Reihenfolge (gemischter Stapel),
+   * danach neu mischen. Dadurch kommt kein Fall (z. B. N-Perm) öfter dran als die anderen.
+   */
+  pickUniform() {
+    if (!this.bag.length) {
+      const bag = [...this.ids];
+      for (let i = bag.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [bag[i], bag[j]] = [bag[j], bag[i]];
+      }
+      // nicht dieselbe Karte zweimal hintereinander (Ende des letzten + Anfang des neuen Stapels)
+      if (bag.length > 1 && bag[bag.length - 1] === this.last) [bag[0], bag[bag.length - 1]] = [bag[bag.length - 1], bag[0]];
+      this.bag = bag;
+    }
+    return this.bag.pop();
+  }
+
   /** Gewichtete Auswahl: ungeübte und langsame Fälle öfter, nicht zweimal derselbe hintereinander */
   pick() {
+    if (this.uniform) return this.pickUniform();
     const all = this.ids.map((id) => avg((algData.train[id] || []).slice(-8).map((x) => x.exec)));
     const known = all.filter((x) => x != null);
     const ref = avg(known) || 1;

@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
  * Die Seite selbst wird zuerst aus dem Netz geladen (Updates kommen an), offline aus dem Speicher.
  */
 function offline() {
-  const extra = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
+  const extra = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-64.png', 'apple-touch-icon.png'];
   return {
     name: 'smartcube-offline',
     apply: 'build',
