@@ -38,10 +38,12 @@ let peer = null; // unter dem eigenen Code erreichbar
 let starting = null;
 
 const num = (x) => (typeof x === 'number' && Number.isFinite(x) ? x : null);
+/** Link-Daten eines Solves (share.js-Format: Züge, Zeiten, Scramble) – nur Form prüfen, Inhalt prüft decodeShare */
+const shareStr = (x) => (typeof x === 'string' && x.length <= 40000 && x.startsWith('r=1&') ? x : null);
 /** Fremde Karte prüfen (kommt von einem anderen Gerät) */
 function sanitizeCard(c) {
   if (!c || typeof c !== 'object' || !sanitizeCode(c.code)) return null;
-  const pb = c.pb && typeof c.pb === 'object' ? { time: num(c.pb.time), penalty: num(c.pb.penalty) || 0, date: num(c.pb.date) } : null;
+  const pb = c.pb && typeof c.pb === 'object' ? { time: num(c.pb.time), penalty: num(c.pb.penalty) || 0, date: num(c.pb.date), share: shareStr(c.pb.share) } : null;
   return {
     code: c.code,
     name: String(c.name || '?').slice(0, 24),
@@ -50,12 +52,13 @@ function sanitizeCard(c) {
     ao5: num(c.ao5),
     ao12: num(c.ao12),
     count: num(c.count) || 0,
-    last: (Array.isArray(c.last) ? c.last : []).slice(0, 10).map((s) => ({
+    last: (Array.isArray(c.last) ? c.last : []).slice(0, 12).map((s) => ({
       time: num(s?.time),
       penalty: s?.penalty === 'DNF' ? 'DNF' : num(s?.penalty) || 0,
       date: num(s?.date),
       moves: num(s?.moves),
       tps: num(s?.tps),
+      share: shareStr(s?.share),
     })),
   };
 }

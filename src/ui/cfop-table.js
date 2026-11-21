@@ -4,6 +4,7 @@
  */
 import { formatTime } from '../stats.js';
 import { L, dec } from '../i18n.js';
+import { colorChip } from './replay.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const tps = (moves, time) => (time > 0 && moves != null ? dec((moves / time) * 1000, 1) : '–');
@@ -42,4 +43,17 @@ export function cfopTable(rows) {
     <div class="ct-row ct-head"><span class="ct-n">${L('Phase', 'Phase')}</span><span>${L('Zeit', 'Time')}</span><span>${L('Züge', 'Moves')}</span><span>TPS</span></div>
     ${body}
   </div>`;
+}
+
+/** Zeilen für cfopTable() aus einer Analyse (analyzeSolve): Cross, F2L mit Paaren, OLL, PLL */
+export function analysisRows(a) {
+  const ph = a.phases;
+  const pairs = ph.slice(1, 5);
+  const sum = (k) => pairs.reduce((x, p) => x + (p[k] || 0), 0);
+  return [
+    { cls: 'ph-cross', name: 'Cross', extra: ` ${colorChip(a.crossFace)}${a.xcross ? ' <span class="tag">X</span>' : ''}`, time: ph[0].time, moves: ph[0].moves },
+    { cls: 'ph-pair', name: 'F2L', time: sum('time'), moves: sum('moves'), recog: sum('recog'), sub: pairs.map((p, i) => ({ name: `${L('Paar', 'Pair')} ${i + 1}`, time: p.time, moves: p.moves, recog: p.recog })) },
+    { cls: 'ph-oll', name: 'OLL', extra: ph[5].skip ? ' <span class="tag">Skip</span>' : a.ll?.oll ? ` <span class="small">${a.ll.oll}</span>` : '', time: ph[5].time, moves: ph[5].moves, recog: ph[5].recog },
+    { cls: 'ph-pll', name: 'PLL', extra: ph[6].skip ? ' <span class="tag">Skip</span>' : a.ll?.pll ? ` <span class="small">${esc(a.ll.pll)}</span>` : '', time: ph[6].time, moves: ph[6].moves, recog: ph[6].recog },
+  ];
 }

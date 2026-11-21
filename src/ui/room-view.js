@@ -8,7 +8,7 @@ import { avatarHtml } from '../profile.js';
 import { SOLVED, applyMove, isSolved, parseMove, formatMove, countHtm } from '../cube/facelets.js';
 import { analyzeSolve } from '../cube/analysis.js';
 import { liveStage, barHtml, liveCrossFace } from './live-bar.js';
-import { cfopTable } from './cfop-table.js';
+import { cfopTable, analysisRows } from './cfop-table.js';
 import { colorChip } from './replay.js';
 import { groupAlg } from '../cube/alg-format.js';
 import { SKIN_PRESETS } from './cube3d.js';
@@ -435,15 +435,7 @@ export class RoomView {
     if (c.start && c.moves.length && isSolved(c.moves.reduce(applyMove, c.start))) {
       try {
         const a = analyzeSolve(c.start, c.moves, c.times);
-        const ph = a.phases;
-        const pairs = ph.slice(1, 5);
-        const sum = (k) => pairs.reduce((x, p) => x + (p[k] || 0), 0);
-        html += cfopTable([
-          { cls: 'ph-cross', name: 'Cross', extra: ` ${colorChip(a.crossFace)}${a.xcross ? ' <span class="tag">X</span>' : ''}`, time: ph[0].time, moves: ph[0].moves },
-          { cls: 'ph-pair', name: 'F2L', time: sum('time'), moves: sum('moves'), recog: sum('recog'), sub: pairs.map((p, i) => ({ name: `${L('Paar', 'Pair')} ${i + 1}`, time: p.time, moves: p.moves, recog: p.recog })) },
-          { cls: 'ph-oll', name: 'OLL', extra: ph[5].skip ? ' <span class="tag">Skip</span>' : a.ll?.oll ? ` <span class="small">${a.ll.oll}</span>` : '', time: ph[5].time, moves: ph[5].moves, recog: ph[5].recog },
-          { cls: 'ph-pll', name: 'PLL', extra: ph[6].skip ? ' <span class="tag">Skip</span>' : a.ll?.pll ? ` <span class="small">${esc(a.ll.pll)}</span>` : '', time: ph[6].time, moves: ph[6].moves, recog: ph[6].recog },
-        ]);
+        html += cfopTable(analysisRows(a));
         html += `<details class="wv-sol"><summary>${L('Lösung', 'Solution')} (${countHtm(c.moves)} ${L('Züge', 'moves')})</summary><div class="in-alg">${esc(groupAlg(c.moves.join(' ')))}</div></details>`;
       } catch (err) {
         console.warn(err);
@@ -490,12 +482,31 @@ export class RoomView {
           .join('')}</tr>`;
       })
       .join('');
-    const mean = (id) => {
-      const t = board.map((b) => eff(b.results[id])).filter((x) => x != null && Number.isFinite(x));
-      return t.length ? formatTime(t.reduce((a, b) => a + b, 0) / t.length) : '–';
+    // Durchschnitt über ALLE Runden (nicht nur die angezeigten): Zeit, Splits, Züge, TPS
+    const avgOf = (id, f) => {
+      const t = board.map((b) => (b.results[id] ? f(b.results[id]) : null)).filter((x) => x != null && Number.isFinite(x));
+      return t.length ? t.reduce((a, b) => a + b, 0) / t.length : null;
     };
+    const sumRows = [
+      { k: 'Ø', f: (r) => eff(r), fmt: formatTime },
+      { k: 'Ø Cross', cls: 'ph-cross', f: (r) => r.splits?.cross?.[0], fmt: formatTime },
+      { k: 'Ø F2L', cls: 'ph-pair', f: (r) => r.splits?.f2l?.[0], fmt: formatTime },
+      { k: 'Ø OLL', cls: 'ph-oll', f: (r) => r.splits?.oll?.[0], fmt: formatTime },
+      { k: 'Ø PLL', cls: 'ph-pll', f: (r) => r.splits?.pll?.[0], fmt: formatTime },
+      { k: `Ø ${L('Züge', 'Moves')}`, f: (r) => r.moveCount, fmt: (v) => String(Math.round(v)) },
+      { k: 'Ø TPS', f: (r) => r.tps, fmt: (v) => v.toFixed(2), higher: true },
+    ];
+    const sums = sumRows
+      .map((row) => {
+        const vals = roster.map((p) => avgOf(p.id, row.f));
+        const fin = vals.filter((v) => v != null);
+        const best = fin.length > 1 ? (row.higher ? Math.max(...fin) : Math.min(...fin)) : null;
+        if (!fin.length) return '';
+        return `<tr class="sum"><td>${row.cls ? `<i class="key ${row.cls}"></i>` : ''}${row.k}</td>${vals.map((v) => `<td class="${v != null && v === best ? 'win' : ''}">${v == null ? '–' : row.fmt(v)}</td>`).join('')}</tr>`;
+      })
+      .join('');
     const foot = `<tr class="sum"><td>${L('Siege', 'Wins')}</td>${roster.map((p) => `<td>${wins[p.id]}</td>`).join('')}</tr>
-      <tr class="sum"><td>Ø</td>${roster.map((p) => `<td>${mean(p.id)}</td>`).join('')}</tr>`;
+      <tr class="sum sum-head"><td colspan="${roster.length + 1}" class="small">${L(`Durchschnitt aller ${board.filter((b) => Object.keys(b.results || {}).length).length} Runden`, `Average of all ${board.filter((b) => Object.keys(b.results || {}).length).length} rounds`)}</td></tr>${sums}`;
     table.innerHTML = head + rows + foot;
   }
 
@@ -542,7 +553,7 @@ export class RoomView {
       const st = c?.phase === 'running' ? t : c?.phase === 'done' ? t : STATUS[c?.phase] ?? '';
       return `<span class="rs-p${c?.phase === 'running' ? ' live' : ''}" data-watch="${esc(p.id)}"><span class="avatar">${avatarHtml({ name: p.name, avatar: p.avatar })}</span>${esc(p.name)} <b>${esc(st)}</b></span>`;
     });
-    const html = `<span class="rs-code">${L('Raum', 'Room')} ${esc(this.room.code)}${round ? ` · ${L('Runde', 'Round')} ${round.n}` : ''}</span>${parts.join('') || `<span class="small">${L('Warte auf Mitspieler …', 'Waiting for players …')}</span>`}<span class="rs-go">›</span>`;
+    const html = `<span class="rs-code">${L('Raum', 'Room')} ${esc(this.room.code)}${round ? ` · ${L('Runde', 'Round')} ${round.n}` : ''}</span>${parts.join('') || `<span class="small">${L('Warte auf Mitspieler …', 'Waiting for players …')}</span>`}${this.room.isHost ? `<span class="rs-next" role="button" data-act="next-round">▶ ${L('Nächste Runde', 'Next round')}</span>` : ''}<span class="rs-go">›</span>`;
     if (html !== this.stripHtml) {
       this.strip.innerHTML = html;
       this.stripHtml = html;

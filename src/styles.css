@@ -1338,3 +1338,14 @@ details.in-sec[open] > summary { margin-bottom: 8px; }
 .small-btn.on { border-color: var(--accent); color: var(--accent); }
 .row-buttons { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
 #storage-info { margin-bottom: 4px; }
+
+.rs-next { margin-left: auto; padding: 4px 10px; border-radius: 999px; background: var(--accent); color: #fff; font-weight: 650; font-size: 13px; white-space: nowrap; }
+.rs-next + .rs-go { margin-left: 8px; }
+.room-board .sum-head td { padding-top: 10px; color: var(--muted); }
+
+/* Freunde: Details */
+button.stat.tap { cursor: pointer; text-align: left; border: 1px solid var(--line); color: inherit; font: inherit; }
+button.stat.tap:active { background: var(--accent-soft); }
+tr.tap { cursor: pointer; }
+tr.tap:active td { background: var(--accent-soft); }
+#friend-dialog .link-btn { padding: 0; margin-bottom: 4px; }

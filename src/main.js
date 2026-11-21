@@ -1,7 +1,8 @@
 import './styles.css';
 import { pairIcon } from './ui/pair-icon.js';
 import { now } from 'gan-web-bluetooth';
-import { SOLVED, applyMove, applyAlg, isSolved, COLOR_NAMES, groupMoves, CROSS_DOWN, relativeState } from './cube/facelets.js';
+import { SOLVED, applyMove, applyAlg, isSolved, COLOR_NAMES, groupMoves, CROSS_DOWN, relativeState, countHtm } from './cube/facelets.js';
+import { groupAlg } from './cube/alg-format.js';
 import { analyzeSolve } from './cube/analysis.js';
 import { analyzeGyro, fromGan } from './cube/gyro.js';
 import { ScrambleTracker } from './cube/scramble-tracker.js';
@@ -13,7 +14,7 @@ import { forgetMacs } from './ui/mac-dialog.js';
 import { load, save } from './storage.js';
 import { averageOf, bestAverage, best, mean, formatTime, formatSolve, effectiveTime } from './stats.js';
 import { buildSolve, hasDetail, phasesOf, phaseName } from './solve-data.js';
-import { decodeShare } from './share.js';
+import { decodeShare, encodeShare } from './share.js';
 import { Replay, colorChip } from './ui/replay.js';
 import { StatsView } from './ui/stats-view.js';
 import { donut, phaseSegments } from './ui/donut.js';
@@ -42,7 +43,7 @@ import { keepAwake, awakeStatus, setMusicFirst, canMixAudio } from './wake.js';
 import { InsightsView } from './ui/insights-view.js';
 import { algsOf } from './algs.js';
 import { radarSvg } from './ui/radar.js';
-import { cfopTable, splitTone } from './ui/cfop-table.js';
+import { cfopTable, splitTone, analysisRows } from './ui/cfop-table.js';
 import { splitBaseline } from './split-compare.js';
 import { caseDiagram } from './ui/ll-diagram.js';
 import { friends, myFriendCode, formatFriendCode, normalizeFriendCode, startFriends, fetchFriend, removeFriend, isFriend, friendOf } from './friends.js';
@@ -354,14 +355,38 @@ async function newScramble(given, opts = {}) {
     console.error(err);
     alg = await randomScramble();
   }
+  // Raum / Rennen: alle sollen im selben Zustand landen. Ist der Würfel nicht gelöst, wird der Weg dorthin
+  // vom jetzigen Zustand aus neu berechnet (statt erst lösen zu müssen) – wie bei „Üben ab hier“ und im Geister-Rennen.
+  let target = null;
+  let recomputed = false;
+  if (typeof given === 'string' && !opts.ghost && app.room && app.conn) {
+    target = applyAlg(SOLVED, given);
+    for (let i = 0; i < 3 && !isSolved(app.state); i++) {
+      const from = app.state;
+      try {
+        const fresh = await setupAlgFor(relativeState(from, target));
+        if (app.phase !== 'scrambling') return; // inzwischen abgebrochen
+        if (app.state !== from) continue; // während der Berechnung gedreht → nochmal vom neuen Stand
+        alg = fresh;
+        recomputed = true;
+      } catch (err) {
+        console.error(err);
+        target = null; // Berechnung nicht möglich: Scramble wie gegeben (Hinweis „Würfel nicht gelöst“)
+      }
+      break;
+    }
+  }
   if (app.phase !== 'scrambling') return; // inzwischen abgebrochen
   app.scrambleType = easy ? scrambleMode() : 'wca';
   renderModeChip();
-  app.scramble = alg;
+  app.scramble = typeof given === 'string' && !opts.ghost ? given : alg; // gespeichert wird das Raum-Scramble
   app.tracker = new ScrambleTracker(alg);
-  app.scrambleTarget = applyAlg(app.state, alg);
-  app.scrambleFromSolved = isSolved(app.state);
+  app.scrambleTarget = target || applyAlg(app.state, alg);
+  app.scrambleFromSolved = target ? true : isSolved(app.state);
+  app.scrambleNote = recomputed ? L('Von deinem jetzigen Würfelzustand neu berechnet', 'Recomputed from your cube’s current state') : '';
+  if (recomputed) app.tracker.adjusted = true; // Hinweis anzeigen
   renderScramble();
+  if (app.tracker.done) enterReady(); // Würfel steht schon richtig
   setStatus(app.conn ? L('Verdrehe den Würfel wie angezeigt.', 'Apply the scramble shown.') : L('Verbinde einen Würfel, damit das Scramble verfolgt wird.', 'Connect a cube so the scramble can be tracked.'));
 }
 
@@ -507,6 +532,14 @@ function solveRows(s) {
     { cls: 'ph-oll', name: 'OLL', extra: ph[5].skip ? ' <span class="tag">Skip</span>' : '', time: ph[5].time, moves: ph[5].moves, recog: ph[5].recog, ref: ref.oll, note: llNote(ph[5], 'OLL') },
     { cls: 'ph-pll', name: 'PLL', extra: ph[6].skip ? ' <span class="tag">Skip</span>' : '', time: ph[6].time, moves: ph[6].moves, recog: ph[6].recog, ref: ref.pll, note: llNote(ph[6], 'PLL') },
   ];
+}
+
+/** Vergleich mit den anderen im Ergebnis-Fenster (aktualisiert sich, wenn sie fertig werden) */
+function renderResultCompare() {
+  const box = $('res-room');
+  const round = app.room?.board?.find((b) => b.n === app.lastRoomRound);
+  box.hidden = !round;
+  box.innerHTML = round ? compareHtml(round, app.room.roster || [], app.room.myId) : '';
 }
 
 function showResult(solve, badge) {
@@ -777,7 +810,7 @@ function renderModeChip() {
   const sess = !app.room && scrambleMode() === 'wca' && settings.session !== 'main' ? ` · ${scopeName(settings.session, settings.sessions)}` : '';
   $('mode-name').textContent = (app.room ? L('Online-Raum', 'Online room') : m.title) + sess;
   $('mode-btn').className = `mode-chip tone-${m.tone}`;
-  $('btn-new-scramble').title = m.kind === 'ghost' ? L('Neues Rennen', 'New race') : L('Neues Scramble', 'New scramble');
+  $('btn-new-scramble').title = app.room?.isHost ? L('Nächste Runde starten', 'Start next round') : m.kind === 'ghost' ? L('Neues Rennen', 'New race') : L('Neues Scramble', 'New scramble');
 }
 renderModeChip();
 
@@ -1371,7 +1404,8 @@ $('btn-connect-other').addEventListener('click', () => connect('other'));
 $('btn-connect-virtual').addEventListener('click', () => connect('virtual'));
 $('btn-disconnect').addEventListener('click', disconnect);
 $('btn-disconnect-2').addEventListener('click', disconnect);
-$('btn-new-scramble').addEventListener('click', newScramble);
+// Im Raum startet der Gastgeber damit die nächste Runde; sonst neues Scramble
+$('btn-new-scramble').addEventListener('click', () => (app.room?.isHost ? startNextRoundFromTimer() : newScramble()));
 $('mode-btn').addEventListener('click', openModes);
 $('mode-close').addEventListener('click', () => $('mode-dialog').close());
 $('mode-dialog').addEventListener('click', (e) => {
@@ -2319,7 +2353,6 @@ function onRoomEvent(ev) {
       if (roomView.watch.open) roomView.watch.close(); // neue Runde: zurück zum eigenen Scramble
       roomView.message(L(`Runde ${ev.n}: Scramble ausführen, der erste Zug danach startet die Zeit.`, `Round ${ev.n}: apply the scramble, the next move starts the timer.`));
       for (const c of roomView.cards.values()) c.el.querySelector('.person-time').textContent = '–';
-      if (!isSolved(app.state) && app.conn) setStatus(L('Löse zuerst deinen Würfel (oder „Als gelöst markieren“), dann stimmt das Scramble.', 'Solve your cube first (or “Mark as solved”) so the scramble matches.'));
       newScramble(ev.scramble);
       showTab('timer');
       roomSend('state', { facelets: app.state });
@@ -2339,6 +2372,13 @@ function onRoomEvent(ev) {
       roomView.message(L('Verbindungsproblem: ', 'Connection problem: ') + (ev.error?.message || ev.error));
       break;
   }
+}
+
+/** Gastgeber startet die nächste Runde aus dem Timer-Tab (Strip oder „Neu“-Knopf) */
+function startNextRoundFromTimer() {
+  if (!app.room?.isHost) return;
+  if (app.phase === 'running') return toast(L('Erst den Solve beenden.', 'Finish your solve first.'));
+  hostNextRound();
 }
 
 async function hostNextRound() {
@@ -2376,6 +2416,7 @@ async function enterRoom(mode, code) {
     if (mode === 'create') await room.create({ maxPlayers: Number($('room-max').value) || 0 });
     else await room.join(code);
     lobbyWatch(false);
+    renderModeChip(); // Gastgeber: „Neu“-Knopf startet jetzt die nächste Runde
     // Öffentlicher Raum: bei allen in der Liste, Beitritt ohne Code
     if (mode === 'create' && $('room-public').checked) {
       app.roomPublic = { code: room.code, name: $('room-name').value.trim(), host: profile.name, avatar: profile.avatar, created: Date.now(), max: room.maxPlayers };
@@ -2478,6 +2519,7 @@ function leaveRoom(silent) {
 }
 
 $('room-strip').addEventListener('click', (e) => {
+  if (e.target.closest('[data-act=next-round]')) return void startNextRoundFromTimer(); // Gastgeber: direkt im Timer-Tab
   const who = e.target.closest('[data-watch]');
   if (who) roomView.openWatch(who.dataset.watch); // Mitspieler antippen = zuschauen
   else showTab('room');
@@ -2546,12 +2588,23 @@ function myCard() {
     code: myFriendCode,
     name: profile.name || L('Ohne Namen', 'No name'),
     avatar: profile.avatar,
-    pb: pbSolve && { time: pbSolve.time, penalty: pbSolve.penalty || 0, date: pbSolve.date },
+    pb: pbSolve && { time: pbSolve.time, penalty: pbSolve.penalty || 0, date: pbSolve.date, share: shareOfSolve(pbSolve, true) },
     ao5: averageOf(main, 5),
     ao12: averageOf(main, 12),
     count: main.length,
-    last: main.slice(-10).reverse().map((x) => ({ time: x.time, penalty: x.penalty || 0, date: x.date, moves: x.moveCount ?? null, tps: x.tps ?? null })),
+    // letzte 12 (für die Ø 5 / Ø 12 Ansicht), je mit Rekonstruktion (Züge + Zeiten) zum Nachschauen
+    last: main.slice(-12).reverse().map((x) => ({ time: x.time, penalty: x.penalty || 0, date: x.date, moves: x.moveCount ?? null, tps: x.tps ?? null, share: shareOfSolve(x, false) })),
   };
+}
+
+/** Rekonstruktion eines Solves als kompakter Text (share.js) für die Profilkarte; null ohne Zugdaten */
+function shareOfSolve(x, withGyro) {
+  try {
+    const d = hasDetail(x) ? replayData(x) : null;
+    return d ? encodeShare({ ...d, name: '', gyro: withGyro ? d.gyro : undefined }) : null;
+  } catch {
+    return null;
+  }
 }
 
 const agoText = (t) => {
@@ -2624,24 +2677,104 @@ $('pv-friends').addEventListener('click', async (e) => {
   }
 });
 
-function openFriend(code, status = '') {
+const friendCache = new Map(); // share-Text → { solve, a } (Rekonstruktion + Analyse)
+/** Solve aus der Karte eines Freundes: Rekonstruktion und Analyse (null, wenn keine Daten oder ungültig) */
+function friendSolve(entry) {
+  if (!entry?.share) return null;
+  if (friendCache.has(entry.share)) return friendCache.get(entry.share);
+  let out = null;
+  try {
+    const solve = decodeShare(entry.share);
+    if (solve.moves.length && solve.moves.length === solve.times.length) out = { solve, a: analyzeSolve(solve.start, solve.moves, solve.times) };
+  } catch {
+    out = null;
+  }
+  friendCache.set(entry.share, out);
+  return out;
+}
+
+/** Ansicht im Freunde-Fenster: '' (Profil), 'pb', 'ao5', 'ao12' oder 's<i>' (Solve aus der Liste), mit „@von“ für Zurück */
+function friendDetailHtml(f, view) {
+  const c = f.card || {};
+  const [cur, from = ''] = view.split('@');
+  const t = (v) => (v == null ? '–' : formatTime(v));
+  const tc = (v) => (v > 0 ? formatTime(v) : '–'); // übersprungene Phase (0) als „–“
+  const back = from ? `ao${from.replace('ao', '')}` : '';
+  const head = (title, sub) => `<div class="rp-head"><div><button type="button" class="link-btn" data-fr="view" data-view="${back}">‹ ${esc(f.name || '?')}</button><h2>${title}</h2><div class="small">${sub}</div></div>
+      <button type="button" class="rp-close" data-fr="close" aria-label="${L('Schließen', 'Close')}">✕</button></div>`;
+  const solveBlock = (entry, view) => {
+    const d = friendSolve(entry);
+    if (!d) return `<p class="small">${L('Für diesen Solve gibt es keine Zugdaten (älterer Solve oder ohne Würfel).', 'No move data for this solve (older solve or no cube).')}</p>`;
+    return `${cfopTable(analysisRows(d.a))}
+      ${d.solve.scramble ? `<details class="wv-sol"><summary>Scramble</summary><div class="in-alg">${esc(d.solve.scramble)}</div></details>` : ''}
+      <details class="wv-sol"><summary>${L('Lösung', 'Solution')} (${countHtm(d.solve.moves)} ${L('Züge', 'moves')})</summary><div class="in-alg">${esc(groupAlg(d.solve.moves.join(' ')))}</div></details>
+      <button type="button" class="primary" data-fr="replay" data-view="${view}">▶ ${L('Rekonstruktion ansehen', 'View reconstruction')}</button>`;
+  };
+  if (cur === 'pb') {
+    return `${head(`🏆 ${L('Bestzeit', 'Best')} ${fmtPen(c.pb)}`, c.pb?.date ? new Date(c.pb.date).toLocaleDateString(locale) : '')}${solveBlock(c.pb, 'pb')}`;
+  }
+  if (/^s\d+$/.test(cur)) {
+    const x = (c.last || [])[Number(cur.slice(1))];
+    if (!x) return head('?', '') + '';
+    return `${head(fmtPen(x), `${x.date ? new Date(x.date).toLocaleString(locale) : ''}${x.moves != null ? ` · ${x.moves} ${L('Züge', 'moves')}` : ''}`)}${solveBlock(x, cur)}`;
+  }
+  // Ø 5 / Ø 12: die Solves des Durchschnitts mit Splits, Ø der Splits, eingeklammert = fällt weg
+  const n = cur === 'ao5' ? 5 : 12;
+  const list = (c.last || []).slice(0, n);
+  const effv = (x) => (x.penalty === 'DNF' ? Infinity : x.time + (x.penalty || 0));
+  const order = list.map((x, i) => [effv(x), i]).sort((a, b) => a[0] - b[0]);
+  const cut = n <= 5 ? 1 : Math.ceil(n * 0.05);
+  const dropped = new Set([...order.slice(0, cut), ...order.slice(n - cut)].map(([, i]) => i));
+  const parts = list.map((x) => {
+    const d = friendSolve(x);
+    if (!d) return null;
+    const ph = d.a.phases;
+    return { cross: ph[0].time, f2l: ph.slice(1, 5).reduce((a, p) => a + p.time, 0), oll: ph[5].time, pll: ph[6].time, moves: d.solve.moves.length ? countHtm(d.solve.moves) : null };
+  });
+  const mean = (k) => {
+    const v = parts.map((p) => p?.[k]).filter((v) => v != null);
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+  };
+  const rows = list
+    .map((x, i) => {
+      const p = parts[i];
+      const time = `${dropped.has(i) ? '(' : ''}<b>${fmtPen(x)}</b>${dropped.has(i) ? ')' : ''}`;
+      return `<tr data-fr="view" data-view="s${i}@ao${n}" class="${p ? 'tap' : ''}"><td>${i + 1}</td><td>${time}</td><td>${p ? tc(p.cross) : '–'}</td><td>${p ? tc(p.f2l) : '–'}</td><td>${p ? tc(p.oll) : '–'}</td><td>${p ? tc(p.pll) : '–'}</td></tr>`;
+    })
+    .join('');
+  const have = parts.filter(Boolean).length;
+  const foot = have ? `<tr class="sum"><td></td><td>Ø</td><td>${t(mean('cross'))}</td><td>${t(mean('f2l'))}</td><td>${t(mean('oll'))}</td><td>${t(mean('pll'))}</td></tr>` : '';
+  return `${head(`Ø ${n} ${t(cur === 'ao5' ? c.ao5 : c.ao12)}`, L(`Die letzten ${n} Solves · eingeklammert fällt weg`, `The last ${n} solves · in brackets are dropped`))}
+    ${list.length < n ? `<p class="small">${L('Zu wenige Solves.', 'Not enough solves.')}</p>` : `<div class="table-wrap"><table class="phase-table"><tr><th>#</th><th>${L('Zeit', 'Time')}</th><th><i class="key ph-cross"></i>Cross</th><th><i class="key ph-pair"></i>F2L</th><th><i class="key ph-oll"></i>OLL</th><th><i class="key ph-pll"></i>PLL</th></tr>${rows}${foot}</table></div>
+    <p class="small">${have < list.length ? L(`Splits gibt es für ${have} von ${list.length} Solves (nur mit Smartcube aufgenommen). `, `Splits for ${have} of ${list.length} solves (recorded with a smart cube only). `) : ''}${L('Solve antippen für Details und Rekonstruktion.', 'Tap a solve for details and reconstruction.')}</p>`}`;
+}
+
+function openFriend(code, status = '', view = '') {
   const f = friendOf(code);
   const dlg = $('friend-dialog');
   if (!f) return dlg.close();
+  dlg.dataset.code = code;
+  dlg.dataset.view = view;
+  if (view) {
+    dlg.innerHTML = friendDetailHtml(f, view);
+    if (!dlg.open) dlg.showModal();
+    dlg.scrollTop = 0;
+    return;
+  }
   const c = f.card || {};
-  const tile = (v, k) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`;
-  const rows = (c.last || [])
-    .map((x, i) => `<tr><td>${i + 1}</td><td><b>${fmtPen(x)}</b></td><td>${x.moves ?? '–'}</td><td>${x.tps ? dec(x.tps, 2) : '–'}</td><td class="small">${x.date ? new Date(x.date).toLocaleDateString(locale) : '–'}</td></tr>`)
+  const tile = (v, k, view, ok) => `<${ok ? 'button type="button" data-fr="view" data-view="' + view + '"' : 'div'} class="stat${ok ? ' tap' : ''}"><div class="v">${v}</div><div class="k">${k}${ok ? ' ›' : ''}</div></${ok ? 'button' : 'div'}>`;
+  const lastN = (c.last || []).slice(0, 10);
+  const rows = lastN
+    .map((x, i) => `<tr${x.share ? ` data-fr="view" data-view="s${i}" class="tap"` : ''}><td>${i + 1}</td><td><b>${fmtPen(x)}</b></td><td>${x.moves ?? '–'}</td><td>${x.tps ? dec(x.tps, 2) : '–'}</td><td class="small">${x.date ? new Date(x.date).toLocaleDateString(locale) : '–'}${x.share ? ' ›' : ''}</td></tr>`)
     .join('');
   dlg.innerHTML = `<div class="rp-head"><div class="pv-head"><span class="avatar big">${avatarHtml(f)}</span>
       <div><h2>${esc(f.name || '?')}</h2><div class="small">${formatFriendCode(f.code)} · ${L('Stand', 'Updated')}: ${agoText(f.at)}${status ? ` · ${status}` : ''}</div></div></div>
       <button type="button" class="rp-close" data-fr="close" aria-label="${L('Schließen', 'Close')}">✕</button></div>
-    <div class="stats pv-tiles">${tile(fmtPen(c.pb), L('Bestzeit', 'Best'))}${tile(formatTime(c.ao5), 'Ø 5')}${tile(formatTime(c.ao12), 'Ø 12')}</div>
-    ${c.pb?.date ? `<p class="small">🏆 PB ${L('vom', 'from')} ${new Date(c.pb.date).toLocaleDateString(locale)} · ${c.count || 0} Solves ${L('gesamt', 'total')}</p>` : ''}
+    <div class="stats pv-tiles">${tile(fmtPen(c.pb), L('Bestzeit', 'Best'), 'pb', !!c.pb?.share)}${tile(formatTime(c.ao5), 'Ø 5', 'ao5', (c.last || []).length >= 5)}${tile(formatTime(c.ao12), 'Ø 12', 'ao12', (c.last || []).length >= 12)}</div>
+    ${c.pb?.date ? `<p class="small">🏆 PB ${L('vom', 'from')} ${new Date(c.pb.date).toLocaleDateString(locale)} · ${c.count || 0} Solves ${L('gesamt', 'total')}${c.pb.share ? ` · ${L('antippen für Splits und Rekonstruktion', 'tap for splits and reconstruction')}` : ''}</p>` : ''}
     <h3 class="sub-h">${L('Letzte 10 Solves', 'Last 10 solves')}</h3>
     ${rows ? `<div class="table-wrap"><table class="phase-table"><tr><th>#</th><th>${L('Zeit', 'Time')}</th><th>${L('Züge', 'Moves')}</th><th>TPS</th><th>${L('Datum', 'Date')}</th></tr>${rows}</table></div>` : `<p class="small">${L('Noch keine Solves.', 'No solves yet.')}</p>`}
     <menu><button type="button" class="ghost" data-fr="remove">🗑 ${L('Entfernen', 'Remove')}</button><button type="button" data-fr="refresh">↻ ${L('Aktualisieren', 'Refresh')}</button></menu>`;
-  dlg.dataset.code = code;
   if (!dlg.open) dlg.showModal();
 }
 
@@ -2649,6 +2782,17 @@ $('friend-dialog').addEventListener('click', async (e) => {
   const dlg = $('friend-dialog');
   if (e.target === dlg || e.target.closest('[data-fr=close]')) return dlg.close();
   const code = dlg.dataset.code;
+  const nav = e.target.closest('[data-fr=view]');
+  if (nav) return openFriend(code, '', nav.dataset.view);
+  const rp = e.target.closest('[data-fr=replay]');
+  if (rp) {
+    const f = friendOf(code);
+    const [cur] = rp.dataset.view.split('@');
+    const entry = cur === 'pb' ? f?.card?.pb : f?.card?.last?.[Number(cur.slice(1))];
+    const d = friendSolve(entry);
+    if (d) replay.open({ ...d.solve, name: f.name }, { title: `${f.name} · ${cur === 'pb' ? L('Bestzeit', 'Best') : L('Solve', 'Solve')}` });
+    return;
+  }
   if (e.target.closest('[data-fr=remove]')) {
     const f = friendOf(code);
     if (!confirm(L(`${f?.name || 'Freund'} entfernen?`, `Remove ${f?.name || 'friend'}?`))) return;

@@ -363,6 +363,7 @@ export class InsightsView {
 
   open(solve) {
     this.solve = solve;
+    this.renderedFor = null; // frisch geöffnet: Standard-Aufklappen
     try {
       EDIT.on = localStorage.getItem('smartcube.editHold') === '1';
       SCR.down = localStorage.getItem('smartcube.scrCrossDown') === '1';
@@ -380,6 +381,8 @@ export class InsightsView {
   }
 
   render(solve) {
+    // Beim Neuaufbau (Farbe vorne ändern, Haltung, Scramble-Ansicht …) bleiben aufgeklappte Bereiche offen
+    const prevOpen = this.renderedFor === solve ? [...this.dlg.querySelectorAll('details')].map((d) => d.open) : null;
     let r;
     try {
       r = solveInsights(solve, { extraAlgs: this.deps.extraAlgs, crossColors: this.deps.crossColors?.() || [], fronts: this.fronts });
@@ -410,5 +413,10 @@ export class InsightsView {
         <div class="in-sol">${r.solution.map((p) => `<div class="in-lbl">${NAMES[p.key] || p.key}</div><div class="in-alg mine">${esc(groupAlg(p.moves))}</div>`).join('')}</div>
       </details>
       <p class="small in-note emoji-help">${L('Legende: ✓ effizient · −n möglich = Züge sparbar · ↻ Rotation · 🔭 Vorausschau · 🧭 Kanten oben (EO) · Vergleich mit optimalem Kreuz und kürzesten F2L-Algs (Datenbank + eigene).', 'Legend: ✓ efficient · −n possible = moves to save · ↻ rotation · 🔭 lookahead · 🧭 top edges (EO) · compared with optimal cross and shortest F2L algs (database + own).')}</p>`;
+    this.renderedFor = solve;
+    if (prevOpen?.length) {
+      const ds = [...this.dlg.querySelectorAll('details')];
+      if (ds.length === prevOpen.length) ds.forEach((d, i) => (d.open = prevOpen[i]));
+    }
   }
 }
