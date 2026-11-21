@@ -1,0 +1,9 @@
+// Cloudflare (Workers Builds): liefert den fertigen Build aus dem Ordner dist als statische Seite aus.
+// „name“ muss genauso heißen wie das Worker-Projekt in Cloudflare (Adresse: smart-cube.<konto>.workers.dev).
+{
+  "name": "smart-cube",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./dist"
+  }
+}
