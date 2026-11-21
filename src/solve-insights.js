@@ -556,11 +556,13 @@ export function solveInsights(solve, opts = {}) {
       }
     }
   }
-  for (const l of [out.oll, out.pll]) {
+  for (const [l, p] of [[out.oll, oll], [out.pll, pll]]) {
     if (l.frontOptions && !l.source) {
       l.source = 'assumed';
       l.holdK = Math.max(0, Y.indexOf(l.view || ''));
     }
+    // Bild des echten Zustands zu Beginn der Phase, so wie du ihn gehalten hast
+    if (l.frontOptions && !l.skip) l.dia = { state: view(states[p.start], face, Y[l.holdK ?? 0]), hold: holdColors(states[p.start], face, Y[l.holdK ?? 0]) };
     l.saved = l.best ? Math.max(0, l.moves - l.best.len) : 0;
     l.twoLook = !!l.best && l.moves >= l.best.len + 4 && l.moves >= l.best.len * 1.35; // vermutlich 2-Look oder Umweg
   }

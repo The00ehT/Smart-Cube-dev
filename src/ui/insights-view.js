@@ -7,7 +7,7 @@ import { formatTime, formatSolve } from '../stats.js';
 import { metricsOf } from '../metrics.js';
 import { L, dec } from '../i18n.js';
 import { colorChip } from './replay.js';
-import { caseDiagram, f2lDiagram, PHYS } from './ll-diagram.js';
+import { caseDiagram, f2lDiagram, ll3dDiagram, PHYS } from './ll-diagram.js';
 import { groupAlg } from '../cube/alg-format.js';
 import { COLOR_NAMES, SOLVED, applyAlg, isSolved, phaseStatus, solvedSlots, relativeState, HtmCounter, translateMoves, tokenizeAlg, CROSS_DOWN } from '../cube/facelets.js';
 import { ScrambleTracker } from '../cube/scramble-tracker.js';
@@ -57,6 +57,7 @@ const practiceBtn = (idx) => `<button type="button" class="ghost small-btn in-pr
 
 /** Haltung: welche Farbe war vorne? antippbar (ohne Gyroskop selbst einstellen) */
 const EDIT = { on: false }; // Haltung bearbeiten (Farbwahl sichtbar) – sonst kompakt
+const LLPIC = { d3: false }; // OLL/PLL-Bild: 2D (Fall) oder 3D (dein Zustand in deiner Haltung)
 const SCR = { down: false }; // Scramble mit Kreuzfarbe unten (statt Weiß oben, Grün vorne)
 
 /** Knopf „Haltung in die Rekonstruktion übernehmen“ – nur sinnvoll, solange Phasen nicht fest eingestellt sind */
@@ -166,7 +167,13 @@ function llRow(name, cls, l) {
   const twoLook = l.twoLook ? `<span class="in-tag warn" title="${L(`Direkter Alg: ${b.len} Züge`, `Direct alg: ${b.len} moves`)}">2-Look?</span>` : '';
   const head = `<summary class="in-head"><i class="key ${cls}"></i><b>${name}</b>${l.skip ? '<span class="in-tag good">Skip</span>' : caseName ? `<span class="small">${esc(caseName)}</span>` : ''}<span class="small">${mv(l.moves)} · ${formatTime(l.time)}</span>${twoLook}</summary>`;
   if (l.skip) return `<details class="in-item in-collapse">${head}<div class="small">🎉 Skip</div></details>`;
-  return `<details class="in-item in-collapse">${head}${hold}${midRot}<div class="in-case">${b ? caseDiagram(b.id, 46) : ''}<div class="in-case-tx">
+  // Bild antippen: 2D (Fall) ⇄ 3D (dein Zustand in deiner Haltung, mit Vorne/Rechts)
+  const h = l.dia?.hold;
+  const d3 = l.dia ? ll3dDiagram(l.dia.state, 46, { U: PHYS[h.up], D: PHYS[h.down], F: PHYS[h.front], R: PHYS[h.right], L: PHYS[h.left], B: PHYS[h.back] }) : '';
+  const pic = d3
+    ? `<button type="button" class="ll-pic" data-act="ll-3d" title="${L('Antippen: 2D ⇄ 3D', 'Tap: 2D ⇄ 3D')}"><span class="dia-2d">${b ? caseDiagram(b.id, 46) : ''}</span><span class="dia-3d">${d3}</span></button>`
+    : b ? caseDiagram(b.id, 46) : '';
+  return `<details class="in-item in-collapse">${head}${hold}${midRot}<div class="in-case">${pic}<div class="in-case-tx">
       <div class="in-alg mine">${esc(groupAlg(l.userMoves)) || '–'}</div>
       <div class="small">${b ? '' : L('Fall nicht erkannt · ', 'Case not recognized · ')}${l.recog ? `Recog ${formatTime(l.recog)} · Exec ${formatTime(Math.max(0, l.time - l.recog))}` : ''}${l.twoLook ? ` · ${L(`direkt: ${mv(b.len)}`, `direct: ${mv(b.len)}`)}` : ''}</div>
     </div></div><div class="in-actions">${practiceBtn(name === 'OLL' ? 5 : 6)}</div></details>`;
@@ -196,6 +203,17 @@ export class InsightsView {
       const fb = e.target.closest('[data-front]');
       if (fb) return this.setFront(['cross', 'oll', 'pll'].includes(fb.dataset.pair) ? fb.dataset.pair : Number(fb.dataset.pair), Number(fb.dataset.front));
       if (e.target.closest('[data-act=adopt-hold]')) return this.adoptHolds();
+      if (e.target.closest('[data-act=ll-3d]')) {
+        // alle OLL/PLL-Bilder gemeinsam umschalten, ohne neu zu rendern (Aufklappzustand bleibt)
+        LLPIC.d3 = !LLPIC.d3;
+        try {
+          localStorage.setItem('smartcube.llDia3d', LLPIC.d3 ? '1' : '');
+        } catch {
+          /* egal */
+        }
+        dlg.classList.toggle('ll-3d', LLPIC.d3);
+        return;
+      }
       const pb = e.target.closest('[data-practice]');
       if (pb) return this.startPractice(Number(pb.dataset.practice));
       if (e.target.closest('[data-act=practice-stop]')) return this.stopPractice();
@@ -398,6 +416,7 @@ export class InsightsView {
     try {
       EDIT.on = localStorage.getItem('smartcube.editHold') === '1';
       SCR.down = localStorage.getItem('smartcube.scrCrossDown') === '1';
+      LLPIC.d3 = localStorage.getItem('smartcube.llDia3d') === '1';
     } catch {
       EDIT.on = false;
     }
@@ -430,6 +449,7 @@ export class InsightsView {
       r.saved > 1
         ? `<div class="in-summary"><b>~${mv(r.saved)} ${L('sparbar', 'to save')}</b>${secs ? ` <span>≈ ${dec(secs / 1000, 1)} s</span>` : ''}<div class="small">${total} → ${total - r.saved} ${L('Züge mit den kürzesten Wegen (Cross + F2L)', 'moves with the shortest ways (cross + F2L)')}</div></div>`
         : `<div class="in-summary good"><b>✓ ${L('Sehr effizient', 'Very efficient')}</b></div>`;
+    this.dlg.classList.toggle('ll-3d', LLPIC.d3);
     this.dlg.innerHTML = `<div class="rp-head"><div><h2>${L('Analyse', 'Analysis')}</h2><div class="small">${formatSolve(solve)} · ${mv(total)}</div></div>
       <button type="button" class="rp-close" data-act="close" aria-label="${L('Schließen', 'Close')}">✕</button></div>
       <div class="in-practice" hidden></div>

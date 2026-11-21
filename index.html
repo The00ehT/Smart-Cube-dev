@@ -424,7 +424,9 @@
       </section>
 
       <section class="set-sec">
-        <h3>Offline</h3>
+        <details class="set-fold">
+          <summary><h3>Offline</h3></summary>
+          <div class="set-fold-body">
         <div class="offline-status" id="offline-status">…</div>
         <div class="small app-version" id="app-version"></div>
         <div class="avatar-actions">
@@ -438,12 +440,12 @@
             <li><b>Safari:</b> Unter iOS 26 gibt es die Safari-Erweiterung „WebBLE“, die Web Bluetooth in Safari nachrüstet. In Safari ist die App über „Teilen → Zum Home-Bildschirm“ installierbar und offline nutzbar. (Mit der Erweiterung noch nicht getestet.)</li>
           </ul>
         </details>
+          </div>
+        </details>
       </section>
 
       <section class="set-sec">
         <h3>Würfel</h3>
-        <label class="toggle"><input type="checkbox" id="opt-gyro" checked /> Gyroskop verwenden (Rotations, Regrips, 3D-Lage)</label>
-        <div class="small gyro-help" id="gyro-help"></div>
         <button id="btn-forget-mac">Gespeicherte MAC-Adressen vergessen</button>
       </section>
       </div>

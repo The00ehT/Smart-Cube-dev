@@ -13,6 +13,7 @@ import { forgetMacs } from './ui/mac-dialog.js';
 import { load, save } from './storage.js';
 import { addSample, drainByMode, batteryChartSvg, toCsv } from './cube/battery-log.js';
 import { MODE_PERFORMANCE, MODE_ECO } from './cube/cube-mode.js';
+import { markSlices } from './cube/wide.js';
 import { averageOf, bestAverage, best, mean, formatTime, formatSolve, effectiveTime } from './stats.js';
 import { buildSolve, hasDetail, phasesOf, phaseName } from './solve-data.js';
 import { decodeShare } from './share.js';
@@ -1479,12 +1480,6 @@ function renderAwake() {
 }
 $('opt-awake').closest('.toggle').addEventListener('click', () => setTimeout(renderAwake, 600));
 document.addEventListener('click', () => $('settings-dialog')?.open && setTimeout(renderAwake, 500), { capture: true });
-$('gyro-help').innerHTML = L(
-  `<p><b>An</b>: der Würfel meldet Lagedaten (Performance), die App wertet Rotationen und Regrips aus. <b>Aus</b>: Die App ignoriert die Lagedaten, und bei <b>GAN i4 (Gen4)</b> schaltet sie den Würfel zusätzlich in den <b>Eco-Modus</b> (nur noch ~1 statt ~12 Meldungen pro Sekunde). Das schont Handy und – das soll der Akku-Verlauf unter „Technische Daten“ zeigen – auch den Würfel-Akku.</p>
-   <p>Der Umschaltbefehl stammt aus einem Mitschnitt der GAN-App und ist noch <b>experimentell</b>. Bei anderen Würfeln wirkt „Aus“ nur in der App. Alternativ lässt sich der Modus in Cube Station einstellen (<b>Endurance</b>, laut GAN bis ~200 h statt ~30 h).</p>`,
-  `<p><b>On</b>: the cube reports its orientation (Performance) and the app analyses rotations and regrips. <b>Off</b>: the app ignores orientation data and, on a <b>GAN i4 (Gen4)</b>, also switches the cube to <b>Eco mode</b> (only ~1 instead of ~12 messages per second). That saves phone battery and – which the battery history under “Technical data” is meant to show – the cube’s battery too.</p>
-   <p>The switch command comes from a capture of GAN’s app and is still <b>experimental</b>. On other cubes “Off” only works inside the app. Alternatively set the mode in Cube Station (<b>Endurance</b>, per GAN up to ~200 h instead of ~30 h).</p>`,
-);
 /** Gyro an/aus: Ansicht, Auswertung und (bei GAN Gen4) der Modus des Würfels */
 function afterGyroChange(on) {
   view.setGyroEnabled(on);
@@ -1492,7 +1487,7 @@ function afterGyroChange(on) {
   applyCubeMode();
   renderTech();
 }
-bindToggle('opt-gyro', 'gyro', afterGyroChange);
+view.setGyroEnabled(settings.gyro);
 replay.useGyro = settings.replayGyro;
 replay.onRace = (sol) => raceAgainst(sol, sol.name ? `${sol.name} (${formatTime(analyzeSolve(sol.start, sol.moves, sol.times).time)})` : L('Geteilter Solve', 'Shared solve'));
 // Haltung je Paar aus der Rekonstruktion am eigenen Solve speichern (gleiche Werte wie in der Analyse)
@@ -1545,19 +1540,11 @@ function initTech() {
         <button type="button" role="radio" data-gyro="0">Eco (${L('Gyro aus', 'gyro off')})</button>
       </div>
       <div class="hw tech-grid" id="tech-mode"></div>
-      <p class="small">${L(
-        'Performance und Eco sind dieselbe Einstellung wie „Gyroskop verwenden“ im Tab Allgemein. Die gemessene Rate zeigt, ob der Würfel den Befehl wirklich befolgt: Performance ≈ 12 Meldungen/s, Eco ≈ 1/s.',
-        'Performance and Eco are the same setting as “Use gyroscope” in the General tab. The measured rate shows whether the cube really follows the command: Performance ≈ 12 messages/s, Eco ≈ 1/s.',
-      )}</p>
     </section>
     <section class="set-sec">
       <h3>${L('Akku-Verlauf', 'Battery history')}</h3>
       <div class="tech-chart" id="tech-chart"></div>
       <div class="hw tech-grid" id="tech-drain"></div>
-      <p class="small">${L(
-        'So testest du es: Würfel verbunden lassen und ohne zu drehen ca. 1–2 Stunden im Modus Performance, danach genauso lange in Eco laufen lassen. Die Verbrauchswerte (Prozentpunkte pro Stunde) zeigen den Unterschied. Der Akku meldet ganze Prozent, kurze Tests sind darum grob. Messung alle 60 s, Anzeige der letzten 24 Stunden.',
-        'How to test: keep the cube connected and idle for about 1–2 hours in Performance, then the same time in Eco. The drain figures (percentage points per hour) show the difference. The battery reports whole percent, so short tests are rough. Measured every 60 s, showing the last 24 hours.',
-      )}</p>
       <div class="row-buttons">
         <button type="button" class="ghost" id="tech-csv">${L('CSV speichern', 'Save CSV')}</button>
         <button type="button" class="ghost" id="tech-clear">${L('Verlauf löschen', 'Clear history')}</button>
@@ -1569,11 +1556,8 @@ function initTech() {
     </section>
     <section class="set-sec">
       <h3>${L('Rohe Züge vom Würfel', 'Raw moves from the cube')}</h3>
-      <p class="small">${L(
-        'Der Würfel meldet nur Außenseiten. Zum Prüfen der Wide-Move-/Slice-Erkennung: einmal r, dann M drehen und hier ansehen. Eine Wide Move erscheint z. B. als L (Gegenseite), M als R + L′ kurz hintereinander. Abstand = Pause zum Zug davor.',
-        'The cube only reports outer faces. To check wide move / slice detection: turn r, then M and look here. A wide move shows up as e.g. L (the opposite face), M as R + L′ right after each other. Gap = pause since the previous move.',
-      )}</p>
       <div class="small tech-cmds" id="tech-moves"></div>
+      <div class="row-buttons"><button type="button" class="ghost" id="tech-moves-clear">${L('Zurücksetzen', 'Reset')}</button></div>
     </section>`;
   $('tech-mode-btns').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-gyro]');
@@ -1581,7 +1565,6 @@ function initTech() {
     const on = b.dataset.gyro === '1';
     settings.gyro = on;
     save(SETTINGS_KEY, settings);
-    $('opt-gyro').checked = on;
     afterGyroChange(on);
   });
   $('tech-csv').addEventListener('click', () => {
@@ -1591,6 +1574,10 @@ function initTech() {
     a.download = `smartcube-battery-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  });
+  $('tech-moves-clear').addEventListener('click', () => {
+    if (app.conn?.moveLog) app.conn.moveLog.length = 0;
+    renderTech();
   });
   $('tech-clear').addEventListener('click', () => {
     if (!battLog.length || !confirm(L('Akku-Verlauf wirklich löschen?', 'Really clear the battery history?'))) return;
@@ -1681,15 +1668,22 @@ function renderTech() {
     ? log.slice(-8).reverse().map((x) => `${new Date(x.t).toLocaleTimeString(locale)} · ${escapeHtml(x.label)} · <code>${x.hex}</code>`).join('<br>')
     : L('noch keine', 'none yet');
 
-  // Rohe Züge mit Abstand zum vorigen (Würfeluhr, sonst Gerätezeit)
-  const mlog = (c?.moveLog || []).slice(-14);
-  $('tech-moves').innerHTML = mlog.length
-    ? mlog
+  // Rohe Züge mit Abstand zum vorigen; erkannte Slices (R + L′ kurz hintereinander) stehen als Vermutung dabei
+  const mlog = (c?.moveLog || []).slice(-24);
+  const rows = mlog.map((x, i) => {
+    const prev = mlog[i - 1];
+    const gap = prev ? (x.cube != null && prev.cube != null ? x.cube - prev.cube : x.t - prev.t) : null;
+    return { text: x.move, t: gap ?? 0, kind: 'move', gap };
+  });
+  const guessed = markSlices(rows.map((r, i) => ({ ...r, t: rows.slice(0, i + 1).reduce((a, q) => a + (q.gap ?? 0), 0) })));
+  $('tech-moves').innerHTML = guessed.length
+    ? guessed
         .map((x, i) => {
-          const prev = mlog[i - 1];
-          const gap = prev ? (x.cube != null && prev.cube != null ? x.cube - prev.cube : x.t - prev.t) : null;
-          return `<code>${escapeHtml(x.move)}</code>${gap != null ? ` <span>+${Math.max(0, Math.round(gap))} ms</span>` : ''}`;
+          if (x.hide) return '';
+          const pair = x.label ? `<code>${escapeHtml(x.text)} ${escapeHtml(guessed[i + 1].text)}</code> <b>→ ${x.label}</b>` : `<code>${escapeHtml(x.text)}</code>`;
+          return `${pair}${x.gap != null ? ` <span>+${Math.max(0, Math.round(x.gap))} ms</span>` : ''}`;
         })
+        .filter(Boolean)
         .join(' · ')
     : L('noch keine', 'none yet');
 }

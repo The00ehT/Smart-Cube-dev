@@ -1351,3 +1351,17 @@ details.in-sec[open] > summary { margin-bottom: 8px; }
 .in-adopted { margin-left: 8px; }
 .rp-mv.wide { font-weight: 700; color: var(--accent); }
 .rp-wide-toggle { font-size: 14px; }
+
+/* Analyse: OLL/PLL-Bild 2D ⇄ 3D */
+.ll-pic { all: unset; cursor: pointer; display: block; flex: none; border-radius: 8px; }
+.ll-pic:focus-visible { outline: 2px solid var(--accent); }
+.ll-pic .dia-3d { display: none; }
+.ll-3d .ll-pic .dia-2d { display: none; }
+.ll-3d .ll-pic .dia-3d { display: block; }
+/* Einstellungen: einklappbarer Bereich */
+.set-fold > summary { cursor: pointer; list-style: none; }
+.set-fold > summary::-webkit-details-marker { display: none; }
+.set-fold > summary h3 { display: inline; }
+.set-fold > summary::after { content: ' ▾'; color: var(--muted); }
+.set-fold[open] > summary::after { content: ' ▴'; }
+.set-fold-body { display: grid; gap: 12px; margin-top: 12px; }
