@@ -9,6 +9,8 @@
  *   n  Name (optional, aus dem Profil)
  *   g  Würfeldrehungen (Gyro): Zeit~Lage (Basis 36, Lage = Index in ROT24), durch Punkte getrennt
  *   h  Griffwechsel (Gyro): Zeiten, Basis 36, durch Punkte getrennt
+ *   o  Haltung je Phase (Kreuz, Paar 1–4, OLL, PLL): Ziffer 0–3 oder „-“
+ *   q  eingetragene Drehungen mitten in einer Phase: Zugindex~Drehung (1 = y, 2 = y2, 3 = y'), durch Punkte getrennt
  */
 import { L } from './i18n.js';
 import { FACES, SOLVED, applyAlg, parseMove, formatMove } from './cube/facelets.js';
@@ -25,6 +27,9 @@ const decMove = (c) => {
   return formatMove(FACES[Math.floor(k / 3)], [1, 2, 3][k % 3]);
 };
 
+const FRONT_KEYS = ['cross', 1, 2, 3, 4, 'oll', 'pll'];
+const ROT_NAMES = ['', 'y', 'y2', "y'"];
+
 export function encodeShare(solve) {
   const q = new URLSearchParams();
   q.set('r', '1');
@@ -36,11 +41,16 @@ export function encodeShare(solve) {
   else if (solve.penalty) q.set('p', '2');
   if (solve.date) q.set('d', new Date(solve.date).getTime().toString(36));
   if (solve.name) q.set('n', solve.name.slice(0, 24));
-  // Haltung je Phase (Kreuz, Paar 1–4): welche Farbe vorne (0–3, „-“ = wie davor); alt: eine Ziffer fürs Kreuz
+  // Haltung je Phase (Kreuz, Paar 1–4, OLL, PLL): welche Farbe vorne (0–3, „-“ = wie davor); alt: eine Ziffer fürs Kreuz
   const fr = { ...(solve.fronts || {}) };
   if (fr.cross == null && solve.front) fr.cross = solve.front;
-  const o = ['cross', 1, 2, 3, 4].map((k) => (fr[k] == null ? '-' : String(((Number(fr[k]) % 4) + 4) % 4))).join('').replace(/-+$/, '');
+  const o = FRONT_KEYS.map((k) => (fr[k] == null ? '-' : String(((Number(fr[k]) % 4) + 4) % 4))).join('').replace(/-+$/, '');
   if (o) q.set('o', o);
+  const rots = Object.entries(solve.rots || {})
+    .map(([i, name]) => [Number(i), ROT_NAMES.indexOf(name)])
+    .filter(([i, n]) => i > 0 && n > 0)
+    .map(([i, n]) => `${i.toString(36)}~${n}`);
+  if (rots.length) q.set('q', rots.join('.'));
   if (solve.gyro) {
     q.set('g', solve.gyro.rotations.map((r) => `${r.t.toString(36)}~${ROT24.findIndex((x) => x.name === r.name).toString(36)}`).join('.'));
     if (solve.gyro.regrips.length) q.set('h', solve.gyro.regrips.map((t) => t.toString(36)).join('.'));
@@ -70,6 +80,7 @@ export function decodeShare(str) {
     date: d ? new Date(parseInt(d, 36)).toISOString() : null,
     name: (q.get('n') || '').slice(0, 24),
     ...decodeFronts(q.get('o') || ''),
+    rots: decodeRots(q.get('q') || ''),
     gyro: q.has('g')
       ? {
           v0: '',
@@ -94,10 +105,21 @@ export function shareUrl(solve) {
   return `${base}#${encodeShare(solve)}`;
 }
 
-/** „o“ aus dem Link: Haltung je Phase (Kreuz, Paar 1–4) */
+/** „q“ aus dem Link: Drehungen mitten in einer Phase { Zugindex: 'y' } */
+function decodeRots(str) {
+  const rots = {};
+  for (const x of str.split('.').filter(Boolean)) {
+    const [i, n] = x.split('~');
+    const idx = parseInt(i, 36);
+    if (idx > 0 && ROT_NAMES[Number(n)]) rots[idx] = ROT_NAMES[Number(n)];
+  }
+  return rots;
+}
+
+/** „o“ aus dem Link: Haltung je Phase (Kreuz, Paar 1–4, OLL, PLL) */
 function decodeFronts(o) {
   const fronts = {};
-  ['cross', 1, 2, 3, 4].forEach((k, i) => {
+  FRONT_KEYS.forEach((k, i) => {
     if (/[0-3]/.test(o[i] || '')) fronts[k] = Number(o[i]);
   });
   return { fronts, front: fronts.cross || 0 };

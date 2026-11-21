@@ -1501,6 +1501,8 @@ replay.onFronts = (sol, fronts) => {
   if (!own) return;
   own.fronts = fronts;
   own.front = fronts.cross || 0;
+  if (sol.rots) own.rots = sol.rots;
+  else delete own.rots;
   persistSolves();
 };
 replay.onGyroToggle = (on) => {

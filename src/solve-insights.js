@@ -23,6 +23,14 @@ const mod4 = (n) => ((n % 4) + 4) % 4;
 /** y-Schritte einer Gyro-Drehung wie "y", "y'", "y2" (x/z zählen hier nicht) */
 const ySteps = (name) => tokenizeAlg(name || '').reduce((a, t) => a + (t === 'y' ? 1 : t === "y'" ? -1 : t === 'y2' ? 2 : 0), 0);
 const AUF = ['', 'U', 'U2', "U'"];
+/**
+ * Zug-Kosten für die Auswahl von Vorschlägen: Einsetzer mit F-Zügen sind mit den Fingertricks aufwendiger als
+ * R-/U-Zeiten (R U R', Sexy-Move …). Je F-Zug zählen daher 0,6 Züge extra – nur für die Rangfolge,
+ * angezeigt und gezählt wird weiter die echte Zugzahl.
+ */
+export const F_PENALTY = 0.6;
+export const fMoves = (alg) => tokenizeAlg(alg).filter((t) => t[0] === 'F').length;
+export const moveCost = (len, alg) => len + F_PENALTY * fMoves(alg);
 
 /** Züge ohne Würfeldrehungen (x, y, z zählen nicht) */
 export const moveCount = (alg) => tokenizeAlg(alg).filter((t) => !/^[xyz]/.test(t) && parseAnyMove(t)).length;
@@ -68,7 +76,7 @@ function flatAlgs(list) {
 }
 
 /** Bester Datenbank-Algorithmus für den FR-Slot (mit AUF vorab), sonst null */
-function bestPair(s, extraAlgs = () => []) {
+export function bestPair(s, extraAlgs = () => []) {
   if (solvedSlots(s, 'D') & FR_BIT) return null;
   const key = f2lKey(s);
   const c = F2L_CASES.find((x) => x.key === key);
@@ -81,7 +89,9 @@ function bestPair(s, extraAlgs = () => []) {
       const mask = solvedSlots(after, 'D');
       if (!phaseStatus(after).D.cross || !(mask & FR_BIT) || (mask & keep) !== keep) continue;
       const len = moveCount(alg) + (auf ? 1 : 0);
-      if (!best || len < best.len) best = { id: c.id, alg: `${auf} ${alg}`.trim(), len };
+      const full = `${auf} ${alg}`.trim();
+      const cost = moveCost(len, full);
+      if (!best || cost < best.cost) best = { id: c.id, alg: full, len, cost };
       break;
     }
   }
@@ -89,7 +99,7 @@ function bestPair(s, extraAlgs = () => []) {
 }
 
 /** Alle Datenbank-Varianten, die den FR-Slot lösen (je Alg die erste passende AUF): [{ id, alg, len, after }] */
-function pairVariants(s, extraAlgs) {
+export function pairVariants(s, extraAlgs) {
   const keep = solvedSlots(s, 'D');
   if (keep & FR_BIT) return [];
   const c = F2L_CASES.find((x) => x.key === f2lKey(s));
@@ -104,7 +114,8 @@ function pairVariants(s, extraAlgs) {
       const mask = solvedSlots(after, 'D');
       if (!phaseStatus(after).D.cross || !(mask & FR_BIT) || (mask & keep) !== keep) continue;
       seen.add(full);
-      out.push({ id: c.id, alg: full, len: moveCount(alg) + (auf ? 1 : 0), after });
+      const len = moveCount(alg) + (auf ? 1 : 0);
+      out.push({ id: c.id, alg: full, len, cost: moveCost(len, full), after });
       break;
     }
   }
@@ -118,7 +129,7 @@ function slotVariants(sv, extraAlgs) {
   const left = yView(sv, 'y'); // Slot liegt jetzt vorne links
   for (const v of pairVariants(mirrorState(left), extraAlgs)) {
     const a = mirrorAlg(v.alg);
-    out.push({ id: v.id, alg: a, len: v.len, after: recenter(applyAnyAlg(left, a)), dk: 1, mirrored: true });
+    out.push({ id: v.id, alg: a, len: v.len, cost: moveCost(v.len, a), after: recenter(applyAnyAlg(left, a)), dk: 1, mirrored: true });
   }
   return out;
 }
@@ -246,8 +257,36 @@ export function solveInsights(solve, opts = {}) {
   // Haltung je Paar (welche Farbe vorne): selbst eingestellt, sonst aus dem Gyroskop (gemessene y-Drehungen),
   // sonst angenommen „Slot vorne rechts“. Daraus: Slot-Lage, Alg ohne Drehung, Bewertung der Rotations.
   const fronts = opts.fronts || {};
+  // Drehungen des Würfels: gemessen (Gyro) oder von Hand in der Rekonstruktion eingetragen (solve.rots: { Zugindex: 'y' })
+  // – auch mitten in einem Paar. Nur y-Schritte ändern die Haltung („vorne“).
   const gyroRots = solve.gyro?.rotations || null;
-  const stepsBetween = (t0, t1) => (gyroRots ? gyroRots.filter((r) => r.t > t0 && r.t <= t1).reduce((a, r) => a + ySteps(r.name), 0) : 0);
+  const manualRots = Object.entries(solve.rots || {})
+    .map(([i, name]) => ({ i: Number(i), t: solve.times[Number(i)] ?? 0, name }))
+    .filter((r) => r.i > 0 && ySteps(r.name) !== 0)
+    .sort((a, b) => a.t - b.t);
+  const rotList = gyroRots || (manualRots.length ? manualRots : null);
+  const rotsIn = (t0, t1) => (rotList ? rotList.filter((r) => r.t > t0 && r.t <= t1) : []);
+  const stepsBetween = (t0, t1) => rotsIn(t0, t1).reduce((a, r) => a + ySteps(r.name), 0);
+  /** Eigene Züge einer Phase; bei Drehungen mittendrin wechselt die Haltung ab dem Zug danach */
+  const userAlgHold = (p, hk) => {
+    if (!p.moves) return '';
+    const mids = rotsIn(solve.times[p.start] ?? 0, solve.times[p.end] ?? 0);
+    if (!mids.length) return userAlg(p, Y[hk]);
+    let cur = hk;
+    let from = p.start;
+    const parts = [];
+    for (const r of mids) {
+      // erster Zug ab der Drehung (Handeintrag: genau dieser Zug)
+      let j = r.i ?? solve.times.findIndex((t, idx) => idx > from && t >= r.t);
+      if (j == null || j < 0 || j <= from || j > p.end) continue;
+      parts.push(mergeDoubles(translateMoves(moves.slice(from, j), `${CROSS_DOWN[face0]} ${Y[cur]}`.trim())).join(' '));
+      parts.push(r.name);
+      cur = mod4(cur + ySteps(r.name));
+      from = j;
+    }
+    parts.push(mergeDoubles(translateMoves(moves.slice(from, p.end + 1), `${CROSS_DOWN[face0]} ${Y[cur]}`.trim())).join(' '));
+    return parts.filter(Boolean).join(' ');
+  };
   /** Vorschlag für das Paar aus Haltung k (Slot liegt dort an POS[d]) */
   const inHold = (before, k, rt) => {
     const pos = POS[mod4(rt - k)];
@@ -280,7 +319,8 @@ export function solveInsights(solve, opts = {}) {
     return b ? { ...b, pos, rot } : null;
   };
   out.pairs = [];
-  out.rotations = { count: 0, unnecessary: 0, known: !!gyroRots };
+  out.rotations = { count: 0, unnecessary: 0, mid: 0, known: !!rotList };
+  // Haltung am Ende der letzten Phase mit Zügen (nach Drehungen mittendrin) und deren Zeit
   let prevK = null;
   let prevT = 0;
   for (let k = 1; k <= 4; k++) {
@@ -303,9 +343,9 @@ export function solveInsights(solve, opts = {}) {
     if (fronts[k] != null) {
       hk = mod4(fronts[k]);
       source = 'set';
-    } else if (gyroRots && prevK != null) {
+    } else if (rotList && prevK != null) {
       hk = mod4(prevK + stepsBetween(prevT, tStart));
-      source = 'gyro';
+      source = gyroRots ? 'gyro' : 'set';
     } else {
       hk = rt;
       source = gyroRots ? 'gyro' : 'assumed';
@@ -320,9 +360,16 @@ export function solveInsights(solve, opts = {}) {
     entry.pos = POS[mod4(rt - hk)];
     // Bild des Falls aus deiner Haltung: Stand vor dem Paar, das Paar an seiner echten Stelle
     entry.dia = { state: options[hk].s0, pair: entry.pos, hold: options[hk].hold };
-    entry.userMoves = userAlg(p, Y[hk]);
+    entry.userMoves = userAlgHold(p, hk);
+    // Drehungen mitten im Paar (der Slot wird z. B. nach dem Zug gedreht, um besser einzusetzen)
+    const tEnd = solve.times[p.end] ?? tStart;
+    const mids = rotsIn(tStart, tEnd);
+    if (mids.length) {
+      entry.midRot = mids.map((r) => r.name);
+      out.rotations.mid += mids.length;
+    }
     // Drehung vor diesem Paar? (nur bewerten, wenn die Haltungen bekannt sind)
-    if (prevK != null && (gyroRots || fronts[k] != null)) {
+    if (prevK != null && (rotList || fronts[k] != null)) {
       const steps = mod4(hk - prevK);
       if (steps) {
         out.rotations.count++;
@@ -335,13 +382,13 @@ export function solveInsights(solve, opts = {}) {
         }
       }
     }
-    prevK = hk;
-    prevT = solve.times[p.end] ?? tStart;
+    prevK = mod4(hk + stepsBetween(tStart, tEnd));
+    prevT = tEnd;
     // Leichteres Paar zu diesem Zeitpunkt? (Vergleich je Fall von vorne rechts aus)
     const evals = options.map((o) => ({ ...o, best: bestPair(o.s0, extraAlgs) }));
     const mineEval = evals[rt];
     const others = evals.filter((o) => o !== mineEval && o.best && !o.best.stuck);
-    const easiest = others.reduce((b, o) => (!b || o.best.len < b.best.len ? o : b), null);
+    const easiest = others.reduce((b, o) => (!b || o.best.cost < b.best.cost ? o : b), null);
     const myLen = entry.best && !entry.best.stuck ? entry.best.len : Infinity;
     if (easiest && easiest.best.len + 2 <= Math.min(myLen, p.moves)) entry.easier = { ...easiest.best, hold: easiest.hold };
     entry.saved = entry.best && !entry.best.stuck ? Math.max(0, p.moves - entry.best.len) : 0;
@@ -353,7 +400,7 @@ export function solveInsights(solve, opts = {}) {
       if (lastPair && j !== rt) continue; // beim letzten Paar gibt es keine Wahl des Slots
       for (const v of slotVariants(options[j].s0, extraAlgs)) cands.push({ ...v, slotK: j, k: mod4(j + v.dk) });
     }
-    const pickBase = (list, score) => list.filter((c) => c.slotK === rt).sort((a, b) => a.len - b.len || score(a) - score(b))[0];
+    const pickBase = (list, score) => list.filter((c) => c.slotK === rt).sort((a, b) => a.cost - b.cost || score(a) - score(b))[0];
     const holdInfo = (c) => ({ hold: holdColors(before, face, Y[c.k]), pairHold: options[c.slotK].hold });
     if (!lastPair && cands.length) {
       const cache = new Map();
@@ -362,7 +409,8 @@ export function solveInsights(solve, opts = {}) {
         c.total = c.len + c.next;
       }
       const base = pickBase(cands, (c) => c.total);
-      const best = cands.filter((c) => Number.isFinite(c.total)).sort((a, b) => a.total - b.total || (b.slotK === rt) - (a.slotK === rt) || a.len - b.len)[0];
+      for (const c of cands) c.score = c.total + F_PENALTY * fMoves(c.alg);
+      const best = cands.filter((c) => Number.isFinite(c.total)).sort((a, b) => a.score - b.score || (b.slotK === rt) - (a.slotK === rt) || a.len - b.len)[0];
       if (base && best && Number.isFinite(base.total) && base.total - best.total >= 2) {
         entry.lookahead = {
           sameSlot: best.slotK === rt,
@@ -392,9 +440,12 @@ export function solveInsights(solve, opts = {}) {
       };
       const mineOll = ollOf(view(after, face));
       const scored = cands.map((c) => ({ ...c, oll: ollOf(c.after) })).filter((c) => c.oll && Number.isFinite(c.oll.len));
-      for (const c of scored) c.total = c.len + c.oll.len;
-      const base = pickBase(scored, (c) => c.total);
-      const best = [...scored].sort((a, b) => a.total - b.total || b.oll.eo - a.oll.eo || a.len - b.len)[0];
+      for (const c of scored) {
+        c.total = c.len + c.oll.len;
+        c.score = c.total + F_PENALTY * fMoves(c.alg);
+      }
+      const base = pickBase(scored, (c) => c.score);
+      const best = [...scored].sort((a, b) => a.score - b.score || b.oll.eo - a.oll.eo || a.len - b.len)[0];
       const bestEo = [...scored].sort((a, b) => b.oll.eo - a.oll.eo || a.total - b.total)[0];
       entry.eo = { last: true, mine: mineOll };
       if (base && best && base.total - best.total >= 2) entry.eo.better = { id: best.id, alg: best.alg, len: best.len, oll: best.oll, total: best.total, baseTotal: base.total, baseOll: base.oll, baseAlg: base.alg, mirrored: best.mirrored, ...holdInfo(best) };
@@ -446,6 +497,29 @@ export function solveInsights(solve, opts = {}) {
   const pll = ph[6];
   out.oll = { moves: oll.moves, time: oll.time, recog: oll.recog, skip: oll.skip, userMoves: userAlg(oll, '') };
   out.pll = { moves: pll.moves, time: pll.time, recog: pll.recog, skip: pll.skip, userMoves: userAlg(pll, '') };
+  // Haltung (vorne) bei OLL/PLL: selbst eingestellt, sonst aus den Drehungen (Gyro/Rekonstruktion), sonst unten geschätzt
+  for (const [key, l, p] of [['oll', out.oll, oll], ['pll', out.pll, pll]]) {
+    if (!p.moves) continue;
+    const tStart = solve.times[p.start] ?? 0;
+    const tEnd = solve.times[p.end] ?? tStart;
+    l.frontOptions = Y.map((r) => holdColors(states[p.start], face, r).front);
+    let hk = null;
+    if (fronts[key] != null) {
+      hk = mod4(fronts[key]);
+      l.source = 'set';
+    } else if (rotList && prevK != null) {
+      hk = mod4(prevK + stepsBetween(prevT, tStart));
+      l.source = gyroRots ? 'gyro' : 'set';
+    }
+    if (hk == null) continue;
+    l.holdK = hk;
+    l.view = Y[hk];
+    l.userMoves = userAlgHold(p, hk);
+    const mids = rotsIn(tStart, tEnd);
+    if (mids.length) l.midRot = mids.map((r) => r.name);
+    prevK = mod4(hk + stepsBetween(tStart, tEnd));
+    prevT = tEnd;
+  }
   if (!oll.skip) {
     const s = llAt(oll.start);
     const n = f2lSolved(s) ? identifyOll(s) : null;
@@ -466,7 +540,7 @@ export function solveInsights(solve, opts = {}) {
     return dp[a.length][b.length];
   };
   for (const [l, p] of [[out.oll, oll], [out.pll, pll]]) {
-    if (l.skip || !l.best?.id || !p.moves) continue;
+    if (l.skip || !l.best?.id || !p.moves || l.source) continue; // Haltung schon bekannt (eingestellt oder gemessen)
     const refs = [...extraAlgs(l.best.id), ...dbAlgs(l.best.id)].map(plainToks);
     let bestScore = -Infinity;
     for (const r of Y) {
@@ -483,6 +557,10 @@ export function solveInsights(solve, opts = {}) {
     }
   }
   for (const l of [out.oll, out.pll]) {
+    if (l.frontOptions && !l.source) {
+      l.source = 'assumed';
+      l.holdK = Math.max(0, Y.indexOf(l.view || ''));
+    }
     l.saved = l.best ? Math.max(0, l.moves - l.best.len) : 0;
     l.twoLook = !!l.best && l.moves >= l.best.len + 4 && l.moves >= l.best.len * 1.35; // vermutlich 2-Look oder Umweg
   }

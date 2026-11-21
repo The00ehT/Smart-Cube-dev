@@ -1345,3 +1345,7 @@ details.in-sec[open] > summary { margin-bottom: 8px; }
 .small-btn.on { border-color: var(--accent); color: var(--accent); }
 .row-buttons { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
 #storage-info { margin-bottom: 4px; }
+
+/* Rekonstruktion: Drehung von Hand einfügen (Haltung bearbeiten) */
+.rp-mv.editable { cursor: pointer; outline: 1px dashed var(--line); outline-offset: 1px; border-radius: 4px; }
+.in-adopted { margin-left: 8px; }
