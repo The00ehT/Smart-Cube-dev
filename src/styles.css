@@ -1349,3 +1349,5 @@ details.in-sec[open] > summary { margin-bottom: 8px; }
 /* Rekonstruktion: Drehung von Hand einfügen (Haltung bearbeiten) */
 .rp-mv.editable { cursor: pointer; outline: 1px dashed var(--line); outline-offset: 1px; border-radius: 4px; }
 .in-adopted { margin-left: 8px; }
+.rp-mv.wide { font-weight: 700; color: var(--accent); }
+.rp-wide-toggle { font-size: 14px; }

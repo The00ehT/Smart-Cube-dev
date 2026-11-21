@@ -16,6 +16,7 @@ const HOLD_KEYS = ['cross', '1', '2', '3', '4', 'oll', 'pll'];
 /** Drehung von Hand in der Phase: erst y, dann y', dann y2, dann wieder keine */
 const ROT_CYCLE = ['', 'y', "y'", 'y2'];
 import { viewerEvents } from '../cube/gyro.js';
+import { detectWide, wideCount } from '../cube/wide.js';
 import { analyzeSolve, PHASE_NAMES } from '../cube/analysis.js';
 import { setupAlgFor } from './cube-view.js';
 import { formatTime, formatSolve } from '../stats.js';
@@ -64,6 +65,7 @@ export class Replay {
           <div class="rp-front"></div>
           <div class="rp-phases"></div>
           <label class="toggle rp-gyro-toggle" hidden><input type="checkbox" class="rp-gyro" checked /> ${L('Rotations &amp; Regrips zeigen (Gyro)', 'Show rotations &amp; regrips (gyro)')}</label>
+          <label class="toggle rp-wide-toggle"><input type="checkbox" class="rp-wide" checked /> ${L('Wide Moves &amp; Slices erkennen', 'Detect wide moves &amp; slices')} <span class="small rp-wide-count"></span></label>
           <div class="rp-actions">
             <button class="rp-share primary">${L('Teilen', 'Share')}</button>
             <button class="rp-race ghost" type="button">👻 ${L('Dagegen antreten', 'Race it')}</button>
@@ -140,6 +142,26 @@ export class Replay {
       this.onGyroToggle?.(this.useGyro);
     });
     this.useGyro = true;
+    // Wide Moves (r, u …) und Slices (M, E, S) erkennen: Voreinstellung an, gemerkt in diesem Browser
+    try {
+      this.wideOn = localStorage.getItem('smartcube.replayWide') !== '0';
+    } catch {
+      this.wideOn = true;
+    }
+    $('.rp-wide', dialog).checked = this.wideOn;
+    $('.rp-wide', dialog).addEventListener('change', (e) => {
+      this.wideOn = e.target.checked;
+      try {
+        localStorage.setItem('smartcube.replayWide', this.wideOn ? '1' : '0');
+      } catch {
+        /* egal */
+      }
+      this.pause();
+      const mi = this.events?.[Math.max(0, (this.k || 0) - 1)]?.i;
+      this.build();
+      const at = mi == null ? 0 : this.events.findIndex((ev) => ev.kind === 'move' && ev.i === mi) + 1;
+      this.seekMove(Math.max(0, at));
+    });
   }
 
   /**
@@ -280,7 +302,10 @@ export class Replay {
       }
     }
     // Kreuz unten; mit Gyro zusätzlich die gemessenen Drehungen
-    const ev = viewerEvents(s.moves, s.times, { v0, rotations });
+    let ev = viewerEvents(s.moves, s.times, { v0, rotations });
+    // Wide Moves (Gegenseite + gleichzeitige Würfeldrehung, nur mit Gyro) und Slices (R L′ = M …) erkennen
+    if (this.wideOn) ev = detectWide(ev, { gyro: !!gyro });
+    $('.rp-wide-count', this.dlg).textContent = this.wideOn && wideCount(ev) ? `· ${wideCount(ev)} ${L('erkannt', 'found')}` : '';
     for (const t of gyro?.regrips || []) {
       const at = ev.findIndex((e) => e.t > t);
       ev.splice(at < 0 ? ev.length : at, 0, { kind: 'grip', text: '✋', t });
@@ -299,16 +324,29 @@ export class Replay {
     $('.rp-twizzle', this.dlg).href = this.twizzleUrl();
   }
 
-  /** Ereignisse für die Anzeige gruppieren: zwei gleiche Vierteldrehungen hintereinander → Doppelzug */
-  groups(from, to) {
+  /**
+   * Ereignisse für die Anzeige gruppieren: zwei gleiche Vierteldrehungen hintereinander → Doppelzug.
+   * Erkannte Slices (label/hide) erscheinen als ein Zug; `literal` nutzt immer die echten Züge (für den Export).
+   */
+  groups(from, to, literal = false) {
     const out = [];
+    const lab = (e) => (literal ? e.text : e.label ?? e.text);
+    const endOf = (k) => (literal ? k : k + (this.events[k].span || 0));
     for (let k = from; k <= to; k++) {
       const e = this.events[k];
-      const n = this.events[k + 1];
-      if (e.kind === 'move' && n && k + 1 <= to && n.kind === 'move' && n.text === e.text && !e.text.endsWith('2')) {
-        out.push({ text: e.text[0] + '2', first: k, last: k + 1, kind: 'move' });
-        k++;
-      } else out.push({ text: e.text, first: k, last: k, kind: e.kind });
+      if (!literal && e.hide) continue;
+      const last = endOf(k);
+      let nk = last + 1;
+      while (!literal && nk <= to && this.events[nk]?.hide) nk++;
+      const n = this.events[nk];
+      if (e.kind === 'move' && n && nk <= to && n.kind === 'move' && lab(n) === lab(e) && !lab(e).endsWith('2')) {
+        const nLast = endOf(nk);
+        out.push({ text: lab(e)[0] + '2', first: k, last: nLast, kind: 'move' });
+        k = nLast;
+      } else {
+        out.push({ text: lab(e), first: k, last, kind: e.kind });
+        k = last;
+      }
     }
     return out;
   }
@@ -324,7 +362,8 @@ export class Replay {
       .map((p, pi) => {
         const r = this.phaseRange(pi);
         if (!r) return null;
-        const txt = this.groups(r[0], r[1]).filter((g) => g.kind !== 'grip').map((g) => g.text).join(' ');
+        // Export mit den echten Zügen (Slices als zwei Außenzüge), Wide Moves sind exakt gleichwertig
+        const txt = this.groups(r[0], r[1], true).filter((g) => g.kind !== 'grip').map((g) => g.text).join(' ');
         return txt ? `${txt} // ${PHASE_NAMES[p.key]}` : null;
       })
       .filter(Boolean)
@@ -343,7 +382,7 @@ export class Replay {
       const r = this.phaseRange(pi);
       const mv = r
         ? this.groups(r[0], r[1])
-            .map((g) => `<span class="rp-mv ${g.kind}${this.editHold && this.holdByPhase && g.kind === 'move' ? ' editable' : ''}" data-k="${g.last}" data-first="${g.first}"${g.kind === 'move' && this.events[g.first].i != null ? ` data-mi="${this.events[g.first].i}"` : ''}${g.kind === 'grip' ? ` title="${L('Regrip (geschätzt)', 'Regrip (estimated)')}"` : ''}>${g.text}</span>`)
+            .map((g) => `<span class="rp-mv ${g.kind}${this.events[g.first].wide || this.events[g.first].label ? ' wide' : ''}${this.editHold && this.holdByPhase && g.kind === 'move' ? ' editable' : ''}" data-k="${g.last}" data-first="${g.first}"${g.kind === 'move' && this.events[g.first].i != null ? ` data-mi="${this.events[g.first].i}"` : ''}${g.kind === 'grip' ? ` title="${L('Regrip (geschätzt)', 'Regrip (estimated)')}"` : this.events[g.first].wide ? ` title="${L('Wide Move erkannt: Gegenseite + Würfeldrehung', 'Wide move detected: opposite face + cube rotation')}"` : this.events[g.first].label ? ` title="${L('Slice erkannt: zwei gegenläufige Außenzüge', 'Slice detected: two opposite outer turns')}"` : ''}>${g.text}</span>`)
             .join(' ')
         : '';
       const rots = r ? this.events.slice(r[0], r[1] + 1).filter((e) => e.kind === 'rot').length : 0;

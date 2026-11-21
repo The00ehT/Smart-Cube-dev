@@ -1566,6 +1566,14 @@ function initTech() {
     <section class="set-sec">
       <h3>${L('Letzte Befehle an den Würfel', 'Latest commands to the cube')}</h3>
       <div class="small tech-cmds" id="tech-cmds"></div>
+    </section>
+    <section class="set-sec">
+      <h3>${L('Rohe Züge vom Würfel', 'Raw moves from the cube')}</h3>
+      <p class="small">${L(
+        'Der Würfel meldet nur Außenseiten. Zum Prüfen der Wide-Move-/Slice-Erkennung: einmal r, dann M drehen und hier ansehen. Eine Wide Move erscheint z. B. als L (Gegenseite), M als R + L′ kurz hintereinander. Abstand = Pause zum Zug davor.',
+        'The cube only reports outer faces. To check wide move / slice detection: turn r, then M and look here. A wide move shows up as e.g. L (the opposite face), M as R + L′ right after each other. Gap = pause since the previous move.',
+      )}</p>
+      <div class="small tech-cmds" id="tech-moves"></div>
     </section>`;
   $('tech-mode-btns').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-gyro]');
@@ -1671,6 +1679,18 @@ function renderTech() {
   const log = c?.commandLog || [];
   $('tech-cmds').innerHTML = log.length
     ? log.slice(-8).reverse().map((x) => `${new Date(x.t).toLocaleTimeString(locale)} · ${escapeHtml(x.label)} · <code>${x.hex}</code>`).join('<br>')
+    : L('noch keine', 'none yet');
+
+  // Rohe Züge mit Abstand zum vorigen (Würfeluhr, sonst Gerätezeit)
+  const mlog = (c?.moveLog || []).slice(-14);
+  $('tech-moves').innerHTML = mlog.length
+    ? mlog
+        .map((x, i) => {
+          const prev = mlog[i - 1];
+          const gap = prev ? (x.cube != null && prev.cube != null ? x.cube - prev.cube : x.t - prev.t) : null;
+          return `<code>${escapeHtml(x.move)}</code>${gap != null ? ` <span>+${Math.max(0, Math.round(gap))} ms</span>` : ''}`;
+        })
+        .join(' · ')
     : L('noch keine', 'none yet');
 }
 

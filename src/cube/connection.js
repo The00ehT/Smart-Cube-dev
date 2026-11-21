@@ -35,6 +35,7 @@ export async function connectGan(emit) {
 
   let gyroSeen = false;
   const gyroMeter = new RateMeter(3000);
+  const moveLog = []; // letzte vom Würfel gemeldete Züge (roh), zum Prüfen von Wide Moves und Slices
   const commandLog = []; // letzte gesendete Befehle (Klartext), für die Technischen Daten
   const logCommand = (label, bytes) => {
     commandLog.push({ t: Date.now(), label, hex: hex(bytes.subarray(0, 8)) });
@@ -43,6 +44,8 @@ export async function connectGan(emit) {
   const sub = conn.events$.subscribe((e) => {
     switch (e.type) {
       case 'MOVE':
+        moveLog.push({ t: Date.now(), cube: e.cubeTimestamp, move: e.move });
+        if (moveLog.length > 40) moveLog.shift();
         emit({ type: 'move', move: e.move, localTimestamp: e.localTimestamp, cubeTimestamp: e.cubeTimestamp });
         break;
       case 'FACELETS':
@@ -88,6 +91,7 @@ export async function connectGan(emit) {
       deviceId: conn.device?.id ?? null,
     },
     commandLog,
+    moveLog,
     modeSupported,
     /** zuletzt an den Würfel geschickter Gyro-Modus (null = noch nicht gesetzt) */
     mode: null,
